@@ -96,7 +96,7 @@ No entity spawning or rendering yet — just the grid data.
 
 ---
 
-## Phase 4 — Entity types and status effects
+## Phase 4 — Entity types and status effects ✅ COMPLETE
 
 **Goal:** Shared entity interfaces used by every subsequent module — entity base, decorations, items, inventory, and status effects.
 No game logic yet, just types and lightweight factories.
