@@ -104,6 +104,10 @@ Once loaded, `window.CrawlLib` exposes an imperative `CrawlLib.createGame()` fac
       },
     })
 
+    // Attach callbacks before generating — spawner, decorator, surface painter, etc.
+    // then call generate() to build the dungeon and start the game.
+    game.generate()
+
     // game.dungeon, game.player, game.turns are live state objects
     console.log('Player starts at', game.player.x, game.player.z)
   </script>
@@ -119,11 +123,12 @@ This section covers using r3f-crawl-lib entirely from a `<script>` tag — no JS
 
 ### The `game` handle
 
-`createGame(canvas, options)` returns a `game` object:
+`createGame(canvas, options)` mounts the renderer and returns a `game` object but does **not** generate the dungeon. Attach any callbacks (`attachSpawner`, `attachDecorator`, `attachSurfacePainter`, etc.) first, then call `game.generate()` to build the dungeon and begin the game.
 
 | Property | Type | Description |
 |---|---|---|
-| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) |
+| `game.generate()` | function | Generate the dungeon and start the game — call after attaching all callbacks |
+| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) — available after `generate()` |
 | `game.player` | object | Player state and action methods |
 | `game.turns` | object | Turn scheduler — call `turns.commit()` to advance |
 | `game.combat` | object | Combat system |
@@ -244,6 +249,8 @@ Use `game.events.on()` to react to anything that happens:
           atlasJson: './atlas.json',
         },
       })
+
+      game.generate()
     })
 </script>
 ```
@@ -283,10 +290,15 @@ The game renders into your `<canvas>`; HUD elements are just HTML on top:
     document.getElementById('hp').textContent   = game.player.hp
     document.getElementById('turn').textContent = game.turns.turn
   })
+
+  // Generate the dungeon after all callbacks are attached
+  game.generate()
 </script>
 ```
 
 ### Spawn callback
+
+> Attach all callbacks before calling `game.generate()`. The dungeon is not built until `generate()` is called, so any `attachSpawner`, `attachDecorator`, or `attachSurfacePainter` calls made beforehand are guaranteed to be in place when generation runs.
 
 Register a callback to control enemy spawning. It is called whenever the library needs to decide whether to place an entity at a given position — on dungeon entry, room visits, or any custom trigger. Return an entity (or array of entities) to spawn, or `null` to skip.
 
@@ -425,7 +437,7 @@ Instead of writing your own `keydown` handler, use the built-in binding helper:
 
 | Function | Description |
 |---|---|
-| `CrawlLib.createGame(canvas, options)` | Mount the game; returns a `game` handle |
+| `CrawlLib.createGame(canvas, options)` | Mount the renderer; returns a `game` handle — does not generate the dungeon |
 | `CrawlLib.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
 | `CrawlLib.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
 | `CrawlLib.attachDecorator(game, opts)` | Register a decoration callback to place stationary props |
