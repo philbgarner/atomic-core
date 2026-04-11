@@ -6,8 +6,10 @@
   "main": "dist/r3f-crawl-lib.umd.js",
   "module": "dist/r3f-crawl-lib.js",
   "types": "dist/index.d.ts",
+  "browser": "dist/r3f-crawl-lib.iife.js",
   "exports": {
     ".": {
+      "browser": "./dist/r3f-crawl-lib.iife.js",
       "import": "./dist/r3f-crawl-lib.js",
       "require": "./dist/r3f-crawl-lib.umd.js",
       "types": "./dist/index.d.ts"
@@ -17,7 +19,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "dev": "vite build --watch"
   },
