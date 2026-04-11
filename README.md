@@ -614,6 +614,8 @@ All entities share a common base interface. Extend it for custom types.
 {
   id:         string,     // unique identifier
   kind:       string,     // 'player' | 'npc' | 'enemy' | 'item' | ...
+  type:       string,     // entity subtype — used as the sprite lookup key if sprite is not set
+  sprite:     string,     // character atlas sprite name; defaults to type if omitted
   x:          number,
   z:          number,
   hp:         number,
@@ -634,7 +636,8 @@ NPCs are friendly to the player but will fight back against enemies.
 
 ```js
 var villager = CrawlLib.createNpc({
-  type: 'villager',   // 'villager' | 'guard' | 'merchant' or any custom string
+  type:   'villager',   // used as sprite lookup key if sprite is not set
+  sprite: 'villager',  // character atlas sprite name (optional — defaults to type)
   x: 5, z: 3,
   hp: 20, attack: 2, defense: 1,
   faction: 'npc',
@@ -659,7 +662,8 @@ Enemies are hostile to both the player and NPCs.
 
 ```js
 var goblin = CrawlLib.createEnemy({
-  type: 'goblin',
+  type:   'goblin',
+  sprite: 'goblin',  // character atlas sprite name (optional — defaults to type)
   x: 10, z: 10,
   hp: 15, attack: 4, defense: 1,
   xp: 20,
@@ -1102,3 +1106,47 @@ The tile atlas is a PNG sheet (default 512×1024, 64×64 tiles) with a companion
 ```
 
 Point `rendering.atlas` and `rendering.atlasJson` at your files. The Tiled `tilesetMap` bridges Tiled GIDs to these tile names.
+
+---
+
+## Character Atlas Format
+
+Entity and decoration sprites are looked up by name from a separate character atlas. Point `rendering.characterAtlas` and `rendering.characterAtlasJson` at your sprite sheet and its JSON descriptor.
+
+The JSON lists each named sprite with its pixel rect on the sheet:
+
+```json
+{
+  "sheetWidth":  256,
+  "sheetHeight": 256,
+  "sprites": {
+    "goblin":        { "x": 0,   "y": 0,   "w": 48, "h": 64 },
+    "orc":           { "x": 48,  "y": 0,   "w": 48, "h": 64 },
+    "skeleton":      { "x": 96,  "y": 0,   "w": 48, "h": 64 },
+    "villager":      { "x": 0,   "y": 64,  "w": 48, "h": 64 },
+    "guard":         { "x": 48,  "y": 64,  "w": 48, "h": 64 },
+    "barrel":        { "x": 0,   "y": 128, "w": 32, "h": 48 },
+    "torch-sconce":  { "x": 32,  "y": 128, "w": 32, "h": 48 }
+  }
+}
+```
+
+Sprites do not need to be a uniform size — each entry defines its own `w`/`h`. The renderer normalises the rect to UV coordinates automatically.
+
+### Sprite assignment
+
+When an entity or decoration is rendered, the library resolves its sprite name in this order:
+
+1. The explicit `sprite` field on the entity, if set
+2. The entity's `type` string, used as a direct key into the character atlas
+
+```js
+// These two are equivalent if 'goblin' exists in the character atlas JSON
+CrawlLib.createEnemy({ type: 'goblin', ... })
+CrawlLib.createEnemy({ type: 'goblin', sprite: 'goblin', ... })
+
+// Override: a cave-troll variant that reuses the troll sprite
+CrawlLib.createEnemy({ type: 'cave-troll', sprite: 'troll', ... })
+```
+
+If neither `sprite` nor `type` resolves to a known sprite name, the entity renders with a fallback placeholder.
