@@ -1,19 +1,14 @@
 // src/lib/turn/types.ts
 //
 // Shared types for the priority-queue turn system.
-//
-// Note: RpsEffect has been moved to entities/effects.ts (Phase 4).
-// A re-export stub is provided here until Phase 4 is complete.
 
 export type ActorId = string;
 
 export type ActorKind = "player" | "monster";
 
-/**
- * @deprecated Will be re-exported from entities/effects.ts after Phase 4.
- * Kept here as a stub for phases 2–3.
- */
-export type RpsEffect = "none" | "bleeding" | "freezing" | "poisoned";
+// RpsEffect lives in entities/effects.ts; re-exported here for convenience.
+import type { RpsEffect } from "../entities/effects";
+export type { RpsEffect };
 
 export type ActorBase = {
   id: ActorId;
