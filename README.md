@@ -17,7 +17,9 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 - Minimap with entity overlays
 - Chest drops and item pickups
 - Hidden passage traversal
-- Wave-based enemy spawning
+- Callback-driven enemy spawning
+- Stationary decoration entities (billboarded sprites for furniture, props, etc.)
+- Atlas surface painting — apply tile layers to walls, floors, and ceilings per-tile
 - Configurable keybindings
 - Audio hooks (Howler.js compatible)
 - Script tag API — no build step required
@@ -169,10 +171,6 @@ Use `game.events.on()` to react to anything that happens:
     logEl.textContent = e.entity.id + ' is defeated!'
   })
 
-  game.events.on('wave', function(e) {
-    logEl.textContent = 'Wave ' + e.wave + ' begins!'
-  })
-
   game.events.on('win',  function() { alert('You win!') })
   game.events.on('lose', function() { alert('Game over') })
 </script>
@@ -288,31 +286,99 @@ The game renders into your `<canvas>`; HUD elements are just HTML on top:
 </script>
 ```
 
-### Wave spawner
+### Spawn callback
+
+Register a callback to control enemy spawning. It is called whenever the library needs to decide whether to place an entity at a given position — on dungeon entry, room visits, or any custom trigger. Return an entity (or array of entities) to spawn, or `null` to skip.
 
 ```html
 <script>
-  CrawlLib.attachWaveSpawner(game, {
-    turnsPerWave: 120,
-    winAfterWave: 10,
+  CrawlLib.attachSpawner(game, {
+    onSpawn: function({ dungeon, roomId, x, y }) {
+      var room = dungeon.rooms[roomId]
+      if (!room) return null
 
-    buildWave: function(ctx) {
-      var count = Math.min(1 + ctx.wave, 6)
+      // Only spawn in rooms far from the start
+      if (room.distanceFromStart < 3) return null
+
       var types = ['goblin', 'orc', 'skeleton']
-      var enemies = []
-      for (var i = 0; i < count; i++) {
-        var type = types[Math.floor(Math.random() * types.length)]
-        enemies.push(CrawlLib.createEnemy({
-          type:    type,
-          faction: 'enemy',
-          hp:      15 + (ctx.wave - 1) * 3,
-          attack:   4 + Math.floor((ctx.wave - 1) / 2),
-          xp:      20 + (ctx.wave - 1) * 5,
-          x: ctx.rooms.farthestFromEnd.cx,
-          z: ctx.rooms.farthestFromEnd.cz,
-        }))
+      var type  = types[Math.floor(Math.random() * types.length)]
+
+      return CrawlLib.createEnemy({
+        type:    type,
+        faction: 'enemy',
+        hp:      15,
+        attack:   4,
+        xp:      20,
+        x:       x,
+        z:       y,
+        drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.4 },
+      })
+    },
+  })
+</script>
+```
+
+### Decoration callback
+
+Register a callback to place stationary billboarded sprites (furniture, props, wall fixtures, etc.). It is called for each candidate tile position during dungeon setup. Return a decoration, an array of decorations, or `null` to skip.
+
+```html
+<script>
+  CrawlLib.attachDecorator(game, {
+    onDecorate: function({ dungeon, roomId, x, y }) {
+      var room = dungeon.rooms[roomId]
+      if (!room) return null
+
+      // Place a barrel in the corner of every other room
+      if (room.index % 2 === 0 && x === room.x + 1 && y === room.y + 1) {
+        return CrawlLib.createDecoration({
+          type:       'barrel',
+          x:          x,
+          z:          y,
+          sprite:     'barrel',        // atlas sprite name
+          blocksMove: true,
+        })
       }
-      return enemies
+
+      // Place a wall torch sconce on north walls
+      if (dungeon.tiles[y - 1] && dungeon.tiles[y - 1][x].solid) {
+        return CrawlLib.createDecoration({
+          type:       'torch-sconce',
+          x:          x,
+          z:          y,
+          sprite:     'torch-sconce',
+          blocksMove: false,
+        })
+      }
+
+      return null
+    },
+  })
+</script>
+```
+
+### Surface painting callback
+
+Register a callback to paint atlas tile layers onto tiles. It is called per tile position and should return an array of atlas tile IDs to composite in sequence over the base tile, or `null` to leave the tile unchanged.
+
+```html
+<script>
+  CrawlLib.attachSurfacePainter(game, {
+    onPaint: function({ dungeon, roomId, x, y }) {
+      var room = dungeon.rooms[roomId]
+      if (!room) return null
+
+      // Crypt rooms get a bone-floor base with a grime overlay
+      if (room.theme === 'crypt') {
+        return ['bone-floor', 'grime-overlay']
+      }
+
+      // Puddle near room centre
+      if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
+        return ['wet-overlay']
+      }
+
+      return null
     },
   })
 </script>
@@ -361,10 +427,13 @@ Instead of writing your own `keydown` handler, use the built-in binding helper:
 |---|---|
 | `CrawlLib.createGame(canvas, options)` | Mount the game; returns a `game` handle |
 | `CrawlLib.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
-| `CrawlLib.attachWaveSpawner(game, opts)` | Attach the wave spawner to an existing game |
+| `CrawlLib.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
+| `CrawlLib.attachDecorator(game, opts)` | Register a decoration callback to place stationary props |
+| `CrawlLib.attachSurfacePainter(game, opts)` | Register a callback to paint atlas layers on surfaces |
 | `CrawlLib.attachKeybindings(game, opts)` | Register keyboard bindings |
 | `CrawlLib.createNpc(opts)` | Create an NPC entity (`faction: 'npc'`) |
 | `CrawlLib.createEnemy(opts)` | Create an enemy entity (`faction: 'enemy'`) |
+| `CrawlLib.createDecoration(opts)` | Create a stationary billboarded decoration |
 | `CrawlLib.createItem(opts)` | Create an item |
 | `CrawlLib.buildTilesetMap(tsj, opts)` | Build a `tilesetMap` from a `.tsj` object |
 
@@ -393,13 +462,16 @@ dungeon: {
   // or a callback: function({ room, rng }) { return 'crypt' }
   themes: 'dungeon',
 
-  // Called after generation for custom object and entity placement
+  // Called after generation for custom object, entity, decoration, and surface placement
   onPlace: function({ rooms, endRoom, startRoom, rng, place }) {
     place.object(endRoom.cx, endRoom.cz, 'exit')
     rooms.forEach(function(room) {
       if (rng.chance(0.4)) place.object(room.cx, room.cz, 'chest')
       if (rng.chance(0.3)) place.npc(room.cx, room.cz, 'villager')
       if (rng.chance(0.2)) place.enemy(room.cx, room.cz, 'goblin')
+      if (rng.chance(0.3)) place.decoration(room.cx - 1, room.cz, 'barrel')
+      // Paint atlas layers in sequence over the generated tile
+      place.surface(room.cx, room.cz, ['flagstone-floor', 'crack-overlay'])
     })
   },
 }
@@ -500,7 +572,6 @@ turns.commit(game.player.move(1, 0))
 
 // Current turn counter
 turns.turn    // number
-turns.wave    // current wave number (if using wave spawner)
 
 // Add an actor dynamically
 turns.addActor(entity)
@@ -602,36 +673,156 @@ var goblin = CrawlLib.createEnemy({
 })
 ```
 
-#### Wave Spawner
+#### Spawn Callback
+
+`attachSpawner` lets you control enemy placement with a single callback. The library calls `onSpawn` whenever it needs to evaluate whether an entity should appear at a given position. Return an entity or array of entities to place them, or `null` / `undefined` to skip.
 
 ```js
-CrawlLib.attachWaveSpawner(game, {
-  turnsPerWave: 120,
-  winAfterWave: 10,
+CrawlLib.attachSpawner(game, {
+  onSpawn: function({ dungeon, roomId, x, y }) {
+    var room = dungeon.rooms[roomId]
+    if (!room || room.distanceFromStart < 2) return null
 
-  buildWave: function({ wave, rng, rooms }) {
-    var count = Math.min(1 + wave, 6)
-    var types = ['goblin', 'orc', 'skeleton']
-    var enemies = []
-    for (var i = 0; i < count; i++) {
-      enemies.push(CrawlLib.createEnemy({
-        type:    rng.pick(types),
-        faction: 'enemy',
-        hp:      15 + (wave - 1) * 3,
-        attack:   4 + Math.floor((wave - 1) / 2),
-        xp:      20 + (wave - 1) * 5,
-        x: rooms.farthestFromEnd.cx,
-        z: rooms.farthestFromEnd.cz,
-        drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.4 },
-      }))
-    }
-    return enemies
+    return CrawlLib.createEnemy({
+      type:    'goblin',
+      faction: 'enemy',
+      hp:      15,
+      attack:   4,
+      xp:      20,
+      x:       x,
+      z:       y,
+      drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.4 },
+    })
   },
-
-  onWaveComplete: function({ wave }) { console.log('Wave ' + wave + ' cleared!') },
-  onWin:  function() { console.log('You win!') },
-  onLose: function() { console.log('Game over') },
 })
+```
+
+The `onSpawn` callback receives:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `dungeon` | object | Full dungeon state (tiles, rooms, passages) |
+| `roomId` | string | ID of the room being evaluated |
+| `x` | number | Tile X coordinate of the candidate spawn point |
+| `y` | number | Tile Y coordinate of the candidate spawn point |
+
+---
+
+### Decorations
+
+Decorations are stationary billboarded sprites — furniture, props, wall fixtures, rubble, etc. They have no AI or combat stats. They render as sprites in the 3D world and can optionally block movement or be interactive.
+
+```js
+var barrel = CrawlLib.createDecoration({
+  type:        'barrel',       // string label for your own bookkeeping
+  x:           8,
+  z:           5,
+  sprite:      'barrel',       // atlas sprite name (character atlas)
+  blocksMove:  true,           // default: false
+  blocksView:  false,          // affects line-of-sight; default: false
+  interactive: false,          // player can 'interact' with it; default: false
+  onInteract:  function({ player, decoration }) { /* optional */ },
+})
+```
+
+Decoration base interface:
+
+```js
+{
+  id:          string,    // auto-generated unique ID
+  kind:        'decoration',
+  type:        string,
+  x:           number,
+  z:           number,
+  sprite:      string,    // character atlas tile name
+  blocksMove:  boolean,
+  blocksView:  boolean,
+  interactive: boolean,
+  onInteract:  function | null,
+}
+```
+
+Use `attachDecorator` to place decorations via a per-tile callback during dungeon setup:
+
+```js
+CrawlLib.attachDecorator(game, {
+  onDecorate: function({ dungeon, roomId, x, y }) {
+    var room = dungeon.rooms[roomId]
+    if (!room) return null
+
+    // Scatter barrels near room walls
+    if (rng.chance(0.05) && room.isNearWall(x, y)) {
+      return CrawlLib.createDecoration({
+        type: 'barrel', x: x, z: y, sprite: 'barrel', blocksMove: true,
+      })
+    }
+
+    return null
+  },
+})
+```
+
+The `onDecorate` callback shares the same context shape as `onSpawn`: `{ dungeon, roomId, x, y }`. Return a single decoration, an array, or `null`.
+
+Decorations can also be placed imperatively at any time:
+
+```js
+var pillar = CrawlLib.createDecoration({ type: 'pillar', x: 4, z: 6, sprite: 'stone-pillar', blocksMove: true })
+game.dungeon.decorations.add(pillar)
+game.dungeon.decorations.remove(pillar.id)
+game.dungeon.decorations.list   // Decoration[]
+```
+
+---
+
+### Surface Painting
+
+Each tile position can have an ordered stack of atlas tile IDs composited over the base generated tile. Layers are applied in sequence — first entry is drawn first, last entry on top. This lets you apply theme-specific overlays, stains, cracks, moss, runes, or decorative borders without replacing the underlying tile data.
+
+Use `attachSurfacePainter` to drive painting from a per-tile callback:
+
+```js
+CrawlLib.attachSurfacePainter(game, {
+  onPaint: function({ dungeon, roomId, x, y }) {
+    var room = dungeon.rooms[roomId]
+    if (!room) return null
+
+    if (room.theme === 'crypt') {
+      return ['bone-floor', 'carved-stone-overlay']
+    }
+
+    // Puddle near room centre
+    if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
+      return ['wet-overlay']
+    }
+
+    return null
+  },
+})
+```
+
+Return an array of atlas tile IDs to layer over the base tile, or `null` to leave it unchanged.
+
+Surfaces can also be painted imperatively via `game.dungeon.paint()`:
+
+```js
+// Set the layer stack for a tile (replaces any previous paint at that position)
+game.dungeon.paint(x, z, ['moss-overlay', 'crack-overlay'])
+
+// Clear painted layers (reverts to generated tile)
+game.dungeon.unpaint(x, z)
+```
+
+Surface paint operations in `onPlace`:
+
+```js
+onPlace: function({ rooms, place }) {
+  rooms.forEach(function(room) {
+    if (room.theme === 'crypt') {
+      place.surface(room.cx, room.cz, ['bone-floor', 'carved-stone-overlay'])
+    }
+  })
+},
 ```
 
 ---
@@ -844,8 +1035,7 @@ game.events.on('miss',       function(e) { /* { attacker, defender } */ })
 game.events.on('chest-open', function(e) { /* { chest, loot } */ })
 game.events.on('item-pickup',function(e) { /* { item, entity } */ })
 game.events.on('turn',       function(e) { /* { turn } — fires every turn */ })
-game.events.on('wave',       function(e) { /* { wave } */ })
-game.events.on('win',        function()  { /* player cleared all waves */ })
+game.events.on('win',        function()  { /* player reached the exit or custom win condition */ })
 game.events.on('lose',       function(e) { /* { reason } */ })
 ```
 
@@ -858,7 +1048,7 @@ game.events.on('lose',       function(e) { /* { reason } */ })
 3. Export as **JSON** (File > Export As > JSON Map Files `.tmj`).
 4. Fetch the `.tmj` at runtime and pass it to `createGame()` under `dungeon.tiled`.
 
-The library maps Tiled tile GIDs to atlas texture coordinates automatically. Object layer entries become entity spawn points consumed by your `onPlace` callback or the default wave spawner.
+The library maps Tiled tile GIDs to atlas texture coordinates automatically. Object layer entries become entity spawn points consumed by your `onPlace` callback.
 
 ---
 
@@ -874,7 +1064,9 @@ All settings are passed directly to `CrawlLib.createGame()` or the relevant `att
 | `turns` | `actors`, `onAdvance` |
 | `combat` | `damageFormula`, `factions`, `onDamage`, `onDeath`, `onMiss` |
 | `rendering` | `atlas`, `atlasJson`, `characterAtlas`, `tileSize`, `torch`, `camera`, `headBob`, `lightingShader` |
-| `attachWaveSpawner` | `turnsPerWave`, `winAfterWave`, `buildWave`, `onWaveComplete`, `onWin`, `onLose` |
+| `attachSpawner` | `onSpawn` — callback receiving `{ dungeon, roomId, x, y }` |
+| `attachDecorator` | `onDecorate` — callback receiving `{ dungeon, roomId, x, y }` |
+| `attachSurfacePainter` | `onPaint` — callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile IDs |
 | `attachKeybindings` | `bindings`, `onAction` |
 | `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
 
