@@ -17,7 +17,7 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/lib/index.ts'),
       name: 'CrawlLib',
       fileName: 'r3f-crawl-lib',
-      formats: ['es', 'umd'],
+      formats: ['es', 'umd', 'iife'],
     },
     rollupOptions: {
       external: [

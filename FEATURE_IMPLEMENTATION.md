@@ -128,7 +128,7 @@ No game logic yet, just types and lightweight factories.
 
 ---
 
-## Phase 5 — AI and spatial reasoning
+## Phase 5 — AI and spatial reasoning ✅ COMPLETE
 
 **Goal:** Pathfinding, field of view, spatial queries, and the default monster AI decision loop.
 These are pure algorithms; they receive dungeon data and return decisions — no mutation.
@@ -161,7 +161,7 @@ These are pure algorithms; they receive dungeon data and return decisions — no
 
 ---
 
-## Phase 6 — Combat and factions
+## Phase 6 — Combat and factions ✅ COMPLETE
 
 **Goal:** Faction registry, damage resolution, and status effect application — extracted from `useGameState.ts` into a standalone, configurable module.
 
