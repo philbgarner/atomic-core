@@ -27,12 +27,17 @@ Game logic lives entirely in your JS layer — the library provides the renderin
   - [Script tag API surface](#script-tag-api-surface)
 - [Core Concepts](#core-concepts)
   - [Dungeon](#dungeon)
+    - [Dungeon Themes](#dungeon-themes)
+    - [Cellular Automata Generator](#cellular-automata-generator)
+    - [Dungeon Serialization](#dungeon-serialization)
     - [Tiled Map Import](#tiled-map-import)
+  - [Ceiling & Floor Height Offsets](#ceiling--floor-height-offsets)
   - [Player](#player)
   - [Turn Scheduler](#turn-scheduler)
   - [Entities](#entities)
     - [NPCs](#npcs)
     - [Enemies](#enemies)
+    - [Active Effects](#active-effects)
     - [Spawn Callback](#spawn-callback-1)
   - [Decorations](#decorations)
   - [Surface Painting](#surface-painting)
@@ -40,9 +45,12 @@ Game logic lives entirely in your JS layer — the library provides the renderin
   - [Items & Inventory](#items--inventory)
   - [Hidden Passages](#hidden-passages)
   - [3D Renderer](#3d-renderer-1)
+    - [Per-direction Tile Specs](#per-direction-tile-specs)
+    - [Layer System](#layer-system)
   - [Keybindings](#keybindings)
   - [Audio](#audio)
   - [Events](#events)
+- [Multiplayer Transport](#multiplayer-transport)
 - [Tiled Workflow](#tiled-workflow)
 - [Configuration Reference](#configuration-reference)
 - [Tile Atlas Format](#tile-atlas-format)
@@ -51,10 +59,17 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 
 ## Features
 
-- First-person 3D tile-based dungeon rendering with torch lighting and fog (plain Three.js — no React/R3F required)
-- BSP dungeon generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
+- First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js — no React/R3F required)
+- BSP dungeon generator or cellular automata generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
+- Built-in dungeon themes (`dungeon`, `crypt`, `catacomb`, `industrial`, `ruins`) with `registerTheme()` for custom themes
+- Ceiling and floor height offsets; pit markers that omit floor tiles
+- Dungeon serialization — save and restore `DungeonOutputs` to/from JSON
+- Renderer layer system — stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
+- Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
+- Sprite billboard rendering with separate body/head UV layers
+- Active status effects with configurable stacking modes
 - Three-faction combat model: `player`, `npc`, `enemy`
 - Minimap with entity overlays
 - Chest drops and item pickups
@@ -64,6 +79,7 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 - Atlas surface painting — apply tile layers to walls, floors, and ceilings per-tile
 - Configurable keybindings
 - Audio hooks (Howler.js compatible)
+- Optional multiplayer transport layer (WebSocket-based, server-authoritative)
 - Script tag API — no build step required
 
 ---
@@ -566,6 +582,9 @@ CrawlLib.attachKeybindings(game, {
 | `CrawlLib.createEnemy(opts)` | Create an enemy entity |
 | `CrawlLib.createDecoration(opts)` | Create a stationary decoration |
 | `CrawlLib.createItem(opts)` | Create an item |
+| `CrawlLib.buildTilesetMap(tiledJson, options)` | Build a GID→atlas-name map from a Tiled tileset JSON |
+| `CrawlLib.createWebSocketTransport(url)` | Create a browser-side WebSocket transport for multiplayer |
+| `CrawlLib.registerTheme(name, def)` | Register a custom dungeon theme |
 
 ---
 
@@ -600,6 +619,91 @@ dungeon: {
   },
 }
 ```
+
+#### Dungeon Themes
+
+Themes control which atlas tile types are written into the floor/wall/ceiling channels during generation. Five built-in themes are included:
+
+| Key | Floor | Wall | Ceiling |
+|---|---|---|---|
+| `dungeon` | Cobblestone | Cobblestone | Cobblestone |
+| `crypt` | Flagstone | Concrete | Flagstone |
+| `catacomb` | Cobblestone | Plaster | Concrete |
+| `industrial` | Steel | Concrete | Steel |
+| `ruins` | Dirt | Cobblestone | Cobblestone |
+
+Pass a `theme` key to the dungeon config to apply it uniformly, or use a `ThemeSelector` to vary themes per room:
+
+```js
+dungeon: {
+  seed: 12345, width: 40, height: 40,
+  // A single built-in theme key
+  theme: 'crypt',
+
+  // Or an array for random uniform selection
+  theme: ['dungeon', 'crypt'],
+
+  // Or weighted pairs
+  theme: [['dungeon', 3], ['crypt', 1]],
+
+  // Or a callback for full per-room control
+  theme: ({ roomId, rng }) => roomId === 0 ? 'crypt' : 'dungeon',
+}
+```
+
+Register custom themes at any time before `game.generate()`:
+
+```js
+CrawlLib.registerTheme('marble', {
+  floorType:   'MarbleFloor',
+  wallType:    'MarbleWall',
+  ceilingType: 'MarbleCeiling',
+})
+```
+
+---
+
+#### Cellular Automata Generator
+
+As an alternative to the BSP algorithm, pass `generator: 'cellular'` to produce organic cave-like layouts:
+
+```js
+dungeon: {
+  generator: 'cellular',
+  seed:      0xdeadbeef,
+  width:     64,
+  height:    64,
+  // Cellular-specific options
+  fillRatio:   0.45,   // initial wall density (0–1); default 0.45
+  iterations:  5,      // smoothing passes; default 5
+}
+```
+
+Both generators return identical `DungeonOutputs` shapes, so all other systems (rendering, themes, passages, etc.) work unchanged.
+
+---
+
+#### Dungeon Serialization
+
+Save the full dungeon state to JSON and restore it later:
+
+```js
+import { serializeDungeon, deserializeDungeon } from 'r3f-crawl-lib'
+
+// After game.generate():
+const snapshot = serializeDungeon(game.dungeon.outputs)
+localStorage.setItem('dungeon', JSON.stringify(snapshot))
+
+// On reload — pass the restored outputs as dungeon.restore:
+const saved = JSON.parse(localStorage.getItem('dungeon'))
+const game = CrawlLib.createGame(el, {
+  dungeon: { restore: deserializeDungeon(saved) },
+  player:  { hp: 30 },
+})
+game.generate()
+```
+
+---
 
 #### Tiled Map Import
 
@@ -642,6 +746,26 @@ dungeon: {
   },
 }
 ```
+
+---
+
+### Ceiling & Floor Height Offsets
+
+Each cell can carry an independent floor and ceiling height offset encoded in `DungeonOutputs.floorHeightOffset` and `DungeonOutputs.ceilingHeightOffset` (R8 `DataTexture`s, 128 = no offset). The BSP and cellular generators expose an `onHeightOffset` callback to set these per-cell:
+
+```js
+dungeon: {
+  seed: 12345, width: 40, height: 40,
+  onHeightOffset({ x, y, roomId, rng }) {
+    // Return { floor?, ceiling? } in world units (positive = raise, negative = lower)
+    if (rng() < 0.05) return { floor: -1.5 }   // pit tile — floor is omitted from rendering
+    if (rng() < 0.1)  return { ceiling: -0.5 }  // lower ceiling
+    return null
+  },
+}
+```
+
+Tiles with a floor offset value of `0` are treated as **pits** — the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
 
 ---
 
@@ -789,6 +913,36 @@ var goblin = CrawlLib.createEnemy({
 | `rpsEffect` | string | `'none'` |
 
 The returned `EnemyEntity` also has `alertState: 'idle' | 'chasing' | 'searching'` and `searchTurnsLeft`.
+
+#### Active Effects
+
+Status effects can be applied to any entity and ticked each turn. Effects support three stacking modes: `replace` (newest wins), `stack` (additive), and `max` (keep highest value).
+
+```js
+import { applyEffect, tickEffects } from 'r3f-crawl-lib'
+
+// Apply a poison effect to a defender after combat
+game.events.on('damage', function({ defender }) {
+  applyEffect(defender, {
+    id:        'poison',
+    duration:  5,           // turns remaining
+    tickDamage: 2,
+    stackMode: 'stack',     // 'replace' | 'stack' | 'max'
+  })
+})
+
+// Advance effects each turn — returns events for any effect damage / expiry
+game.turns.onAdvance = function({ entities }) {
+  for (const e of entities) {
+    const events = tickEffects(e)
+    for (const ev of events) {
+      if (ev.type === 'effect-damage') game.events.emit('damage', ev)
+    }
+  }
+}
+```
+
+---
 
 #### Spawn Callback
 
@@ -1036,6 +1190,69 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 
 ---
 
+#### Per-direction Tile Specs
+
+By default `floorTileId`, `ceilTileId`, and `wallTileId` apply to every face. For finer control, pass `wallTiles`, `floorSkirtTiles`, and `ceilSkirtTiles` as `DirectionFaceMap` objects to specify per-direction tile IDs and optional UV rotation:
+
+```js
+var renderer = CrawlLib.createDungeonRenderer(el, game, {
+  atlas: { /* ... */ },
+  floorTileId: 20,
+  ceilTileId:  19,
+  wallTileId:  16,
+
+  // Per-direction overrides for wall faces
+  wallTiles: {
+    north: { tileId: 16, rotation: 0 },
+    south: { tileId: 17, rotation: 0 },
+    east:  { tileId: 16, rotation: 1 },  // rotation: 0–3 in 90° steps
+    west:  { tileId: 16, rotation: 3 },
+  },
+
+  // Skirt panels visible at floor/ceiling junctions
+  floorSkirtTiles: { north: { tileId: 18 }, south: { tileId: 18 } },
+  ceilSkirtTiles:  { north: { tileId: 19 }, south: { tileId: 19 } },
+})
+```
+
+`FaceTileSpec` fields: `tileId` (number) and optional `rotation` (0–3, clockwise 90° steps).
+
+---
+
+#### Layer System
+
+The renderer supports stacking additional instanced meshes on top of any surface via `renderer.addLayer(spec)`. This is the primary way to add details such as decals, trim, glows, or overlays without a custom renderer.
+
+```js
+var handle = renderer.addLayer({
+  target:   'floor',       // 'floor' | 'ceil' | 'wall' | 'floorSkirt' | 'ceilSkirt'
+  tileId:   22,            // atlas tile index for this layer
+  yOffset:  0.01,          // nudge up/down in world units to avoid z-fighting
+  filter({ x, z, face, dungeon }) {
+    // Return { visible: true } to show this layer on this face, or null to hide it
+    const cell = dungeon.getCell(x, z)
+    return cell.hasBlood ? { visible: true } : null
+  },
+})
+
+// Remove a layer at any time
+handle.remove()
+
+// Force the layer to rebuild after dungeon state changes
+handle.rebuild()
+```
+
+`LayerSpec` fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `target` | `LayerTarget` | Surface to attach to: `'floor'`, `'ceil'`, `'wall'`, `'floorSkirt'`, `'ceilSkirt'` |
+| `tileId` | number | Atlas tile index to render on this layer |
+| `yOffset` | number | World-unit Y offset (useful to prevent z-fighting) |
+| `filter` | function | Per-face callback — return `{ visible: true }` or `null` |
+
+---
+
 ### Keybindings
 
 ```js
@@ -1095,6 +1312,49 @@ game.events.on('audio',      function({ name, position }) {})
 
 ---
 
+## Multiplayer Transport
+
+The library includes an optional server-authoritative multiplayer layer. When a `transport` is provided to `createGame`, all player actions are forwarded to the server instead of applied locally. The server validates each action, updates canonical state, and broadcasts a `ServerStateUpdate` to all connected clients. Single-player code paths are completely unaffected when no transport is set.
+
+### Browser side
+
+```js
+const game = CrawlLib.createGame(el, {
+  dungeon: { /* ... */ },
+  player: {
+    id: 'player-abc',   // stable player ID for reconnections
+    hp: 30,
+  },
+  transport: CrawlLib.createWebSocketTransport('wss://your-server/game'),
+})
+```
+
+`createWebSocketTransport(url)` returns an `ActionTransport` that:
+- Sends every `turns.commit()` call to the server as a JSON message
+- Listens for `ServerStateUpdate` messages and patches local turn state automatically
+- Re-emits the `'turn'` event so UI updates work without any extra wiring
+
+### Server side
+
+The server entry point (`src/server/index.js`) is an Express + `ws` server that:
+- Generates the dungeon server-side from the host player's config so the solid map is authoritative
+- Validates every player move before accepting it
+- Broadcasts state to all peers in the room
+- Serves the multiplayer example and static assets on a single port
+
+A minimal Three.js shim (`src/server/three-shim.js`) lets `bsp.ts` run in Node without a real GPU context.
+
+### Network types
+
+| Type | Description |
+|---|---|
+| `ActionTransport` | Interface for custom transport implementations |
+| `ServerStateUpdate` | Payload broadcast to all room peers after each validated action |
+| `PlayerNetState` | Per-player position and stats included in each update |
+| `DungeonInitPayload` | Sent by the server to new connections to bootstrap dungeon state |
+
+---
+
 ## Tiled Workflow
 
 1. Create your map in [Tiled](https://www.mapeditor.org/) with separate layers for `Floor`, `Walls`, `Ceiling`, `Overlays`, and an object layer `Objects`.
@@ -1112,13 +1372,16 @@ All settings are passed directly to `CrawlLib.createGame()` or the relevant `att
 
 | Section | Key settings |
 |---|---|
-| `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `onPlace` |
+| `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `generator` (`'bsp'` \| `'cellular'`), `theme` (string / array / weighted pairs / callback), `onPlace`, `onHeightOffset`, `restore` |
+| `dungeon` (cellular) | `fillRatio`, `iterations` |
 | `dungeon.tiled` | `map`, `layers`, `objectTypes`, `tilesetMap` |
-| `player` | `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed` |
+| `player` | `id`, `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed` |
 | `turns` | `onAdvance` |
 | `combat` | `damageFormula`, `factions`, `onDamage`, `onDeath`, `onMiss` |
 | `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
-| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
+| `transport` | `ActionTransport` instance (e.g. from `createWebSocketTransport`) |
+| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
+| `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
 | `attachSpawner` | `onSpawn` — callback receiving `{ dungeon, roomId, x, y }` |
 | `attachDecorator` | `onDecorate` — callback receiving `{ dungeon, roomId, x, y }` |
 | `attachSurfacePainter` | `onPaint` — callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
