@@ -1,18 +1,18 @@
-// basic.js — r3f-crawl-lib script-tag example
+// basic.js — r3f-crawl-lib 3D example
 // Demonstrates dungeon generation, turn-based movement, combat events,
-// and ASCII map rendering with no build step.
+// and first-person 3D rendering — no build step required.
 
-const { createGame, createEnemy, attachSpawner, attachKeybindings } = CrawlLib;
+const { createGame, createEnemy, attachSpawner, attachKeybindings, createDungeonRenderer } = CrawlLib;
 
 // ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const mapEl  = document.getElementById('map');
-const logEl  = document.getElementById('log');
-const hpEl   = document.getElementById('hp');
-const turnEl = document.getElementById('turn');
-const posEl  = document.getElementById('pos');
+const viewportEl = document.getElementById('viewport');
+const logEl      = document.getElementById('log');
+const hpEl       = document.getElementById('hp');
+const turnEl     = document.getElementById('turn');
+const posEl      = document.getElementById('pos');
 
 // ---------------------------------------------------------------------------
 // Entity tracking
@@ -56,14 +56,20 @@ const game = createGame(document.body, {
 });
 
 // ---------------------------------------------------------------------------
+// 3D renderer
+// ---------------------------------------------------------------------------
+
+const renderer = createDungeonRenderer(viewportEl, game);
+
+// ---------------------------------------------------------------------------
 // Spawn enemies — one per room, capped, skipping early rooms
 // ---------------------------------------------------------------------------
 
 attachSpawner(game, {
   onSpawn({ roomId, x, y }) {
     if (spawned >= MAX_ENEMIES) return null;
-    if (roomId < 2) return null;           // avoid start area
-    if (Math.random() > 0.55) return null; // random skip
+    if (roomId < 2) return null;
+    if (Math.random() > 0.55) return null;
     spawned++;
     const e = createEnemy({
       type: 'goblin',
@@ -90,7 +96,7 @@ attachSpawner(game, {
 game.events.on('turn', ({ turn }) => {
   turnEl.textContent = String(turn);
   updateStats();
-  renderMap();
+  renderer.setEntities(enemies);
 });
 
 game.events.on('audio', ({ name }) => {
@@ -132,7 +138,7 @@ attachKeybindings(game, {
 });
 
 // ---------------------------------------------------------------------------
-// Generate the dungeon (fires the first 'turn' event, triggering renderMap)
+// Generate the dungeon
 // ---------------------------------------------------------------------------
 
 game.generate();
@@ -146,50 +152,10 @@ function addLog(text, cls) {
   div.className = 'entry' + (cls ? ' ' + cls : '');
   div.textContent = text;
   logEl.prepend(div);
-  while (logEl.children.length > 40) {
-    logEl.lastElementChild.remove();
-  }
+  while (logEl.children.length > 40) logEl.lastElementChild.remove();
 }
 
 function updateStats() {
   hpEl.textContent  = `${game.player.hp} / ${game.player.maxHp}`;
   posEl.textContent = `${game.player.x}, ${game.player.z}`;
-}
-
-function renderMap() {
-  const outputs = game.dungeon.outputs;
-  if (!outputs) return;
-
-  const { width, height } = outputs;
-  // solid.image.data is a Uint8Array (R8 format — 1 byte per cell)
-  const solid = outputs.textures.solid.image.data;
-
-  // Build a 2D array of colored HTML spans
-  const rows = [];
-  for (let y = 0; y < height; y++) {
-    const cols = [];
-    for (let x = 0; x < width; x++) {
-      const isWall = solid[y * width + x] > 0;
-      cols.push(isWall
-        ? '<span style="color:#3a3a3a">#</span>'
-        : '<span style="color:#555">.</span>');
-    }
-    rows.push(cols);
-  }
-
-  // Overlay live enemy positions
-  for (const e of enemies) {
-    if (e.alive && e.x >= 0 && e.z >= 0 && e.x < width && e.z < height) {
-      rows[e.z][e.x] = '<span style="color:#f55">g</span>';
-    }
-  }
-
-  // Overlay player
-  const px = game.player.x;
-  const pz = game.player.z;
-  if (px >= 0 && pz >= 0 && px < width && pz < height) {
-    rows[pz][px] = '<span style="color:#ff0">@</span>';
-  }
-
-  mapEl.innerHTML = rows.map(r => r.join('')).join('\n');
 }

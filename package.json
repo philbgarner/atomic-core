@@ -21,7 +21,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "examples": "npx serve ."
   },
   "peerDependencies": {
     "@react-three/drei": ">=9",

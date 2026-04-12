@@ -2,6 +2,8 @@ export { createGame, attachMinimap, attachSpawner, attachDecorator, attachSurfac
 export { createNpc, createEnemy, createDecoration } from './entities/factory';
 export { createItem } from './entities/inventory';
 export { loadTiledMap } from './dungeon/tiled';
+export { createDungeonRenderer } from './rendering/dungeonRenderer';
+export type { DungeonRendererOptions, DungeonRenderer } from './rendering/dungeonRenderer';
 export type { GameEventMap, EventEmitter } from './events/eventEmitter';
 export type { DungeonOutputs, BspDungeonOutputs } from './dungeon/bsp';
 export type { EntityBase, HiddenPassage } from './entities/types';

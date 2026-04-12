@@ -15,6 +15,9 @@ export { createNpc, createEnemy, createDecoration } from './entities/factory'
 export { createItem }                                from './entities/inventory'
 export { loadTiledMap }                              from './dungeon/tiled'
 
+export { createDungeonRenderer } from './rendering/dungeonRenderer'
+export type { DungeonRendererOptions, DungeonRenderer } from './rendering/dungeonRenderer'
+
 // Type exports
 export type { GameEventMap, EventEmitter }           from './events/eventEmitter'
 export type { DungeonOutputs, BspDungeonOutputs }    from './dungeon/bsp'
