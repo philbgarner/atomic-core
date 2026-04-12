@@ -494,6 +494,10 @@ function generateBspDungeon(options) {
 	const wallOverlays = new Uint8Array(4 * W * H);
 	const ceilingType = new Uint8Array(W * H);
 	const ceilingOverlays = new Uint8Array(4 * W * H);
+	const floorHeightOffset = new Uint8Array(W * H);
+	floorHeightOffset.fill(128);
+	const ceilingHeightOffset = new Uint8Array(W * H);
+	ceilingHeightOffset.fill(128);
 	const { node: root } = buildBsp({
 		x: 0,
 		y: 0,
@@ -591,7 +595,9 @@ function generateBspDungeon(options) {
 			wallType: maskToDataTextureR8(wallType, W, H, "bsp_dungeon_wall_type"),
 			wallOverlays: maskToDataTextureRGBA(wallOverlays, W, H, "bsp_dungeon_wall_overlays"),
 			ceilingType: maskToDataTextureR8(ceilingType, W, H, "bsp_dungeon_ceiling_type"),
-			ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays")
+			ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays"),
+			floorHeightOffset: maskToDataTextureR8(floorHeightOffset, W, H, "bsp_dungeon_floor_height_offset"),
+			ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffset, W, H, "bsp_dungeon_ceiling_height_offset")
 		}
 	};
 }
@@ -2671,6 +2677,7 @@ var FLICKER_RADIUS = .03;
 var BUMP_DEPTH = .3;
 var ATLAS_VERT = `
 attribute float aTileId;
+attribute float aHeightOffset; // world-space Y offset in units (positive = up)
 uniform vec2  uTileSize;
 uniform float uColumns;
 
@@ -2693,6 +2700,7 @@ void main() {
   vTileUv     = uv;
 
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  worldPos.y += aHeightOffset;
   vWorldPos    = worldPos.xz;
   vWorldPos3D  = worldPos.xyz;
   vFaceNormal  = normalize(mat3(modelMatrix * instanceMatrix) * vec3(0.0, 0.0, 1.0));
@@ -2758,7 +2766,7 @@ function makeFaceMatrix(x, y, z, rx, ry, rz, w, h) {
 * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 */
-function buildInstancedMesh(matrices, tileIds, material, useAtlas) {
+function buildInstancedMesh(matrices, tileIds, material, useAtlas, heightOffsets) {
 	const geo = new THREE.PlaneGeometry(1, 1);
 	if (useAtlas) {
 		const tileIdArr = new Float32Array(matrices.length);
@@ -2766,6 +2774,8 @@ function buildInstancedMesh(matrices, tileIds, material, useAtlas) {
 			tileIdArr[i] = id;
 		});
 		geo.setAttribute("aTileId", new THREE.InstancedBufferAttribute(tileIdArr, 1));
+		const offsets = heightOffsets ?? new Float32Array(matrices.length);
+		geo.setAttribute("aHeightOffset", new THREE.InstancedBufferAttribute(offsets, 1));
 	}
 	const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
 	matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -2847,24 +2857,36 @@ function createDungeonRenderer(element, game, options = {}) {
 		const { width, height } = outputs;
 		const solid = outputs.textures.solid.image.data;
 		const wallMidY = ceilingH / 2;
+		const offsetStep = tileSize * .5;
+		const floorOffData = outputs.textures.floorHeightOffset?.image.data;
+		const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
 		const floors = [];
 		const ceils = [];
 		const walls = [];
 		const floorIds = [];
 		const ceilIds = [];
 		const wallIds = [];
+		const floorOffsets = [];
+		const ceilOffsets = [];
 		function isSolid(cx, cz) {
 			if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
 			return (solid[cz * width + cx] ?? 0) > 0;
 		}
 		for (let cz = 0; cz < height; cz++) for (let cx = 0; cx < width; cx++) {
 			if (isSolid(cx, cz)) continue;
+			const idx = cz * width + cx;
 			const wx = (cx + .5) * tileSize;
 			const wz = (cz + .5) * tileSize;
-			floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
-			floorIds.push(floorTileId);
+			const floorVal = floorOffData ? floorOffData[idx] ?? 128 : 128;
+			if (floorVal !== 0) {
+				floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
+				floorIds.push(floorTileId);
+				floorOffsets.push((floorVal - 128) * offsetStep);
+			}
+			const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
 			ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
 			ceilIds.push(ceilTileId);
+			ceilOffsets.push(-(ceilVal - 128) * offsetStep);
 			if (isSolid(cx, cz - 1)) {
 				walls.push(makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
 				wallIds.push(wallTileId);
@@ -2882,9 +2904,9 @@ function createDungeonRenderer(element, game, options = {}) {
 				wallIds.push(wallTileId);
 			}
 		}
-		floorMesh = buildInstancedMesh(floors, floorIds, floorMat, !!atlas);
+		floorMesh = buildInstancedMesh(floors, floorIds, floorMat, !!atlas, new Float32Array(floorOffsets));
 		scene.add(floorMesh);
-		ceilMesh = buildInstancedMesh(ceils, ceilIds, ceilMat, !!atlas);
+		ceilMesh = buildInstancedMesh(ceils, ceilIds, ceilMat, !!atlas, new Float32Array(ceilOffsets));
 		scene.add(ceilMesh);
 		wallMesh = buildInstancedMesh(walls, wallIds, wallMat, !!atlas);
 		scene.add(wallMesh);

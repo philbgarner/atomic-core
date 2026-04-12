@@ -174,6 +174,7 @@ const BUMP_DEPTH = 0.3;
 
 const ATLAS_VERT = /* glsl */ `
 attribute float aTileId;
+attribute float aHeightOffset; // world-space Y offset in units (positive = up)
 uniform vec2  uTileSize;
 uniform float uColumns;
 
@@ -196,6 +197,7 @@ void main() {
   vTileUv     = uv;
 
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  worldPos.y += aHeightOffset;
   vWorldPos    = worldPos.xz;
   vWorldPos3D  = worldPos.xyz;
   vFaceNormal  = normalize(mat3(modelMatrix * instanceMatrix) * vec3(0.0, 0.0, 1.0));
@@ -282,6 +284,7 @@ function buildInstancedMesh(
   tileIds: number[],
   material: THREE.Material,
   useAtlas: boolean,
+  heightOffsets?: Float32Array,
 ): THREE.InstancedMesh {
   const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -289,6 +292,9 @@ function buildInstancedMesh(
     const tileIdArr = new Float32Array(matrices.length);
     tileIds.forEach((id, i) => { tileIdArr[i] = id; });
     geo.setAttribute('aTileId', new THREE.InstancedBufferAttribute(tileIdArr, 1));
+
+    const offsets = heightOffsets ?? new Float32Array(matrices.length);
+    geo.setAttribute('aHeightOffset', new THREE.InstancedBufferAttribute(offsets, 1));
   }
 
   const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
@@ -414,13 +420,21 @@ export function createDungeonRenderer(
     const { width, height } = outputs;
     const solid = outputs.textures.solid.image.data as Uint8Array;
     const wallMidY = ceilingH / 2;
+    const offsetFactor = 0.5;
+    const offsetStep = tileSize * offsetFactor;
 
-    const floors:    THREE.Matrix4[] = [];
-    const ceils:     THREE.Matrix4[] = [];
-    const walls:     THREE.Matrix4[] = [];
-    const floorIds:  number[]        = [];
-    const ceilIds:   number[]        = [];
-    const wallIds:   number[]        = [];
+    // Height offset texture data (value 128 = no offset; 0 = pit for floor).
+    const floorOffData  = outputs.textures.floorHeightOffset?.image.data  as Uint8Array | undefined;
+    const ceilOffData   = outputs.textures.ceilingHeightOffset?.image.data as Uint8Array | undefined;
+
+    const floors:        THREE.Matrix4[] = [];
+    const ceils:         THREE.Matrix4[] = [];
+    const walls:         THREE.Matrix4[] = [];
+    const floorIds:      number[]        = [];
+    const ceilIds:       number[]        = [];
+    const wallIds:       number[]        = [];
+    const floorOffsets:  number[]        = [];
+    const ceilOffsets:   number[]        = [];
 
     function isSolid(cx: number, cz: number) {
       if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
@@ -431,13 +445,23 @@ export function createDungeonRenderer(
       for (let cx = 0; cx < width; cx++) {
         if (isSolid(cx, cz)) continue;
 
+        const idx = cz * width + cx;
         const wx = (cx + 0.5) * tileSize;
         const wz = (cz + 0.5) * tileSize;
 
-        floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
-        floorIds.push(floorTileId);
+        // Floor — skip tile if floorHeightOffset === 0 (pit marker).
+        const floorVal = floorOffData ? (floorOffData[idx] ?? 128) : 128;
+        if (floorVal !== 0) {
+          floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
+          floorIds.push(floorTileId);
+          floorOffsets.push((floorVal - 128) * offsetStep); // vertex shader applies this
+        }
+
+        // Ceiling — inverted: value < 128 raises ceiling, > 128 lowers it.
+        const ceilVal = ceilOffData ? (ceilOffData[idx] ?? 128) : 128;
         ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
         ceilIds.push(ceilTileId);
+        ceilOffsets.push(-(ceilVal - 128) * offsetStep); // vertex shader applies this (inverted)
 
         if (isSolid(cx, cz - 1)) { walls.push(makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH)); wallIds.push(wallTileId); }
         if (isSolid(cx, cz + 1)) { walls.push(makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH)); wallIds.push(wallTileId); }
@@ -446,10 +470,10 @@ export function createDungeonRenderer(
       }
     }
 
-    floorMesh = buildInstancedMesh(floors, floorIds, floorMat, !!atlas);
+    floorMesh = buildInstancedMesh(floors, floorIds, floorMat, !!atlas, new Float32Array(floorOffsets));
     scene.add(floorMesh);
 
-    ceilMesh = buildInstancedMesh(ceils, ceilIds, ceilMat, !!atlas);
+    ceilMesh = buildInstancedMesh(ceils, ceilIds, ceilMat, !!atlas, new Float32Array(ceilOffsets));
     scene.add(ceilMesh);
 
     wallMesh = buildInstancedMesh(walls, wallIds, wallMat, !!atlas);
