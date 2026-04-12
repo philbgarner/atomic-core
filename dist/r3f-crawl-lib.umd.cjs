@@ -3002,6 +3002,7 @@ void main() {
 		let ws = null;
 		let _playerId = null;
 		const updateHandlers = [];
+		const chatHandlers = [];
 		function dispatch(raw) {
 			let msg;
 			try {
@@ -3012,6 +3013,13 @@ void main() {
 			if (msg.type === "state") {
 				const update = msg;
 				for (const h of updateHandlers) h(update);
+			}
+			if (msg.type === "chat") {
+				const payload = {
+					playerId: msg.playerId,
+					text: msg.text
+				};
+				for (const h of chatHandlers) h(payload);
 			}
 		}
 		return {
@@ -3071,6 +3079,16 @@ void main() {
 			disconnect() {
 				ws?.close();
 				ws = null;
+			},
+			sendChat(text) {
+				if (!ws || !_playerId) return;
+				ws.send(JSON.stringify({
+					type: "chat",
+					text
+				}));
+			},
+			onChat(handler) {
+				chatHandlers.push(handler);
 			}
 		};
 	}

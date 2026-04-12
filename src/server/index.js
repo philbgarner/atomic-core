@@ -240,8 +240,12 @@ wss.on('connection', (ws) => {
       // Tell everyone else a new player joined
       broadcast(room, { type: 'player_joined', playerId }, ws)
 
-      // Send current state to the new player (so they see existing peers)
-      ws.send(stateSnapshot(room))
+      // Broadcast full state to ALL players (including the newcomer) so every
+      // renderer immediately reflects the updated player list and positions.
+      broadcastAll(room, stateSnapshot(room))
+
+      // Announce in chat so all clients can display it as a notification.
+      broadcastAll(room, { type: 'chat', playerId: 'server', text: `${playerId} has entered the dungeon.` })
       return
     }
 
@@ -311,6 +315,13 @@ wss.on('connection', (ws) => {
 
     room.players.delete(playerId)
     broadcastAll(room, { type: 'player_left', playerId })
+
+    // Broadcast updated state so remaining clients remove the departed player
+    // from their renderers immediately.
+    if (room.players.size > 0) {
+      broadcastAll(room, stateSnapshot(room))
+      broadcastAll(room, { type: 'chat', playerId: 'server', text: `${playerId} has left the dungeon.` })
+    }
 
     // Clean up empty rooms
     if (room.players.size === 0) rooms.delete(roomId)

@@ -6,9 +6,9 @@
 //  3. Host sends the solid map to the server after generate() so the server
 //     can validate moves.
 //  4. Listen to 'network-state' events to render other players as entities.
-//
-// game.turns.commit() routing is handled transparently by the transport
-// middleware — the keybindings section below is identical to basic.js.
+//     The renderer is also updated on every network-state event (not just on
+//     the local player's turn) so remote moves are visible in real-time.
+//  5. Player list panel and in-viewport chat overlay with modal input.
 
 const {
   createGame,
@@ -23,16 +23,21 @@ const {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const connectScreen = document.getElementById('connect-screen');
-const connectBtn    = document.getElementById('connect-btn');
-const serverUrlEl   = document.getElementById('server-url');
-const connectError  = document.getElementById('connect-error');
-const viewportEl    = document.getElementById('viewport');
-const logEl         = document.getElementById('log');
-const hpEl          = document.getElementById('hp');
-const turnEl        = document.getElementById('turn');
-const posEl         = document.getElementById('pos');
-const playerCountEl = document.getElementById('player-count');
+const connectScreen  = document.getElementById('connect-screen');
+const connectBtn     = document.getElementById('connect-btn');
+const serverUrlEl    = document.getElementById('server-url');
+const connectError   = document.getElementById('connect-error');
+const viewportEl     = document.getElementById('viewport');
+const logEl          = document.getElementById('log');
+const hpEl           = document.getElementById('hp');
+const turnEl         = document.getElementById('turn');
+const posEl          = document.getElementById('pos');
+const playerCountEl  = document.getElementById('player-count');
+const playerListEl   = document.getElementById('player-list');
+const chatOverlayEl  = document.getElementById('chat-overlay');
+const chatModalEl    = document.getElementById('chat-modal');
+const chatInputEl    = document.getElementById('chat-input');
+const chatSendBtn    = document.getElementById('chat-send');
 
 // ---------------------------------------------------------------------------
 // Connection flow
@@ -84,6 +89,51 @@ const MAX_ENEMIES = 0;
 let otherPlayerEntities = [];
 
 // ---------------------------------------------------------------------------
+// Chat state
+// ---------------------------------------------------------------------------
+
+let chatModalOpen = false;
+
+function openChatModal() {
+  chatModalOpen = true;
+  chatModalEl.style.display = 'flex';
+  chatInputEl.value = '';
+  chatInputEl.focus();
+}
+
+function closeChatModal() {
+  chatModalOpen = false;
+  chatModalEl.style.display = 'none';
+}
+
+function addChatMessage(senderId, text) {
+  const isServer = senderId === 'server';
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (isServer ? ' server-msg' : '');
+  div.textContent = isServer ? text : `${senderId}: ${text}`;
+  chatOverlayEl.prepend(div);
+  // Remove the element after the CSS animation ends so the DOM stays tidy
+  setTimeout(() => div.remove(), 6500);
+}
+
+// ---------------------------------------------------------------------------
+// Player list
+// ---------------------------------------------------------------------------
+
+function updatePlayerList(players, myPlayerId) {
+  playerListEl.innerHTML = '';
+  const entries = Object.entries(players);
+  playerCountEl.textContent = String(entries.length);
+  for (const [pid, ps] of entries) {
+    const isSelf = pid === myPlayerId;
+    const div = document.createElement('div');
+    div.className = 'player-entry' + (isSelf ? ' self' : '') + (!ps.alive ? ' dead' : '');
+    div.textContent = (isSelf ? '► ' : '  ') + pid + '  ' + ps.hp + '/' + ps.maxHp;
+    playerListEl.appendChild(div);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main game setup
 // ---------------------------------------------------------------------------
 
@@ -115,10 +165,6 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
         addLog(`${attacker.type} misses ${defender.type}`, 'turn');
       },
     },
-    // Passing the transport is all that's needed to enable server-authoritative
-    // mode. game.turns.commit() will forward actions to the server instead of
-    // applying them locally. The server broadcasts state updates and createGame
-    // reconciles them automatically.
     transport,
   });
 
@@ -160,7 +206,7 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
 
   attachSpawner(game, {
     onSpawn({ roomId, x, y }) {
-      if (!isHost) return null;          // only host spawns enemies
+      if (!isHost) return null;
       if (spawned >= MAX_ENEMIES) return null;
       if (roomId < 2) return null;
       if (Math.random() > 0.55) return null;
@@ -185,13 +231,13 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
   });
 
-  // 'network-state' is emitted by createGame whenever the server pushes a
-  // state update. Use it to rebuild the list of other players for rendering.
-  // Also push the update directly to the renderer so remote players' moves
-  // are visible immediately — not deferred until the local player's next turn.
+  // 'network-state' fires whenever the server pushes a state update —
+  // including when OTHER players move. Update the renderer immediately so
+  // remote movement is visible in real-time, not deferred to the local turn.
   game.events.on('network-state', (update) => {
     const allPlayers = Object.entries(update.players);
-    playerCountEl.textContent = String(allPlayers.length);
+
+    updatePlayerList(update.players, playerId);
 
     otherPlayerEntities = allPlayers
       .filter(([pid]) => pid !== playerId)
@@ -212,15 +258,48 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
         tick: 0,
       }));
 
-    // Push to renderer immediately so remote movement is reflected in real-time
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
+  });
+
+  // Chat messages received from the server
+  transport.onChat(({ playerId: senderId, text }) => {
+    addChatMessage(senderId, text);
   });
 
   game.events.on('audio', ({ name }) => {
     addLog(`[sfx] ${name}`, 'audio');
   });
 
-  // ── Keyboard input (identical to basic.js) ────────────────────────────────
+  // ── Chat modal ───────────────────────────────────────────────────────────
+
+  function sendChat() {
+    const text = chatInputEl.value.trim();
+    closeChatModal();
+    if (!text) return;
+    transport.sendChat(text);
+  }
+
+  chatSendBtn.addEventListener('click', sendChat);
+
+  chatInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeChatModal(); }
+    e.stopPropagation(); // prevent game keybindings from firing while typing
+  });
+
+  // Open chat on Enter when the modal is not already open
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !chatModalOpen) {
+      e.preventDefault();
+      openChatModal();
+    }
+    if (e.key === 'Escape' && chatModalOpen) {
+      e.preventDefault();
+      closeChatModal();
+    }
+  });
+
+  // ── Keyboard input ───────────────────────────────────────────────────────
 
   attachKeybindings(game, {
     bindings: {
@@ -233,6 +312,9 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
       wait:         [' '],
     },
     onAction(action, event) {
+      // Block movement while the chat modal is open
+      if (chatModalOpen) return;
+
       event.preventDefault();
       if (!game.player.alive) {
         addLog('You are dead. Refresh to restart.', 'death');
@@ -262,8 +344,6 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
         case 'wait':         a = game.player.wait();   break;
       }
 
-      // game.turns.commit() transparently forwards to the server when a
-      // transport is configured — no change needed here vs. single-player.
       if (a) game.turns.commit(a);
     },
   });

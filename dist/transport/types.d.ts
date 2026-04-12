@@ -1,4 +1,4 @@
-import type { TurnAction } from '../turn/types';
+import { TurnAction } from '../turn/types';
 export type PlayerNetState = {
     /** Grid X position. */
     x: number;
