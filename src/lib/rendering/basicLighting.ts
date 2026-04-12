@@ -14,6 +14,7 @@ import * as THREE from "three";
 export const BASIC_ATLAS_VERT = /* glsl */ `
 attribute float aTileId;
 attribute float aHeightOffset;
+attribute float aUvRotation;
 uniform vec2  uTileSize;
 uniform float uColumns;
 
@@ -26,8 +27,15 @@ void main() {
   float col = mod(id, uColumns);
   float row = floor(id / uColumns);
 
+  // Rotate UV within tile bounds (0=0°, 1=90°CCW, 2=180°, 3=270°CCW).
+  int iRot = int(floor(aUvRotation + 0.5));
+  vec2 localUv = uv;
+  if (iRot == 1)      localUv = vec2(localUv.y, 1.0 - localUv.x);
+  else if (iRot == 2) localUv = vec2(1.0 - localUv.x, 1.0 - localUv.y);
+  else if (iRot == 3) localUv = vec2(1.0 - localUv.y, localUv.x);
+
   vec2 offset = vec2(col * uTileSize.x, 1.0 - (row + 1.0) * uTileSize.y);
-  vAtlasUv    = offset + uv * uTileSize;
+  vAtlasUv    = offset + localUv * uTileSize;
   vTileOrigin = offset;
 
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
