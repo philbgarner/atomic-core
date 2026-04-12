@@ -394,16 +394,25 @@ export function createDungeonRenderer(
     return mat;
   }
 
+  function makeAtlasMaterialDoubleSide(atlasConfig: TileAtlasConfig): THREE.ShaderMaterial {
+    const mat = makeAtlasMaterial(atlasConfig);
+    mat.side = THREE.DoubleSide;
+    return mat;
+  }
+
   // ── Plain (fallback) materials ────────────────────────────────────────────
-  const floorMat = atlas
+  const floorMat     = atlas
     ? makeAtlasMaterial(atlas)
     : new THREE.MeshStandardMaterial({ color: 0x555566 });
-  const ceilMat  = atlas
+  const ceilMat      = atlas
     ? makeAtlasMaterial(atlas)
     : new THREE.MeshStandardMaterial({ color: 0x222233 });
-  const wallMat  = atlas
+  const wallMat      = atlas
     ? makeAtlasMaterial(atlas)
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
+  const ceilEdgeMat  = atlas
+    ? makeAtlasMaterialDoubleSide(atlas)
+    : new THREE.MeshStandardMaterial({ color: 0x222233, side: THREE.DoubleSide });
 
   // ── Dungeon geometry ──────────────────────────────────────────────────────
   let floorMesh:     THREE.InstancedMesh | null = null;
@@ -499,12 +508,19 @@ export function createDungeonRenderer(
           const nfE = openFloorVal(cx + 1, cz); if (nfE !== null && nfE < floorVal) { floorEdges.push(makeFaceMatrix((cx+1) * tileSize, feMidY, wz,                    0, HALF_PI,    0, tileSize, tileSize)); floorEdgeIds.push(floorTileId); }
         }
 
-        // Voxel-style ceiling edge skirts: side faces of the ceiling cube (bottom=ceilingH, extends up).
-        const ceMidY = ceilingH + tileSize / 2;
-        const ncN = openCeilVal(cx, cz - 1); if (ncN !== null && ncN > ceilVal) { ceilEdges.push(makeFaceMatrix(wx,               ceMidY, cz * tileSize,         0, Math.PI,    0, tileSize, tileSize)); ceilEdgeIds.push(ceilTileId); }
-        const ncS = openCeilVal(cx, cz + 1); if (ncS !== null && ncS > ceilVal) { ceilEdges.push(makeFaceMatrix(wx,               ceMidY, (cz + 1) * tileSize,   0, 0,          0, tileSize, tileSize)); ceilEdgeIds.push(ceilTileId); }
-        const ncW = openCeilVal(cx - 1, cz); if (ncW !== null && ncW > ceilVal) { ceilEdges.push(makeFaceMatrix(cx * tileSize,     ceMidY, wz,                    0, -HALF_PI,   0, tileSize, tileSize)); ceilEdgeIds.push(ceilTileId); }
-        const ncE = openCeilVal(cx + 1, cz); if (ncE !== null && ncE > ceilVal) { ceilEdges.push(makeFaceMatrix((cx+1) * tileSize, ceMidY, wz,                    0, HALF_PI,    0, tileSize, tileSize)); ceilEdgeIds.push(ceilTileId); }
+        // Voxel-style ceiling edge skirts: height = exact difference between the two ceiling levels.
+        // Current cell's actual ceiling Y in world space:
+        const yCurrent = ceilingH - (ceilVal - 128) * offsetStep;
+        function addCeilSkirt(ncVal: number, mx: number, mz: number, ry: number) {
+          const h = (ncVal - ceilVal) * offsetStep; // height of the step
+          const midY = yCurrent - h / 2;            // centre between the two ceiling levels
+          ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, h));
+          ceilEdgeIds.push(ceilTileId);
+        }
+        const ncN = openCeilVal(cx, cz - 1); if (ncN !== null && ncN > ceilVal) addCeilSkirt(ncN, wx,               cz * tileSize,         Math.PI);
+        const ncS = openCeilVal(cx, cz + 1); if (ncS !== null && ncS > ceilVal) addCeilSkirt(ncS, wx,               (cz + 1) * tileSize,   0);
+        const ncW = openCeilVal(cx - 1, cz); if (ncW !== null && ncW > ceilVal) addCeilSkirt(ncW, cx * tileSize,     wz,                    -HALF_PI);
+        const ncE = openCeilVal(cx + 1, cz); if (ncE !== null && ncE > ceilVal) addCeilSkirt(ncE, (cx+1) * tileSize, wz,                    HALF_PI);
       }
     }
 
@@ -520,7 +536,7 @@ export function createDungeonRenderer(
     floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeIds, floorMat, !!atlas);
     scene.add(floorEdgeMesh);
 
-    ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeIds, ceilMat, !!atlas);
+    ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeIds, ceilEdgeMat, !!atlas);
     scene.add(ceilEdgeMesh);
   }
 

@@ -2842,9 +2842,18 @@ function createDungeonRenderer(element, game, options = {}) {
 		atlasMaterials.push(mat);
 		return mat;
 	}
+	function makeAtlasMaterialDoubleSide(atlasConfig) {
+		const mat = makeAtlasMaterial(atlasConfig);
+		mat.side = THREE.DoubleSide;
+		return mat;
+	}
 	const floorMat = atlas ? makeAtlasMaterial(atlas) : new THREE.MeshStandardMaterial({ color: 5592422 });
 	const ceilMat = atlas ? makeAtlasMaterial(atlas) : new THREE.MeshStandardMaterial({ color: 2236979 });
 	const wallMat = atlas ? makeAtlasMaterial(atlas) : new THREE.MeshStandardMaterial({ color: 7037040 });
+	const ceilEdgeMat = atlas ? makeAtlasMaterialDoubleSide(atlas) : new THREE.MeshStandardMaterial({
+		color: 2236979,
+		side: THREE.DoubleSide
+	});
 	let floorMesh = null;
 	let ceilMesh = null;
 	let wallMesh = null;
@@ -2944,27 +2953,21 @@ function createDungeonRenderer(element, game, options = {}) {
 					floorEdgeIds.push(floorTileId);
 				}
 			}
-			const ceMidY = ceilingH + tileSize / 2;
+			const yCurrent = ceilingH - (ceilVal - 128) * offsetStep;
+			function addCeilSkirt(ncVal, mx, mz, ry) {
+				const h = (ncVal - ceilVal) * offsetStep;
+				const midY = yCurrent - h / 2;
+				ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, h));
+				ceilEdgeIds.push(ceilTileId);
+			}
 			const ncN = openCeilVal(cx, cz - 1);
-			if (ncN !== null && ncN > ceilVal) {
-				ceilEdges.push(makeFaceMatrix(wx, ceMidY, cz * tileSize, 0, Math.PI, 0, tileSize, tileSize));
-				ceilEdgeIds.push(ceilTileId);
-			}
+			if (ncN !== null && ncN > ceilVal) addCeilSkirt(ncN, wx, cz * tileSize, Math.PI);
 			const ncS = openCeilVal(cx, cz + 1);
-			if (ncS !== null && ncS > ceilVal) {
-				ceilEdges.push(makeFaceMatrix(wx, ceMidY, (cz + 1) * tileSize, 0, 0, 0, tileSize, tileSize));
-				ceilEdgeIds.push(ceilTileId);
-			}
+			if (ncS !== null && ncS > ceilVal) addCeilSkirt(ncS, wx, (cz + 1) * tileSize, 0);
 			const ncW = openCeilVal(cx - 1, cz);
-			if (ncW !== null && ncW > ceilVal) {
-				ceilEdges.push(makeFaceMatrix(cx * tileSize, ceMidY, wz, 0, -HALF_PI, 0, tileSize, tileSize));
-				ceilEdgeIds.push(ceilTileId);
-			}
+			if (ncW !== null && ncW > ceilVal) addCeilSkirt(ncW, cx * tileSize, wz, -HALF_PI);
 			const ncE = openCeilVal(cx + 1, cz);
-			if (ncE !== null && ncE > ceilVal) {
-				ceilEdges.push(makeFaceMatrix((cx + 1) * tileSize, ceMidY, wz, 0, HALF_PI, 0, tileSize, tileSize));
-				ceilEdgeIds.push(ceilTileId);
-			}
+			if (ncE !== null && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI);
 		}
 		floorMesh = buildInstancedMesh(floors, floorIds, floorMat, !!atlas, new Float32Array(floorOffsets));
 		scene.add(floorMesh);
@@ -2974,7 +2977,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		scene.add(wallMesh);
 		floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeIds, floorMat, !!atlas);
 		scene.add(floorEdgeMesh);
-		ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeIds, ceilMat, !!atlas);
+		ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeIds, ceilEdgeMat, !!atlas);
 		scene.add(ceilEdgeMesh);
 	}
 	const entityGeo = new THREE.BoxGeometry(tileSize * .35, ceilingH * .55, tileSize * .35);
