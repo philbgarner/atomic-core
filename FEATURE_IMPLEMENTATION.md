@@ -253,7 +253,7 @@ These are the Three.js-coupled modules — everything that touches `DataTexture`
 
 ---
 
-## Phase 9 — Public API wiring
+## Phase 9 — Public API wiring ✅ COMPLETE
 
 **Goal:** Assemble all modules into the `game` handle and implement the `CrawlLib.*` attach functions.
 This is where the imperative developer-facing API from the README is built.
@@ -302,7 +302,7 @@ This is where the imperative developer-facing API from the README is built.
 
 ---
 
-## Phase 10 — Public surface and audio events
+## Phase 10 — Public surface and audio events ✅ COMPLETE
 
 **Goal:** Export the complete `CrawlLib` namespace; wire audio event emission throughout all modules; validate the full README API.
 

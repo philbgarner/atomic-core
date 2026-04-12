@@ -374,6 +374,33 @@ function makeApplyAction(
       return state;
     }
 
+    // Handle non-rotate interact actions: pickup, chest-open, door-open
+    if (action.kind === "interact") {
+      const actor = state.actors[actorId];
+      if (actor) {
+        if (action.meta?.pickup !== undefined) {
+          const itemId = action.meta.pickup as string;
+          const actorEntity = internal.entityById.get(actorId);
+          if (actorEntity) {
+            internal.events.emit("item-pickup", { item: { id: itemId }, entity: actorEntity });
+          }
+          internal.events.emit("audio", { name: "item-pickup", position: [actor.x, actor.y] });
+        }
+        if (action.targetId !== undefined) {
+          const target = internal.entityById.get(action.targetId);
+          if (target) {
+            if (target.type === "chest") {
+              internal.events.emit("chest-open", { chest: target, loot: [] });
+              internal.events.emit("audio", { name: "chest-open", position: [target.x, target.z] });
+            } else if (target.type === "door") {
+              internal.events.emit("audio", { name: "door-open", position: [target.x, target.z] });
+            }
+          }
+        }
+      }
+      return state;
+    }
+
     if (action.kind !== "move" || action.dx == null || action.dy == null) {
       return state;
     }
@@ -407,7 +434,16 @@ function makeApplyAction(
           if (result.defenderDied) defenderEntity.alive = false;
 
           combatOpts?.onDamage?.({ attacker: attackerEntity, defender: defenderEntity, amount: result.damage });
-          if (result.defenderDied) combatOpts?.onDeath?.({ entity: defenderEntity, killer: attackerEntity });
+          if (result.defenderDied) {
+            combatOpts?.onDeath?.({ entity: defenderEntity, killer: attackerEntity });
+            if (actorId === internal.playerActorId) {
+              const xp = (defenderEntity as Record<string, unknown>).xp as number ?? 0;
+              if (xp > 0) {
+                internal.events.emit("xp-gain", { amount: xp, x: defenderEntity.x, z: defenderEntity.z });
+              }
+              internal.events.emit("audio", { name: "xp-pickup", position: [defenderEntity.x, defenderEntity.z] });
+            }
+          }
 
           const updatedDefender = {
             ...state.actors[targetActor.id]!,
@@ -436,6 +472,10 @@ function makeApplyAction(
       (d) => d.blocksMove && d.x === nx && d.z === ny,
     );
     if (blockedByDecoration) return state;
+
+    if (actorId === internal.playerActorId) {
+      internal.events.emit("audio", { name: "footstep", position: [nx, ny] });
+    }
 
     return {
       ...state,
@@ -527,6 +567,7 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
           disablePassageInMask(internal.passageMask, internal.dungeonOutputs.width, passage);
         }
         internal.options.passages?.onToggle?.({ passage, enabled: passage.enabled });
+        internal.events.emit("audio", { name: "passage-toggle", position: [passage.start.x, passage.start.y] });
       },
     },
 

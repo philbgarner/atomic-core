@@ -77,9 +77,11 @@ export function resolveCombat({
   const defenderDied = defender.hp - damage <= 0;
 
   emit.emit("damage", { entity: defender, amount: damage });
+  emit.emit("audio", { name: "hit", position: [defender.x, defender.z] });
 
   if (defenderDied) {
     emit.emit("death", { entity: defender, killer: attacker });
+    emit.emit("audio", { name: "death", position: [defender.x, defender.z] });
   }
 
   return { outcome: "hit", damage, defenderDied };
