@@ -26,7 +26,7 @@ const posEl = document.getElementById("pos");
 
 const enemies = [];
 let spawned = 0;
-const MAX_ENEMIES = 6;
+const MAX_ENEMIES = 0;
 
 // ---------------------------------------------------------------------------
 // Create game
@@ -84,20 +84,20 @@ const atlasImg = new Image();
 atlasImg.onload = () => {
   renderer = createDungeonRenderer(viewportEl, game, {
     atlas: {
-      image:       atlasImg,
-      tileWidth:   64,
-      tileHeight:  64,
-      sheetWidth:  512,
+      image: atlasImg,
+      tileWidth: 64,
+      tileHeight: 64,
+      sheetWidth: 512,
       sheetHeight: 1024,
-      columns:     8,
+      columns: 8,
     },
-    floorTileId: 20,  // Flagstone   uv [256, 128]
-    ceilTileId:  19,  // Cobblestone uv [192, 128]
-    wallTileId:  16,  // Brick       uv [0,   128]
+    floorTileId: 20, // Flagstone   uv [256, 128]
+    ceilTileId: 19, // Cobblestone uv [192, 128]
+    wallTileId: 16, // Brick       uv [0,   128]
   });
   game.generate();
 };
-atlasImg.src = '/examples/basic/atlas.png';
+atlasImg.src = "/examples/basic/atlas.png";
 
 // ---------------------------------------------------------------------------
 // Spawn enemies — one per room, capped, skipping early rooms
@@ -147,10 +147,10 @@ game.events.on("audio", ({ name }) => {
 
 attachKeybindings(game, {
   bindings: {
-    moveN: ["w", "W", "ArrowUp"],
-    moveS: ["s", "S", "ArrowDown"],
-    moveW: ["a", "A", "ArrowLeft"],
-    moveE: ["d", "D", "ArrowRight"],
+    moveForward: ["w", "W", "ArrowUp"],
+    moveBackward: ["s", "S", "ArrowDown"],
+    moveLeft: ["a", "A", "ArrowLeft"],
+    moveRight: ["d", "D", "ArrowRight"],
     turnLeft: ["q", "Q"],
     turnRight: ["e", "E"],
     wait: [" "],
@@ -161,19 +161,32 @@ attachKeybindings(game, {
       addLog("You are dead. Refresh to restart.", "death");
       return;
     }
+    // Compute grid-relative step from facing angle.
+    // facing is yaw in radians; sin/cos give the forward vector in (x, z) grid space.
+    function relativeMove(forward, strafe) {
+      const yaw = game.player.facing;
+      const fx = Math.round(-Math.sin(yaw));
+      const fz = Math.round(-Math.cos(yaw));
+      const sx = Math.round(Math.cos(yaw));
+      const sz = Math.round(-Math.sin(yaw));
+      return game.player.move(
+        forward * fx + strafe * sx,
+        forward * fz + strafe * sz,
+      );
+    }
     let a;
     switch (action) {
-      case "moveN":
-        a = game.player.move(0, -1);
+      case "moveForward":
+        a = relativeMove(1, 0);
         break;
-      case "moveS":
-        a = game.player.move(0, 1);
+      case "moveBackward":
+        a = relativeMove(-1, 0);
         break;
-      case "moveW":
-        a = game.player.move(-1, 0);
+      case "moveLeft":
+        a = relativeMove(0, -1);
         break;
-      case "moveE":
-        a = game.player.move(1, 0);
+      case "moveRight":
+        a = relativeMove(0, 1);
         break;
       case "turnLeft":
         a = game.player.rotate(Math.PI / 2);
