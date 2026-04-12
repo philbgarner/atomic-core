@@ -1,8 +1,8 @@
 # r3f-crawl-lib
 
-A composable JavaScript library built on [React Three Fiber](https://docs.pmnd.rs/react-three-fiber) for building first-person 3D dungeon crawl games in the browser.
+A composable JavaScript library built on [Three.js](https://threejs.org/) for building first-person 3D dungeon crawl games in the browser.
 
-Game logic lives entirely in your JS layer — the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like.
+Game logic lives entirely in your JS layer — the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like. No React, no JSX, no build step required.
 
 ---
 
@@ -17,6 +17,7 @@ Game logic lives entirely in your JS layer — the library provides the renderin
   - [Moving the player](#moving-the-player)
   - [Listening to game events](#listening-to-game-events)
   - [Adding entities at runtime](#adding-entities-at-runtime)
+  - [3D Renderer](#3d-renderer)
   - [Loading a Tiled map](#loading-a-tiled-map)
   - [HUD overlay with plain HTML](#hud-overlay-with-plain-html)
   - [Spawn callback](#spawn-callback)
@@ -38,31 +39,28 @@ Game logic lives entirely in your JS layer — the library provides the renderin
   - [Combat](#combat)
   - [Items & Inventory](#items--inventory)
   - [Hidden Passages](#hidden-passages)
-  - [Rendering](#rendering)
+  - [3D Renderer](#3d-renderer-1)
   - [Keybindings](#keybindings)
   - [Audio](#audio)
   - [Events](#events)
 - [Tiled Workflow](#tiled-workflow)
 - [Configuration Reference](#configuration-reference)
-- [Atlas Format](#atlas-format)
-- [Character Atlas Format](#character-atlas-format)
-  - [Sprite assignment](#sprite-assignment)
+- [Tile Atlas Format](#tile-atlas-format)
 
 ---
 
 ## Features
 
-- First-person 3D tile-based dungeon rendering with torch lighting and fog
+- First-person 3D tile-based dungeon rendering with torch lighting and fog (plain Three.js — no React/R3F required)
 - BSP dungeon generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
 - Three-faction combat model: `player`, `npc`, `enemy`
-- Sprite billboard rendering with body/head layers
 - Minimap with entity overlays
 - Chest drops and item pickups
 - Hidden passage traversal
 - Callback-driven enemy spawning
-- Stationary decoration entities (billboarded sprites for furniture, props, etc.)
+- Stationary decoration entities (props, furniture, fixtures)
 - Atlas surface painting — apply tile layers to walls, floors, and ceilings per-tile
 - Configurable keybindings
 - Audio hooks (Howler.js compatible)
@@ -74,86 +72,123 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 
 ### `<script>` tag (no build step)
 
-Load dependencies from a CDN, then load the library UMD bundle. All exports are available on `window.CrawlLib`.
+Load Three.js, then the library IIFE bundle. All exports are available on `window.CrawlLib`.
 
 ```html
-<!-- Dependencies -->
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/three@0.165/build/three.min.js"></script>
-<script src="https://unpkg.com/@react-three/fiber@8/dist/react-three-fiber.umd.js"></script>
-<script src="https://unpkg.com/@react-three/drei@9/dist/drei.umd.js"></script>
+<!-- Three.js (required) -->
+<script type="module">
+  import * as THREE from '/node_modules/three/build/three.module.js';
+  window.THREE = THREE;
+</script>
 
-<!-- r3f-crawl-lib UMD bundle -->
-<script src="https://unpkg.com/r3f-crawl-lib/dist/r3f-crawl-lib.umd.js"></script>
+<!-- r3f-crawl-lib IIFE bundle -->
+<script src="/dist/r3f-crawl-lib.iife.js" defer></script>
 ```
 
-Once loaded, `window.CrawlLib` exposes an imperative `CrawlLib.createGame()` factory you can use directly from any HTML page without JSX or a build toolchain.
+Once loaded, `window.CrawlLib` exposes the full imperative API you can use from any HTML page without JSX or a build toolchain.
 
 ---
 
 ## Quick Start
 
-`CrawlLib.createGame()` mounts the game into a DOM element and returns a `game` handle with state objects and action methods.
+`CrawlLib.createGame()` sets up game logic and returns a `game` handle. Call `CrawlLib.createDungeonRenderer()` separately to mount the 3D viewport — this lets you attach event callbacks and a spawner before generating the dungeon.
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
   <style>
-    #game { width: 100vw; height: 100vh; display: block; }
+    #viewport { width: 100vw; height: 100vh; display: block; }
   </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <div id="viewport"></div>
 
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/three@0.165/build/three.min.js"></script>
-  <script src="https://unpkg.com/@react-three/fiber@8/dist/react-three-fiber.umd.js"></script>
-  <script src="https://unpkg.com/@react-three/drei@9/dist/drei.umd.js"></script>
-  <script src="https://unpkg.com/r3f-crawl-lib/dist/r3f-crawl-lib.umd.js"></script>
+  <script type="module">
+    import * as THREE from '/node_modules/three/build/three.module.js';
+    window.THREE = THREE;
+  </script>
+  <script src="/dist/r3f-crawl-lib.iife.js" defer></script>
+  <script defer>
+    const { createGame, createEnemy, attachSpawner, attachKeybindings, createDungeonRenderer } = CrawlLib
 
-  <script>
-    const { createGame, createNpc, createEnemy, createItem } = CrawlLib
-
-    const game = createGame(document.getElementById('game'), {
+    const game = createGame(document.body, {
       dungeon: {
-        seed: 42,
-        width: 64,
-        height: 64,
-        themes: 'dungeon',
-        onPlace: function({ rooms, endRoom, startRoom, rng, place }) {
-          place.object(endRoom.cx, endRoom.cz, 'exit')
-          rooms.forEach(function(room) {
-            if (rng.chance(0.4)) place.object(room.cx, room.cz, 'chest')
-            if (rng.chance(0.3)) place.npc(room.cx, room.cz, 'villager')
-          })
-        },
+        seed:        0xdeadbeef,
+        width:       40,
+        height:      40,
+        minRoomSize: 5,
+        maxRoomSize: 11,
       },
-
-      player: { x: 2, z: 2, hp: 30, attack: 3, defense: 2 },
-
-      rendering: {
-        atlas:              './atlas.png',
-        atlasJson:          './atlas.json',
-        characterAtlas:     './characters.png',
-        characterAtlasJson: './characters.json',
-        torch: {
-          color:     '#ff9944',
-          intensity: 1,
-          fogNear:   4,
-          fogFar:    28,
+      player: { hp: 30, maxHp: 30, attack: 5, defense: 2, speed: 5 },
+      combat: {
+        onDamage({ attacker, defender, amount }) {
+          console.log(`${attacker.type} hits ${defender.type} for ${amount}`)
+        },
+        onDeath({ entity }) {
+          console.log(`${entity.type} is slain!`)
         },
       },
     })
 
-    // Attach callbacks before generating — spawner, decorator, surface painter, etc.
-    // then call generate() to build the dungeon and start the game.
-    game.generate()
+    // Load the tile atlas image, then create the 3D renderer
+    const atlasImg = new Image()
+    atlasImg.onload = () => {
+      const renderer = createDungeonRenderer(
+        document.getElementById('viewport'),
+        game,
+        {
+          atlas: {
+            image:       atlasImg,
+            tileWidth:   64,
+            tileHeight:  64,
+            sheetWidth:  512,
+            sheetHeight: 1024,
+            columns:     8,
+          },
+          floorTileId: 20,  // row-major tile index into the atlas sheet
+          ceilTileId:  19,
+          wallTileId:  16,
+        },
+      )
 
-    // game.dungeon, game.player, game.turns are live state objects
-    console.log('Player starts at', game.player.x, game.player.z)
+      // Generate the dungeon — must be called after attaching all callbacks
+      game.generate()
+    }
+    atlasImg.src = './atlas.png'
+
+    // Keyboard input
+    attachKeybindings(game, {
+      bindings: {
+        moveForward:  ['w', 'ArrowUp'],
+        moveBackward: ['s', 'ArrowDown'],
+        moveLeft:     ['a', 'ArrowLeft'],
+        moveRight:    ['d', 'ArrowRight'],
+        turnLeft:     ['q', 'Q'],
+        turnRight:    ['e', 'E'],
+        wait:         [' '],
+      },
+      onAction(action, event) {
+        event.preventDefault()
+        if (!game.player.alive) return
+        const yaw = game.player.facing
+        const fx = Math.round(-Math.sin(yaw))
+        const fz = Math.round(-Math.cos(yaw))
+        const sx = Math.round( Math.cos(yaw))
+        const sz = Math.round(-Math.sin(yaw))
+        let a
+        switch (action) {
+          case 'moveForward':  a = game.player.move( fx,  fz); break
+          case 'moveBackward': a = game.player.move(-fx, -fz); break
+          case 'moveLeft':     a = game.player.move(-sx, -sz); break
+          case 'moveRight':    a = game.player.move( sx,  sz); break
+          case 'turnLeft':     a = game.player.rotate( Math.PI / 2); break
+          case 'turnRight':    a = game.player.rotate(-Math.PI / 2); break
+          case 'wait':         a = game.player.wait(); break
+        }
+        if (a) game.turns.commit(a)
+      },
+    })
   </script>
 </body>
 </html>
@@ -167,7 +202,7 @@ This section covers using r3f-crawl-lib entirely from a `<script>` tag — no JS
 
 ### The `game` handle
 
-`createGame(canvas, options)` mounts the renderer and returns a `game` object but does **not** generate the dungeon. Attach any callbacks (`attachSpawner`, `attachDecorator`, `attachSurfacePainter`, etc.) first, then call `game.generate()` to build the dungeon and begin the game.
+`createGame(element, options)` sets up all game systems and returns a `game` object but does **not** generate the dungeon. Attach any callbacks (`attachSpawner`, `attachDecorator`, `attachSurfacePainter`, etc.) first, create the 3D renderer, then call `game.generate()`.
 
 | Property | Type | Description |
 |---|---|---|
@@ -183,137 +218,185 @@ This section covers using r3f-crawl-lib entirely from a `<script>` tag — no JS
 
 Player action methods return turn actions. Pass them to `turns.commit()` to spend the turn and let all other actors act.
 
-```html
-<script>
-  document.addEventListener('keydown', function(e) {
-    switch (e.key) {
-      case 'w': case 'ArrowUp':    game.turns.commit(game.player.move(0, -1));  break
-      case 's': case 'ArrowDown':  game.turns.commit(game.player.move(0,  1));  break
-      case 'a':                    game.turns.commit(game.player.move(-1, 0));   break
-      case 'd':                    game.turns.commit(game.player.move( 1, 0));   break
-      case 'q':                    game.turns.commit(game.player.rotate(-Math.PI / 2)); break
-      case 'e':                    game.turns.commit(game.player.rotate( Math.PI / 2)); break
-      case 'i':                    game.turns.commit(game.player.interact(null)); break
-      case '.':                    game.turns.commit(game.player.wait());        break
-    }
-  })
-</script>
+```js
+document.addEventListener('keydown', function(e) {
+  if (!game.player.alive) return
+  // Compute facing-relative movement
+  const yaw = game.player.facing
+  const fx = Math.round(-Math.sin(yaw))
+  const fz = Math.round(-Math.cos(yaw))
+  const sx = Math.round( Math.cos(yaw))
+  const sz = Math.round(-Math.sin(yaw))
+  switch (e.key) {
+    case 'w': case 'ArrowUp':    game.turns.commit(game.player.move(fx,  fz));  break
+    case 's': case 'ArrowDown':  game.turns.commit(game.player.move(-fx, -fz)); break
+    case 'a': case 'ArrowLeft':  game.turns.commit(game.player.move(-sx, -sz)); break
+    case 'd': case 'ArrowRight': game.turns.commit(game.player.move(sx,  sz));  break
+    case 'q':                    game.turns.commit(game.player.rotate( Math.PI / 2)); break
+    case 'e':                    game.turns.commit(game.player.rotate(-Math.PI / 2)); break
+    case 'i':                    game.turns.commit(game.player.interact(null)); break
+    case '.':                    game.turns.commit(game.player.wait());         break
+  }
+})
 ```
 
 ### Listening to game events
 
 Use `game.events.on()` to react to anything that happens:
 
-```html
-<script>
-  var hpDisplay = document.getElementById('hp')
-  var logEl     = document.getElementById('log')
+```js
+var hpDisplay = document.getElementById('hp')
+var logEl     = document.getElementById('log')
 
-  game.events.on('damage', function(e) {
-    logEl.textContent = e.entity.id + ' takes ' + e.amount + ' damage'
-    if (e.entity === game.player) {
-      hpDisplay.textContent = game.player.hp + ' / ' + game.player.maxHp
-    }
-  })
+game.events.on('turn', function({ turn }) {
+  document.getElementById('turn').textContent = turn
+  hpDisplay.textContent = game.player.hp + ' / ' + game.player.maxHp
+})
 
-  game.events.on('death', function(e) {
-    logEl.textContent = e.entity.id + ' is defeated!'
-  })
-
-  game.events.on('win',  function() { alert('You win!') })
-  game.events.on('lose', function() { alert('Game over') })
-</script>
+game.events.on('audio', function({ name }) {
+  console.log('[sfx]', name)
+})
 ```
 
 ### Adding entities at runtime
 
-```html
-<script>
-  // NPCs are neutral towards the player; hostile only to enemies
-  var villager = CrawlLib.createNpc({
-    type: 'villager',
-    x: 5, z: 3,
-    hp: 20, attack: 2, defense: 1,
-    faction: 'npc',
-  })
+```js
+// NPCs are neutral towards the player; hostile only to enemies
+var villager = CrawlLib.createNpc({
+  type: 'villager',
+  sprite: 'v',
+  x: 5, z: 3,
+  hp: 20, attack: 2, defense: 1,
+  faction: 'npc',
+})
 
-  // Enemies are hostile to both the player and NPCs
-  var goblin = CrawlLib.createEnemy({
-    type: 'goblin',
-    x: 10, z: 10,
-    hp: 15, attack: 4, defense: 1,
-    faction: 'enemy',
-    xp: 20,
-    drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.5 },
-  })
+// Enemies are hostile to both the player and NPCs
+var goblin = CrawlLib.createEnemy({
+  type:    'goblin',
+  sprite:  'g',
+  x: 10, z: 10,
+  hp: 15, maxHp: 15,
+  attack: 4, defense: 1,
+  speed: 6,
+  danger: 1,
+  xp: 20,
+})
 
-  // Register entities with the scheduler so they act each turn
-  game.turns.addActor(villager)
-  game.turns.addActor(goblin)
-</script>
+// Register entities with the scheduler so they act each turn
+game.turns.addActor(villager)
+game.turns.addActor(goblin)
 ```
+
+### 3D Renderer
+
+The 3D renderer is created separately from the game object. This allows you to defer renderer creation until the atlas image has loaded while still attaching game callbacks synchronously.
+
+```js
+const atlasImg = new Image()
+atlasImg.onload = function() {
+  var renderer = CrawlLib.createDungeonRenderer(
+    document.getElementById('viewport'),
+    game,
+    {
+      // Tile atlas — pass a pre-loaded HTMLImageElement
+      atlas: {
+        image:       atlasImg,
+        tileWidth:   64,
+        tileHeight:  64,
+        sheetWidth:  512,
+        sheetHeight: 1024,
+        columns:     8,
+      },
+      // Tile IDs are 0-based row-major indices into the sheet:
+      //   id = (pixelY / tileHeight) * columns + (pixelX / tileWidth)
+      floorTileId: 20,
+      ceilTileId:  19,
+      wallTileId:  16,
+
+      // Optional overrides (all have sensible defaults)
+      fov:          75,
+      tileSize:     3,
+      ceilingHeight: 3,
+      fogNear:      5,
+      fogFar:       24,
+      fogColor:     '#000000',
+      lerpFactor:   0.18,
+      bandNear:     8,
+      torchIntensity: 0.33,
+    },
+  )
+
+  // After creating the renderer, generate the dungeon
+  game.generate()
+
+  // Update entity visuals each turn
+  game.events.on('turn', function() {
+    renderer.setEntities(enemies)
+  })
+}
+atlasImg.src = './atlas.png'
+```
+
+`createDungeonRenderer` returns a `DungeonRenderer` handle:
+
+| Method | Description |
+|---|---|
+| `renderer.setEntities(entities)` | Pass the current live entity list; call on every `'turn'` event |
+| `renderer.destroy()` | Unmount the canvas and release all Three.js resources |
 
 ### Loading a Tiled map
 
-```html
-<script>
-  fetch('./maps/dungeon-level-1.tmj')
-    .then(function(r) { return r.json() })
-    .then(function(tiledMap) {
-      var game = CrawlLib.createGame(document.getElementById('game'), {
-        dungeon: {
-          tiled: {
-            map: tiledMap,
-            layers: {
-              solid:   'Collision',
-              floor:   'Floor',
-              wall:    'Walls',
-              ceiling: 'Ceiling',
-              objects: 'Objects',
-            },
-            objectTypes: {
-              'PlayerStart':  'playerStart',
-              'Chest':        'chest',
-              'Exit':         'exit',
-              'NPC_Villager': 'npc:villager',
-              'Mob_Goblin':   'mob:goblin',
-            },
-            tilesetMap: {
-              1:  'cobblestone-floor',
-              17: 'flagstone-floor',
-              33: 'concrete-wall',
-            },
+```js
+fetch('./maps/dungeon-level-1.tmj')
+  .then(function(r) { return r.json() })
+  .then(function(tiledMap) {
+    var game = CrawlLib.createGame(document.getElementById('viewport'), {
+      dungeon: {
+        tiled: {
+          map: tiledMap,
+          layers: {
+            solid:   'Collision',
+            floor:   'Floor',
+            wall:    'Walls',
+            ceiling: 'Ceiling',
+            objects: 'Objects',
+          },
+          objectTypes: {
+            'PlayerStart':  'playerStart',
+            'Chest':        'chest',
+            'Exit':         'exit',
+            'NPC_Villager': 'npc:villager',
+            'Mob_Goblin':   'mob:goblin',
+          },
+          tilesetMap: {
+            1:  'cobblestone-floor',
+            17: 'flagstone-floor',
+            33: 'concrete-wall',
           },
         },
-
-        player: { hp: 30, attack: 3, defense: 2 },
-
-        rendering: {
-          atlas:     './atlas.png',
-          atlasJson: './atlas.json',
-        },
-      })
-
-      game.generate()
+      },
+      player: { hp: 30, attack: 3, defense: 2 },
     })
-</script>
+
+    game.generate()
+  })
 ```
 
 ### HUD overlay with plain HTML
 
-The game renders into your `<canvas>`; HUD elements are just HTML on top:
+The renderer creates its own `<canvas>` inside the viewport element. Overlay HTML on top for your HUD:
 
 ```html
 <style>
   #container { position: relative; width: 100vw; height: 100vh; }
-  #game       { position: absolute; inset: 0; }
-  #hud        { position: absolute; top: 16px; left: 16px; color: #fff;
-                font: bold 16px monospace; pointer-events: none; }
-  #minimap    { position: absolute; bottom: 16px; right: 16px; }
+  #viewport  { position: absolute; inset: 0; }
+  #hud       { position: absolute; top: 16px; left: 16px; color: #fff;
+               font: bold 16px monospace; pointer-events: none; }
+  #minimap   { position: absolute; bottom: 16px; right: 16px; }
 </style>
 
 <div id="container">
-  <canvas id="game"></canvas>
+  <div id="viewport"></div>
   <div id="hud">
     HP: <span id="hp">30</span> &nbsp; Turn: <span id="turn">0</span>
   </div>
@@ -321,7 +404,7 @@ The game renders into your `<canvas>`; HUD elements are just HTML on top:
 </div>
 
 <script>
-  var game = CrawlLib.createGame(document.getElementById('game'), { /* ... */ })
+  var game = CrawlLib.createGame(document.getElementById('viewport'), { /* ... */ })
 
   // Enable the built-in minimap renderer pointed at a 2D canvas
   CrawlLib.attachMinimap(game, document.getElementById('minimap'), {
@@ -330,12 +413,11 @@ The game renders into your `<canvas>`; HUD elements are just HTML on top:
   })
 
   // Keep the text HUD in sync
-  game.events.on('turn', function() {
+  game.events.on('turn', function({ turn }) {
     document.getElementById('hp').textContent   = game.player.hp
-    document.getElementById('turn').textContent = game.turns.turn
+    document.getElementById('turn').textContent = turn
   })
 
-  // Generate the dungeon after all callbacks are attached
   game.generate()
 </script>
 ```
@@ -344,154 +426,146 @@ The game renders into your `<canvas>`; HUD elements are just HTML on top:
 
 > Attach all callbacks before calling `game.generate()`. The dungeon is not built until `generate()` is called, so any `attachSpawner`, `attachDecorator`, or `attachSurfacePainter` calls made beforehand are guaranteed to be in place when generation runs.
 
-Register a callback to control enemy spawning. It is called whenever the library needs to decide whether to place an entity at a given position — on dungeon entry, room visits, or any custom trigger. Return an entity (or array of entities) to spawn, or `null` to skip.
+Register a callback to control enemy spawning. It is called for each candidate room position during dungeon generation. Return an entity (or array of entities) to spawn, or `null` to skip.
 
-```html
-<script>
-  CrawlLib.attachSpawner(game, {
-    onSpawn: function({ dungeon, roomId, x, y }) {
-      var room = dungeon.rooms[roomId]
-      if (!room) return null
+```js
+var enemies = []
 
-      // Only spawn in rooms far from the start
-      if (room.distanceFromStart < 3) return null
+CrawlLib.attachSpawner(game, {
+  onSpawn: function({ dungeon, roomId, x, y }) {
+    if (roomId < 2) return null                 // skip early rooms
+    if (Math.random() > 0.55) return null       // random density
 
-      var types = ['goblin', 'orc', 'skeleton']
-      var type  = types[Math.floor(Math.random() * types.length)]
-
-      return CrawlLib.createEnemy({
-        type:    type,
-        faction: 'enemy',
-        hp:      15,
-        attack:   4,
-        xp:      20,
-        x:       x,
-        z:       y,
-        drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.4 },
-      })
-    },
-  })
-</script>
+    var e = CrawlLib.createEnemy({
+      type:    'goblin',
+      sprite:  'g',
+      x:       x,
+      z:       y,
+      hp:      8,
+      maxHp:   8,
+      attack:  2,
+      defense: 0,
+      speed:   6,
+      danger:  1,
+      xp:      10,
+    })
+    enemies.push(e)
+    return e
+  },
+})
 ```
+
+The `onSpawn` callback receives:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `dungeon` | object | Dungeon handle (rooms, passages, decorations) |
+| `roomId` | number | ID of the room being populated |
+| `x` | number | Tile X coordinate of the candidate spawn point |
+| `y` | number | Tile Y coordinate of the candidate spawn point (maps to entity `z`) |
+
+---
 
 ### Decoration callback
 
-Register a callback to place stationary billboarded sprites (furniture, props, wall fixtures, etc.). It is called for each candidate tile position during dungeon setup. Return a decoration, an array of decorations, or `null` to skip.
+Register a callback to place stationary props (furniture, barrels, fixtures, etc.). Return a decoration, an array of decorations, or `null`.
 
-```html
-<script>
-  CrawlLib.attachDecorator(game, {
-    onDecorate: function({ dungeon, roomId, x, y }) {
-      var room = dungeon.rooms[roomId]
-      if (!room) return null
+```js
+CrawlLib.attachDecorator(game, {
+  onDecorate: function({ dungeon, roomId, x, y }) {
+    var room = dungeon.rooms[roomId]
+    if (!room) return null
 
-      // Place a barrel in the corner of every other room
-      if (room.index % 2 === 0 && x === room.x + 1 && y === room.y + 1) {
-        return CrawlLib.createDecoration({
-          type:       'barrel',
-          x:          x,
-          z:          y,
-          sprite:     'barrel',        // atlas sprite name
-          blocksMove: true,
-        })
-      }
+    if (Math.random() < 0.05) {
+      return CrawlLib.createDecoration({
+        type:       'barrel',
+        x:          x,
+        z:          y,
+        sprite:     'barrel',
+        blocksMove: true,
+      })
+    }
 
-      // Place a wall torch sconce on north walls
-      if (dungeon.tiles[y - 1] && dungeon.tiles[y - 1][x].solid) {
-        return CrawlLib.createDecoration({
-          type:       'torch-sconce',
-          x:          x,
-          z:          y,
-          sprite:     'torch-sconce',
-          blocksMove: false,
-        })
-      }
-
-      return null
-    },
-  })
-</script>
+    return null
+  },
+})
 ```
 
 ### Surface painting callback
 
-Register a callback to paint atlas tile layers onto tiles. It is called per tile position and should return an array of atlas tile IDs to composite in sequence over the base tile, or `null` to leave the tile unchanged.
+Register a callback to paint atlas tile layers onto tiles per position. Return an ordered array of atlas tile IDs to composite over the base tile, or `null` to leave it unchanged.
 
-```html
-<script>
-  CrawlLib.attachSurfacePainter(game, {
-    onPaint: function({ dungeon, roomId, x, y }) {
-      var room = dungeon.rooms[roomId]
-      if (!room) return null
+```js
+CrawlLib.attachSurfacePainter(game, {
+  onPaint: function({ dungeon, roomId, x, y }) {
+    var room = dungeon.rooms[roomId]
+    if (!room) return null
 
-      // Crypt rooms get a bone-floor base with a grime overlay
-      if (room.theme === 'crypt') {
-        return ['bone-floor', 'grime-overlay']
-      }
+    if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
+      return ['wet-overlay']
+    }
 
-      // Puddle near room centre
-      if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
-        return ['wet-overlay']
-      }
-
-      return null
-    },
-  })
-</script>
+    return null
+  },
+})
 ```
 
 ### Keybindings helper
 
-Instead of writing your own `keydown` handler, use the built-in binding helper:
+Instead of writing your own `keydown` handler, use the built-in binding helper. Action names are arbitrary strings you define:
 
-```html
-<script>
-  CrawlLib.attachKeybindings(game, {
-    bindings: {
-      'move-forward':   ['w', 'ArrowUp'],
-      'move-back':      ['s', 'ArrowDown'],
-      'strafe-left':    ['a'],
-      'strafe-right':   ['d'],
-      'rotate-left':    ['q'],
-      'rotate-right':   ['e'],
-      'interact':       ['i'],
-      'wait':           ['.'],
-      'toggle-passage': ['f'],
-    },
+```js
+CrawlLib.attachKeybindings(game, {
+  bindings: {
+    moveForward:  ['w', 'ArrowUp'],
+    moveBackward: ['s', 'ArrowDown'],
+    moveLeft:     ['a', 'ArrowLeft'],
+    moveRight:    ['d', 'ArrowRight'],
+    turnLeft:     ['q', 'Q'],
+    turnRight:    ['e', 'E'],
+    interact:     ['i'],
+    wait:         [' '],
+  },
 
-    onAction: function(action) {
-      if (action === 'move-forward')  game.turns.commit(game.player.move(0, -1))
-      if (action === 'move-back')     game.turns.commit(game.player.move(0,  1))
-      if (action === 'strafe-left')   game.turns.commit(game.player.move(-1, 0))
-      if (action === 'strafe-right')  game.turns.commit(game.player.move( 1, 0))
-      if (action === 'rotate-left')   game.turns.commit(game.player.rotate(-Math.PI / 2))
-      if (action === 'rotate-right')  game.turns.commit(game.player.rotate( Math.PI / 2))
-      if (action === 'interact')      game.turns.commit(game.player.interact(null))
-      if (action === 'wait')          game.turns.commit(game.player.wait())
-      if (action === 'toggle-passage') {
-        var nearby = game.dungeon.passageNear(game.player.x, game.player.z)
-        if (nearby) game.dungeon.passages.toggle(nearby.id)
-      }
-    },
-  })
-</script>
+  onAction: function(action, event) {
+    event.preventDefault()
+    if (!game.player.alive) return
+    const yaw = game.player.facing
+    const fx = Math.round(-Math.sin(yaw))
+    const fz = Math.round(-Math.cos(yaw))
+    const sx = Math.round( Math.cos(yaw))
+    const sz = Math.round(-Math.sin(yaw))
+    let a
+    switch (action) {
+      case 'moveForward':  a = game.player.move( fx,  fz); break
+      case 'moveBackward': a = game.player.move(-fx, -fz); break
+      case 'moveLeft':     a = game.player.move(-sx, -sz); break
+      case 'moveRight':    a = game.player.move( sx,  sz); break
+      case 'turnLeft':     a = game.player.rotate( Math.PI / 2); break
+      case 'turnRight':    a = game.player.rotate(-Math.PI / 2); break
+      case 'interact':     a = game.player.interact(null); break
+      case 'wait':         a = game.player.wait(); break
+    }
+    if (a) game.turns.commit(a)
+  },
+})
 ```
 
 ### Script tag API surface
 
 | Function | Description |
 |---|---|
-| `CrawlLib.createGame(canvas, options)` | Mount the renderer; returns a `game` handle — does not generate the dungeon |
+| `CrawlLib.createGame(element, options)` | Set up game logic; returns a `game` handle — does not generate the dungeon |
+| `CrawlLib.createDungeonRenderer(element, game, opts)` | Mount the Three.js first-person renderer; returns a `DungeonRenderer` handle |
 | `CrawlLib.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
 | `CrawlLib.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
 | `CrawlLib.attachDecorator(game, opts)` | Register a decoration callback to place stationary props |
 | `CrawlLib.attachSurfacePainter(game, opts)` | Register a callback to paint atlas layers on surfaces |
 | `CrawlLib.attachKeybindings(game, opts)` | Register keyboard bindings |
-| `CrawlLib.createNpc(opts)` | Create an NPC entity (`faction: 'npc'`) |
-| `CrawlLib.createEnemy(opts)` | Create an enemy entity (`faction: 'enemy'`) |
-| `CrawlLib.createDecoration(opts)` | Create a stationary billboarded decoration |
+| `CrawlLib.createNpc(opts)` | Create an NPC entity |
+| `CrawlLib.createEnemy(opts)` | Create an enemy entity |
+| `CrawlLib.createDecoration(opts)` | Create a stationary decoration |
 | `CrawlLib.createItem(opts)` | Create an item |
-| `CrawlLib.buildTilesetMap(tsj, opts)` | Build a `tilesetMap` from a `.tsj` object |
 
 ---
 
@@ -504,19 +578,13 @@ The dungeon is a grid of tiles encoded as `DataTexture` maps (solid, floor type,
 ```js
 dungeon: {
   // Procedural BSP generation
-  seed: 12345,
-  width: 64,
-  height: 64,
+  seed:        12345,
+  width:       64,
+  height:      64,
   minLeafSize: 8,
   maxLeafSize: 20,
   minRoomSize: 4,
   maxRoomSize: 14,
-  maxDoors: 3,
-  trapDensity: 0.02,
-
-  // Theme: 'dungeon' | 'crypt' | 'catacomb' | 'industrial' | 'ruins'
-  // or a callback: function({ room, rng }) { return 'crypt' }
-  themes: 'dungeon',
 
   // Called after generation for custom object, entity, decoration, and surface placement
   onPlace: function({ rooms, endRoom, startRoom, rng, place }) {
@@ -564,7 +632,7 @@ dungeon: {
       'Passage':      'passage',
     },
 
-    // Map Tiled tileset GIDs to atlas tile IDs
+    // Map Tiled tileset GIDs to atlas tile names (used by surface painter)
     tilesetMap: {
       1:  'cobblestone-floor',
       17: 'flagstone-floor',
@@ -575,25 +643,16 @@ dungeon: {
 }
 ```
 
-Tiled tilesets (`.tsj`) can be used to build `tilesetMap` programmatically:
-
-```js
-var tilesetMap = CrawlLib.buildTilesetMap(myTileset, {
-  // property name on each tile that holds the atlas tile ID
-  atlasIdProperty: 'atlasId',
-})
-```
-
 ---
 
 ### Player
 
 ```js
 player: {
-  x: 2, z: 2,         // starting grid position
+  x: 2, z: 2,         // starting grid position (overridden by PlayerStart object if using Tiled)
   hp: 30, maxHp: 30,
   attack: 4, defense: 2,
-  speed: 1,            // turn cost multiplier
+  speed: 5,            // turn cost — lower = faster
 }
 ```
 
@@ -603,17 +662,19 @@ Reactive state and action methods on `game.player`:
 game.player.x          // current grid X
 game.player.z          // current grid Z
 game.player.hp         // current HP
-game.player.facing     // yaw in radians
+game.player.maxHp      // maximum HP
+game.player.facing     // camera yaw in radians
 game.player.inventory  // array of item slots
 game.player.alive      // boolean
 
 // Imperative actions (pass to turns.commit)
-game.player.move(dx, dz)
-game.player.rotate(angle)       // radians
-game.player.interact(entityId)
+game.player.move(dx, dz)          // grid delta — use facing-relative math for first-person movement
+game.player.rotate(angle)         // radians; positive = counter-clockwise
+game.player.interact(entityId)    // pass null to interact with adjacent objects
 game.player.wait()
 game.player.pickup(itemId)
 game.player.useItem(slotIndex)
+game.player.dropItem(slotIndex)
 ```
 
 ---
@@ -629,16 +690,16 @@ turns.commit(game.player.move(1, 0))
 // Current turn counter
 turns.turn    // number
 
-// Add an actor dynamically
+// Add or remove actors dynamically
 turns.addActor(entity)
 turns.removeActor(entity.id)
 ```
 
-The scheduler runs all registered actors (NPCs and enemies) in priority order after each player action. Each actor must expose a `speed` value and a `tick(ctx)` method that returns a `TurnAction`.
+The scheduler runs all registered actors (NPCs and enemies) in priority order after each player action.
 
 ```js
-// onAdvance fires each time the scheduler advances
-var game = CrawlLib.createGame(canvas, {
+// onAdvance fires each time the scheduler advances a tick
+var game = CrawlLib.createGame(element, {
   turns: {
     onAdvance: function({ turn, dt }) {
       // called between player inputs as other actors take their turns
@@ -651,15 +712,15 @@ var game = CrawlLib.createGame(canvas, {
 
 ### Entities
 
-All entities share a common base interface. Extend it for custom types.
+All entities share a common base interface.
 
 ```js
 // Entity base interface
 {
-  id:         string,     // unique identifier
-  kind:       string,     // 'player' | 'npc' | 'enemy' | 'item' | ...
-  type:       string,     // entity subtype — used as the sprite lookup key if sprite is not set
-  sprite:     string,     // character atlas sprite name; defaults to type if omitted
+  id:         string,     // auto-generated unique identifier
+  kind:       string,     // 'player' | 'npc' | 'enemy' | 'decoration'
+  type:       string,     // entity subtype label
+  sprite:     string,     // sprite key (single character glyph or atlas name)
   x:          number,
   z:          number,
   hp:         number,
@@ -670,7 +731,6 @@ All entities share a common base interface. Extend it for custom types.
   alive:      boolean,
   blocksMove: boolean,
   faction:    string,     // 'player' | 'npc' | 'enemy'
-  tick:       function,   // (ctx) => TurnAction | null
 }
 ```
 
@@ -680,25 +740,28 @@ NPCs are friendly to the player but will fight back against enemies.
 
 ```js
 var villager = CrawlLib.createNpc({
-  type:   'villager',   // used as sprite lookup key if sprite is not set
-  sprite: 'villager',  // character atlas sprite name (optional — defaults to type)
+  type:    'villager',
+  sprite:  'v',
   x: 5, z: 3,
   hp: 20, attack: 2, defense: 1,
   faction: 'npc',
-
-  // Optional AI state machine
-  ai: {
-    initial: 'idle',
-    states: {
-      idle:     function(ctx) { /* return TurnAction */ },
-      fleeing:  function(ctx) { /* return TurnAction */ },
-    },
-    transitions: function({ self, state }) {
-      if (state === 'idle' && self.hp < self.maxHp * 0.3) return 'fleeing'
-    },
-  },
 })
 ```
+
+`createNpc` options:
+
+| Field | Type | Default |
+|---|---|---|
+| `type` | string | required |
+| `sprite` | string \| number | required |
+| `x`, `z` | number | required |
+| `hp` | number | `10` |
+| `maxHp` | number | `hp` |
+| `attack` | number | `0` |
+| `defense` | number | `0` |
+| `speed` | number | `5` |
+| `blocksMove` | boolean | `true` |
+| `faction` | string | `'none'` |
 
 #### Enemies
 
@@ -706,99 +769,81 @@ Enemies are hostile to both the player and NPCs.
 
 ```js
 var goblin = CrawlLib.createEnemy({
-  type:   'goblin',
-  sprite: 'goblin',  // character atlas sprite name (optional — defaults to type)
+  type:    'goblin',
+  sprite:  'g',
   x: 10, z: 10,
-  hp: 15, attack: 4, defense: 1,
-  xp: 20,
-  faction: 'enemy',
-
-  // Loot drop on death
-  drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.5 },
-
-  // Optional status effect applied on hit
-  rpsEffect: 'poison',
-
-  // Optional AI state machine
-  ai: {
-    initial: 'exploring',
-    states: {
-      exploring: function({ self, dungeon, rng }) { /* return TurnAction */ },
-      pursuing:  function({ self, dungeon, rng }) { /* return TurnAction */ },
-    },
-    transitions: function({ self, state }) {
-      if (state === 'exploring' && self.seesPlayer) return 'pursuing'
-    },
-  },
+  hp: 15, maxHp: 15,
+  attack: 4, defense: 1,
+  speed:  6,
+  danger: 1,   // 0–10 scale; affects detection radius and persistence
+  xp:     20,
 })
 ```
 
+`createEnemy` options (extends NPC opts):
+
+| Field | Type | Default |
+|---|---|---|
+| `danger` | number | `1` |
+| `xp` | number | `10` |
+| `rpsEffect` | string | `'none'` |
+
+The returned `EnemyEntity` also has `alertState: 'idle' | 'chasing' | 'searching'` and `searchTurnsLeft`.
+
 #### Spawn Callback
 
-`attachSpawner` lets you control enemy placement with a single callback. The library calls `onSpawn` whenever it needs to evaluate whether an entity should appear at a given position. Return an entity or array of entities to place them, or `null` / `undefined` to skip.
+`attachSpawner` lets you control enemy placement with a single callback. The library calls `onSpawn` for each candidate room tile during generation. Return an entity or array of entities to place them, or `null` / `undefined` to skip.
 
 ```js
 CrawlLib.attachSpawner(game, {
   onSpawn: function({ dungeon, roomId, x, y }) {
-    var room = dungeon.rooms[roomId]
-    if (!room || room.distanceFromStart < 2) return null
+    if (roomId < 2) return null   // skip spawn rooms near the start
 
     return CrawlLib.createEnemy({
       type:    'goblin',
-      faction: 'enemy',
-      hp:      15,
-      attack:   4,
-      xp:      20,
+      sprite:  'g',
       x:       x,
       z:       y,
-      drop: { id: 'gold-coin', name: 'Gold Coin', chance: 0.4 },
+      hp:      8, maxHp: 8,
+      attack:  2, defense: 0,
+      speed:   6, danger: 1, xp: 10,
     })
   },
 })
 ```
 
-The `onSpawn` callback receives:
-
-| Parameter | Type | Description |
-|---|---|---|
-| `dungeon` | object | Full dungeon state (tiles, rooms, passages) |
-| `roomId` | string | ID of the room being evaluated |
-| `x` | number | Tile X coordinate of the candidate spawn point |
-| `y` | number | Tile Y coordinate of the candidate spawn point |
-
 ---
 
 ### Decorations
 
-Decorations are stationary billboarded sprites — furniture, props, wall fixtures, rubble, etc. They have no AI or combat stats. They render as sprites in the 3D world and can optionally block movement or be interactive.
+Decorations are stationary props — furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
 
 ```js
 var barrel = CrawlLib.createDecoration({
-  type:        'barrel',       // string label for your own bookkeeping
-  x:           8,
-  z:           5,
-  sprite:      'barrel',       // atlas sprite name (character atlas)
-  blocksMove:  true,           // default: false
-  blocksView:  false,          // affects line-of-sight; default: false
-  interactive: false,          // player can 'interact' with it; default: false
-  onInteract:  function({ player, decoration }) { /* optional */ },
+  type:       'barrel',
+  x:          8,
+  z:          5,
+  sprite:     'barrel',
+  blocksMove: true,    // default: false
+  yaw:        0,       // rotation in radians
+  scale:      1,       // uniform scale multiplier
 })
 ```
 
-Decoration base interface:
+Decoration fields on the returned entity:
 
 ```js
 {
-  id:          string,    // auto-generated unique ID
-  kind:        'decoration',
-  type:        string,
-  x:           number,
-  z:           number,
-  sprite:      string,    // character atlas tile name
-  blocksMove:  boolean,
-  blocksView:  boolean,
-  interactive: boolean,
-  onInteract:  function | null,
+  id:         string,     // auto-generated
+  kind:       'decoration',
+  type:       string,
+  x:          number,
+  z:          number,
+  sprite:     string,
+  blocksMove: boolean,
+  alive:      false,      // decorations are never alive
+  yaw:        number,
+  scale:      number,
 }
 ```
 
@@ -810,8 +855,7 @@ CrawlLib.attachDecorator(game, {
     var room = dungeon.rooms[roomId]
     if (!room) return null
 
-    // Scatter barrels near room walls
-    if (rng.chance(0.05) && room.isNearWall(x, y)) {
+    if (Math.random() < 0.05) {
       return CrawlLib.createDecoration({
         type: 'barrel', x: x, z: y, sprite: 'barrel', blocksMove: true,
       })
@@ -822,34 +866,26 @@ CrawlLib.attachDecorator(game, {
 })
 ```
 
-The `onDecorate` callback shares the same context shape as `onSpawn`: `{ dungeon, roomId, x, y }`. Return a single decoration, an array, or `null`.
-
 Decorations can also be placed imperatively at any time:
 
 ```js
 var pillar = CrawlLib.createDecoration({ type: 'pillar', x: 4, z: 6, sprite: 'stone-pillar', blocksMove: true })
 game.dungeon.decorations.add(pillar)
 game.dungeon.decorations.remove(pillar.id)
-game.dungeon.decorations.list   // Decoration[]
+game.dungeon.decorations.list   // DecorationEntity[]
 ```
 
 ---
 
 ### Surface Painting
 
-Each tile position can have an ordered stack of atlas tile IDs composited over the base generated tile. Layers are applied in sequence — first entry is drawn first, last entry on top. This lets you apply theme-specific overlays, stains, cracks, moss, runes, or decorative borders without replacing the underlying tile data.
-
-Use `attachSurfacePainter` to drive painting from a per-tile callback:
+Each tile position can have an ordered stack of atlas tile IDs composited over the base generated tile. Use `attachSurfacePainter` to drive painting from a per-tile callback, or paint imperatively via `game.dungeon.paint()`.
 
 ```js
 CrawlLib.attachSurfacePainter(game, {
   onPaint: function({ dungeon, roomId, x, y }) {
     var room = dungeon.rooms[roomId]
     if (!room) return null
-
-    if (room.theme === 'crypt') {
-      return ['bone-floor', 'carved-stone-overlay']
-    }
 
     // Puddle near room centre
     if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
@@ -859,30 +895,10 @@ CrawlLib.attachSurfacePainter(game, {
     return null
   },
 })
-```
 
-Return an array of atlas tile IDs to layer over the base tile, or `null` to leave it unchanged.
-
-Surfaces can also be painted imperatively via `game.dungeon.paint()`:
-
-```js
-// Set the layer stack for a tile (replaces any previous paint at that position)
+// Imperative painting (replaces any previous paint at that position)
 game.dungeon.paint(x, z, ['moss-overlay', 'crack-overlay'])
-
-// Clear painted layers (reverts to generated tile)
 game.dungeon.unpaint(x, z)
-```
-
-Surface paint operations in `onPlace`:
-
-```js
-onPlace: function({ rooms, place }) {
-  rooms.forEach(function(room) {
-    if (room.theme === 'crypt') {
-      place.surface(room.cx, room.cz, ['bone-floor', 'carved-stone-overlay'])
-    }
-  })
-},
 ```
 
 ---
@@ -899,13 +915,14 @@ combat: {
   },
 
   // Faction hostility rules
-  factions: {
-    player: { hostile: ['enemy'] },
-    npc:    { hostile: ['enemy'] },
-    enemy:  { hostile: ['player', 'npc'] },
-  },
+  factions: [
+    ['player', 'enemy',  'hostile'],
+    ['npc',    'enemy',  'hostile'],
+    ['enemy',  'player', 'hostile'],
+    ['enemy',  'npc',    'hostile'],
+  ],
 
-  onDamage: function({ attacker, defender, amount, effect }) { /* show float */ },
+  onDamage: function({ attacker, defender, amount }) { /* show float */ },
   onDeath:  function({ entity, killer }) { /* drop loot, award XP */ },
   onMiss:   function({ attacker, defender }) {},
 }
@@ -922,30 +939,11 @@ var healthPotion = CrawlLib.createItem({
   name: 'Health Potion',
   kind: 'consumable',
   onUse: function({ player }) {
-    player.heal(15)
+    // apply effect
   },
 })
 
-// Create a weapon
-var sword = CrawlLib.createItem({
-  id:     'iron-sword',
-  name:   'Iron Sword',
-  kind:   'weapon',
-  attack: 3,
-})
-
-// Chest drops — opened when the player interacts with a chest entity
-game.events.on('chest-open', function(e) {
-  var loot = e.chest.loot   // array of item IDs configured on the chest
-  loot.forEach(function(itemId) {
-    game.player.pickup(itemId)
-  })
-})
-```
-
-Chests placed via `onPlace` or Tiled object layers accept a `loot` array in their config:
-
-```js
+// Chest drops — configured via onPlace or object layer
 place.object(room.cx, room.cz, 'chest', {
   loot: [
     { id: 'health-potion', name: 'Health Potion', chance: 1.0 },
@@ -958,7 +956,6 @@ place.object(room.cx, room.cz, 'chest', {
 **Inventory:**
 
 ```js
-// The player has a configurable slot inventory
 game.player.inventory   // array of item slots (null = empty)
 game.player.pickup(itemId)
 game.player.useItem(slotIndex)
@@ -971,14 +968,11 @@ game.player.dropItem(slotIndex)
 
 ```js
 passages: {
-  // defined by the map generator or Tiled 'Passage' objects
-  traversalFactor: 2,   // movement speed multiplier while inside
+  traversalFactor: 2,   // movement cost multiplier while inside a passage
   onToggle:   function({ passage, enabled }) {},
   onTraverse: function({ passage, progress }) {},
 }
-```
 
-```js
 // Toggle nearest passage from script
 var nearby = game.dungeon.passageNear(game.player.x, game.player.z)
 if (nearby) game.dungeon.passages.toggle(nearby.id)
@@ -988,56 +982,57 @@ game.dungeon.passages.list   // HiddenPassage[]
 
 ---
 
-### Rendering
+### 3D Renderer
 
-Rendering is configured under the `rendering` key in `createGame()`. All fields are optional.
+`createDungeonRenderer(element, game, options)` mounts a plain Three.js first-person renderer into any `HTMLElement`. It listens for `'turn'` events internally to keep the camera in sync.
 
 ```js
-rendering: {
-  // Tile atlas for dungeon walls/floors/ceilings
-  atlas:              './atlas.png',
-  atlasJson:          './atlas.json',
-
-  // Sprite atlas for entity billboards
-  characterAtlas:     './characters.png',
-  characterAtlasJson: './characters.json',
-
-  // Tile size in world units (default: 3)
-  tileSize: 3,
-
-  // Torch / point light settings
-  torch: {
-    color:       '#ff9944',
-    intensity:   1,
-    bands:       [1.0, 0.55, 0.22, 0.10],
-    flickerSpeed: 1.2,
-    fogNear:     4,
-    fogFar:      28,
+var renderer = CrawlLib.createDungeonRenderer(viewportEl, game, {
+  // ── Tile atlas ──────────────────────────────────────────────────────────────
+  atlas: {
+    image:       atlasImg,   // pre-loaded HTMLImageElement
+    tileWidth:   64,
+    tileHeight:  64,
+    sheetWidth:  512,
+    sheetHeight: 1024,
+    columns:     8,
   },
 
-  // First-person camera
-  camera: {
-    fov:        75,
-    moveLerpMs: 150,
-  },
+  // Tile IDs are 0-based row-major indices: id = row * columns + col
+  // where row = pixelY / tileHeight, col = pixelX / tileWidth
+  floorTileId:   20,
+  ceilTileId:    19,
+  wallTileId:    16,
 
-  // Entity sprite head-bob animation
-  headBob: {
-    amplitude: 0.08,
-    frequency: 2,
-  },
+  // ── Camera ────────────────────────────────────────────────────────────────
+  fov:          75,          // degrees; default 75
+  lerpFactor:   0.18,        // camera smoothing (0 = instant); default 0.18
 
-  // Override the built-in torch shader
-  lightingShader: {
-    uniforms: {
-      uTime:       { value: 0 },
-      uTorchColor: { value: new THREE.Color('#ff9944') },
-    },
-    vertexShader:   '/* glsl */',
-    fragmentShader: '/* glsl */',
-  },
-}
+  // ── Geometry ─────────────────────────────────────────────────────────────
+  tileSize:      3,          // world units per grid cell; default 3
+  ceilingHeight: 3,          // world-unit room height; default 3
+
+  // ── Fog ──────────────────────────────────────────────────────────────────
+  fogNear:  5,               // default 5
+  fogFar:   24,              // default 24
+  fogColor: '#000000',       // CSS colour string; default '#000000'
+
+  // ── Torch lighting ────────────────────────────────────────────────────────
+  bandNear:       8,         // world units before falloff begins; default 8
+  torchColor:     new THREE.Color(1.0, 0.85, 0.4),  // warm yellow default
+  torchIntensity: 0.33,      // 0–2 multiplier; default 0.33
+})
+
+// Update entities on every turn
+game.events.on('turn', function() {
+  renderer.setEntities(enemies)
+})
+
+// Clean up when done
+renderer.destroy()
 ```
+
+If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` — useful for prototyping before an atlas is ready.
 
 ---
 
@@ -1046,19 +1041,19 @@ rendering: {
 ```js
 CrawlLib.attachKeybindings(game, {
   bindings: {
-    'move-forward':   ['w', 'ArrowUp'],
-    'move-back':      ['s', 'ArrowDown'],
-    'strafe-left':    ['a'],
-    'strafe-right':   ['d'],
-    'rotate-left':    ['q'],
-    'rotate-right':   ['e'],
-    'interact':       ['i'],
-    'wait':           ['.'],
-    'toggle-passage': ['f'],
+    // keys are arbitrary action names; values are arrays of KeyboardEvent.key strings
+    moveForward:  ['w', 'ArrowUp'],
+    moveBackward: ['s', 'ArrowDown'],
+    moveLeft:     ['a', 'ArrowLeft'],
+    moveRight:    ['d', 'ArrowRight'],
+    turnLeft:     ['q', 'Q'],
+    turnRight:    ['e', 'E'],
+    wait:         [' '],
   },
 
   onAction: function(action, event) {
-    if (action === 'move-forward')  game.turns.commit(game.player.move(0, -1))
+    // action is the key from bindings; event is the raw KeyboardEvent
+    if (action === 'moveForward') game.turns.commit(game.player.move(/* ... */))
     // ...
   },
 })
@@ -1087,16 +1082,15 @@ game.events.on('audio', function({ name, position }) {
 Subscribe to game events via `game.events.on(name, handler)`:
 
 ```js
-game.events.on('damage',     function(e) { /* { entity, amount, effect } */ })
-game.events.on('death',      function(e) { /* { entity, killer } — spawn loot drop here */ })
-game.events.on('xp-gain',    function(e) { /* { amount, x, z } */ })
-game.events.on('heal',       function(e) { /* { entity, amount } */ })
-game.events.on('miss',       function(e) { /* { attacker, defender } */ })
-game.events.on('chest-open', function(e) { /* { chest, loot } */ })
-game.events.on('item-pickup',function(e) { /* { item, entity } */ })
-game.events.on('turn',       function(e) { /* { turn } — fires every turn */ })
-game.events.on('win',        function()  { /* player reached the exit or custom win condition */ })
-game.events.on('lose',       function(e) { /* { reason } */ })
+game.events.on('turn',       function({ turn }) { /* fires every turn */ })
+game.events.on('damage',     function({ attacker, defender, amount }) {})
+game.events.on('death',      function({ entity, killer }) { /* spawn loot drop here */ })
+game.events.on('xp-gain',    function({ amount, x, z }) {})
+game.events.on('heal',       function({ entity, amount }) {})
+game.events.on('miss',       function({ attacker, defender }) {})
+game.events.on('chest-open', function({ chest, loot }) {})
+game.events.on('item-pickup',function({ item, entity }) {})
+game.events.on('audio',      function({ name, position }) {})
 ```
 
 ---
@@ -1104,11 +1098,11 @@ game.events.on('lose',       function(e) { /* { reason } */ })
 ## Tiled Workflow
 
 1. Create your map in [Tiled](https://www.mapeditor.org/) with separate layers for `Floor`, `Walls`, `Ceiling`, `Overlays`, and an object layer `Objects`.
-2. Add a custom property `atlasId` to each tile in your tileset, matching an r3f-crawl-lib atlas tile name.
-3. Export as **JSON** (File > Export As > JSON Map Files `.tmj`).
-4. Fetch the `.tmj` at runtime and pass it to `createGame()` under `dungeon.tiled`.
+2. Export as **JSON** (File > Export As > JSON Map Files `.tmj`).
+3. Fetch the `.tmj` at runtime and pass it to `createGame()` under `dungeon.tiled`.
+4. Use `tilesetMap` to bridge Tiled tile GIDs to your atlas tile IDs for surface painting.
 
-The library maps Tiled tile GIDs to atlas texture coordinates automatically. Object layer entries become entity spawn points consumed by your `onPlace` callback.
+Object layer entries become entity spawn points consumed by your `onPlace` callback via the `objectTypes` map.
 
 ---
 
@@ -1118,79 +1112,57 @@ All settings are passed directly to `CrawlLib.createGame()` or the relevant `att
 
 | Section | Key settings |
 |---|---|
-| `dungeon` | `seed`, `width`, `height`, leaf/room sizes, `trapDensity`, `themes`, `onPlace` |
+| `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `onPlace` |
 | `dungeon.tiled` | `map`, `layers`, `objectTypes`, `tilesetMap` |
 | `player` | `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed` |
-| `turns` | `actors`, `onAdvance` |
+| `turns` | `onAdvance` |
 | `combat` | `damageFormula`, `factions`, `onDamage`, `onDeath`, `onMiss` |
-| `rendering` | `atlas`, `atlasJson`, `characterAtlas`, `tileSize`, `torch`, `camera`, `headBob`, `lightingShader` |
+| `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
+| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
 | `attachSpawner` | `onSpawn` — callback receiving `{ dungeon, roomId, x, y }` |
 | `attachDecorator` | `onDecorate` — callback receiving `{ dungeon, roomId, x, y }` |
-| `attachSurfacePainter` | `onPaint` — callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile IDs |
+| `attachSurfacePainter` | `onPaint` — callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
 | `attachKeybindings` | `bindings`, `onAction` |
-| `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
 
 ---
 
-## Atlas Format
+## Tile Atlas Format
 
-The tile atlas is a PNG sheet (default 512×1024, 64×64 tiles) with a companion JSON describing named tiles:
+The tile atlas is a PNG sprite sheet. Each tile is addressed by a **0-based row-major index**:
 
-```json
-{
-  "tileSize": 64,
-  "sheetWidth": 512,
-  "sheetHeight": 1024,
-  "tiles": {
-    "cobblestone-floor": { "x": 0,   "y": 0,   "w": 64, "h": 64 },
-    "flagstone-floor":   { "x": 64,  "y": 0,   "w": 64, "h": 64 },
-    "concrete-wall":     { "x": 128, "y": 0,   "w": 64, "h": 64 }
-  }
-}
+```
+tileId = (pixelY / tileHeight) * columns + (pixelX / tileWidth)
 ```
 
-Point `rendering.atlas` and `rendering.atlasJson` at your files. The Tiled `tilesetMap` bridges Tiled GIDs to these tile names.
-
----
-
-## Character Atlas Format
-
-Entity and decoration sprites are looked up by name from a separate character atlas. Point `rendering.characterAtlas` and `rendering.characterAtlasJson` at your sprite sheet and its JSON descriptor.
-
-The JSON lists each named sprite with its pixel rect on the sheet:
-
-```json
-{
-  "sheetWidth":  256,
-  "sheetHeight": 256,
-  "sprites": {
-    "goblin":        { "x": 0,   "y": 0,   "w": 48, "h": 64 },
-    "orc":           { "x": 48,  "y": 0,   "w": 48, "h": 64 },
-    "skeleton":      { "x": 96,  "y": 0,   "w": 48, "h": 64 },
-    "villager":      { "x": 0,   "y": 64,  "w": 48, "h": 64 },
-    "guard":         { "x": 48,  "y": 64,  "w": 48, "h": 64 },
-    "barrel":        { "x": 0,   "y": 128, "w": 32, "h": 48 },
-    "torch-sconce":  { "x": 32,  "y": 128, "w": 32, "h": 48 }
-  }
-}
-```
-
-Sprites do not need to be a uniform size — each entry defines its own `w`/`h`. The renderer normalises the rect to UV coordinates automatically.
-
-### Sprite assignment
-
-When an entity or decoration is rendered, the library resolves its sprite name in this order:
-
-1. The explicit `sprite` field on the entity, if set
-2. The entity's `type` string, used as a direct key into the character atlas
+Pass the atlas as a pre-loaded `HTMLImageElement` along with its dimensions to `createDungeonRenderer`:
 
 ```js
-// These two are equivalent if 'goblin' exists in the character atlas JSON
-CrawlLib.createEnemy({ type: 'goblin', ... })
-CrawlLib.createEnemy({ type: 'goblin', sprite: 'goblin', ... })
-
-// Override: a cave-troll variant that reuses the troll sprite
-CrawlLib.createEnemy({ type: 'cave-troll', sprite: 'troll', ... })
+const atlasImg = new Image()
+atlasImg.onload = function() {
+  var renderer = CrawlLib.createDungeonRenderer(el, game, {
+    atlas: {
+      image:       atlasImg,
+      tileWidth:   64,     // px per tile
+      tileHeight:  64,
+      sheetWidth:  512,    // total sheet width in px
+      sheetHeight: 1024,
+      columns:     8,      // sheetWidth / tileWidth
+    },
+    floorTileId: 20,       // tile at row 2, col 4 of an 8-column sheet
+    ceilTileId:  19,       // tile at row 2, col 3
+    wallTileId:  16,       // tile at row 2, col 0
+  })
+}
+atlasImg.src = './atlas.png'
 ```
 
-If neither `sprite` nor `type` resolves to a known sprite name, the entity renders with a fallback placeholder.
+Example layout for a 512×1024 sheet with 64×64 tiles (8 columns):
+
+| Tile ID | Row | Col | Example use |
+|---|---|---|---|
+| 0–7 | 0 | 0–7 | First row of tiles |
+| 16 | 2 | 0 | Brick wall |
+| 19 | 2 | 3 | Cobblestone ceiling |
+| 20 | 2 | 4 | Flagstone floor |
+
+The renderer uses nearest-neighbour filtering and per-face UV clamping to prevent atlas bleed at tile edges.
