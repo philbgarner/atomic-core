@@ -2075,9 +2075,11 @@
 					monsterDecide: (state, monsterId) => decideChasePlayer(state, monsterId, dungOut, (x, y) => !isSolid(x, y, solid, width, height), (x, y) => isSolid(x, y, solid, width, height)),
 					computeCost: (actorId, a) => defaultComputeCost(actorId, a, internal.turnState.actors),
 					applyAction: makeApplyAction(internal, internal.options.combat),
-					onTimeAdvanced: ({ nextTime, prevTime }) => {
+					onTimeAdvanced: ({ nextTime, prevTime, state }) => {
 						if (nextTime > prevTime) {
 							internal.turnCounter += 1;
+							const playerActor = state.actors[internal.playerActorId];
+							if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
 							internal.events.emit("turn", { turn: internal.turnCounter });
 							internal.options.turns?.onAdvance?.({
 								turn: internal.turnCounter,
