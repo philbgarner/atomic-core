@@ -26,7 +26,6 @@ const hpEl = document.getElementById("hp");
 const turnEl = document.getElementById("turn");
 const posEl = document.getElementById("pos");
 const themeEl = document.getElementById("theme");
-const selectorEl = document.getElementById("selector");
 
 // ---------------------------------------------------------------------------
 // Tile ID lookup — atlas.png is 512×1024 px, 64 px tiles, 8 columns.
@@ -160,7 +159,15 @@ function cellHash(cx, cz, seed) {
 // Theme cycle — TAB steps through these in order
 // ---------------------------------------------------------------------------
 
-const THEME_CYCLE = ["dungeon", "crypt", "catacomb", "domestic", "industrial", "ruins", "void"];
+const THEME_CYCLE = [
+  "dungeon",
+  "crypt",
+  "catacomb",
+  "domestic",
+  "industrial",
+  "ruins",
+  "void",
+];
 let themeIdx = 0;
 
 // ---------------------------------------------------------------------------
@@ -400,7 +407,6 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Tab") {
     e.preventDefault();
     themeIdx = (themeIdx + 1) % THEME_CYCLE.length;
-    selectorEl.textContent = THEME_CYCLE[themeIdx];
     roomMapBuilt = false;
     if (renderer) renderer.rebuild();
     game.regenerate();
