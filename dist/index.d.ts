@@ -3,6 +3,8 @@ export { createNpc, createEnemy, createDecoration } from './entities/factory';
 export { createItem } from './entities/inventory';
 export { loadTiledMap } from './dungeon/tiled';
 export { createDungeonRenderer } from './rendering/dungeonRenderer';
+export { THEMES, THEME_KEYS, resolveTheme, registerTheme, getTheme } from './dungeon/themes';
+export type { ThemeDef, ThemeSelector } from './dungeon/themes';
 export type { DungeonRendererOptions, DungeonRenderer, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle } from './rendering/dungeonRenderer';
 export { createWebSocketTransport } from './transport/websocket';
 export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload } from './transport/types';

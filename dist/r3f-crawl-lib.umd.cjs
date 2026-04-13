@@ -2478,6 +2478,20 @@
 				generated = true;
 				runGenerate(internal, dungeonHandle, turnsHandle);
 			},
+			regenerate() {
+				internal.entityById.clear();
+				internal.entityById.set(internal.playerActorId, internal.playerState.entity);
+				internal.decorations.length = 0;
+				internal.paintMap.clear();
+				internal.turnCounter = 0;
+				const playerOpts = internal.options.player ?? {};
+				internal.playerState.entity.hp = playerOpts.maxHp ?? playerOpts.hp ?? 30;
+				internal.playerState.entity.alive = true;
+				internal.playerState.facing = 0;
+				generated = false;
+				generated = true;
+				runGenerate(internal, dungeonHandle, turnsHandle);
+			},
 			destroy() {
 				if (internal.destroyed) return;
 				internal.destroyed = true;
@@ -3182,6 +3196,26 @@ void main() {
 					if (i !== -1) layerEntries.splice(i, 1);
 				} };
 			},
+			rebuild() {
+				for (const mesh of [
+					floorMesh,
+					ceilMesh,
+					wallMesh,
+					floorEdgeMesh,
+					ceilEdgeMesh
+				]) if (mesh) {
+					scene.remove(mesh);
+					mesh.geometry.dispose();
+				}
+				floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+				for (const entry of layerEntries) if (entry.holder.mesh) {
+					scene.remove(entry.holder.mesh);
+					entry.holder.mesh.geometry.dispose();
+					entry.holder.mesh = null;
+				}
+				dungeonBuilt = false;
+				buildDungeon();
+			},
 			destroy() {
 				cancelAnimationFrame(rafId);
 				ro.disconnect();
@@ -3189,6 +3223,84 @@ void main() {
 				glRenderer.dispose();
 				canvas.remove();
 			}
+		};
+	}
+	//#endregion
+	//#region src/lib/dungeon/themes.ts
+	var registry = /* @__PURE__ */ new Map();
+	/** Built-in themes — available without calling registerTheme(). */
+	var THEMES = {
+		dungeon: {
+			floorType: "Cobblestone",
+			wallType: "Cobblestone",
+			ceilingType: "Cobblestone"
+		},
+		crypt: {
+			floorType: "Flagstone",
+			wallType: "Concrete",
+			ceilingType: "Flagstone"
+		},
+		catacomb: {
+			floorType: "Cobblestone",
+			wallType: "Plaster",
+			ceilingType: "Concrete"
+		},
+		industrial: {
+			floorType: "Steel",
+			wallType: "Concrete",
+			ceilingType: "Steel"
+		},
+		ruins: {
+			floorType: "Dirt",
+			wallType: "Cobblestone",
+			ceilingType: "Cobblestone"
+		}
+	};
+	for (const [name, def] of Object.entries(THEMES)) registry.set(name, def);
+	var THEME_KEYS = Object.keys(THEMES);
+	/**
+	* Register a custom theme (or override a built-in).
+	* The `name` becomes a valid key for `ThemeSelector` string values.
+	*/
+	function registerTheme(name, def) {
+		registry.set(name, def);
+	}
+	/**
+	* Retrieve a theme definition by name.
+	* Returns `undefined` if the name is not registered.
+	*/
+	function getTheme(name) {
+		return registry.get(name);
+	}
+	/**
+	* Resolve a ThemeSelector to a theme name for a given room.
+	* Falls back to "dungeon" if the resolved key is not in the registry.
+	*/
+	function resolveTheme(selector, ctx) {
+		let key;
+		if (typeof selector === "function") key = selector(ctx);
+		else if (typeof selector === "string") key = selector;
+		else if (selector.length === 0) key = "dungeon";
+		else if (typeof selector[0] === "string") {
+			const arr = selector;
+			key = arr[Math.floor(ctx.rng() * arr.length)] ?? "dungeon";
+		} else {
+			const weighted = selector;
+			const total = weighted.reduce((s, [, w]) => s + w, 0);
+			let r = ctx.rng() * total;
+			key = weighted[weighted.length - 1][0];
+			for (const [k, w] of weighted) {
+				r -= w;
+				if (r <= 0) {
+					key = k;
+					break;
+				}
+			}
+		}
+		return registry.get(key) ?? registry.get("dungeon") ?? {
+			floorType: "Cobblestone",
+			wallType: "Cobblestone",
+			ceilingType: "Cobblestone"
 		};
 	}
 	//#endregion
@@ -3288,6 +3400,8 @@ void main() {
 		};
 	}
 	//#endregion
+	exports.THEMES = THEMES;
+	exports.THEME_KEYS = THEME_KEYS;
 	exports.attachDecorator = attachDecorator;
 	exports.attachKeybindings = attachKeybindings;
 	exports.attachMinimap = attachMinimap;
@@ -3300,7 +3414,10 @@ void main() {
 	exports.createItem = createItem;
 	exports.createNpc = createNpc;
 	exports.createWebSocketTransport = createWebSocketTransport;
+	exports.getTheme = getTheme;
 	exports.loadTiledMap = loadTiledMap;
+	exports.registerTheme = registerTheme;
+	exports.resolveTheme = resolveTheme;
 });
 
 //# sourceMappingURL=r3f-crawl-lib.umd.cjs.map

@@ -145,6 +145,12 @@ export type DungeonRenderer = {
      */
     addLayer(spec: LayerSpec): LayerHandle;
     /**
+     * Tear down all existing dungeon geometry and rebuild it from the current
+     * dungeon outputs. Call this after `game.regenerate()` to keep the renderer
+     * in sync when the dungeon layout has changed (e.g. a new seed).
+     */
+    rebuild(): void;
+    /**
      * Create a new atlas `ShaderMaterial` using the same texture, fog, and
      * shader settings as the renderer's own geometry.  Useful when building a
      * layer material that should display tiles from the configured atlas.

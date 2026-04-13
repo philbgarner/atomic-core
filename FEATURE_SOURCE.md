@@ -94,7 +94,7 @@ src/lib/
 - `dungeon/bsp.ts` — BSP tree split, room placement, corridor carving, `setupDungeon()`, `DungeonOutputs` shape; produces `floorHeightOffset` and `ceilingHeightOffset` textures defaulting to 128
 - `dungeon/cellular.ts` — cellular automata generator producing the same `DungeonOutputs` shape
 - `dungeon/serialize.ts` — serialize/deserialize a `DungeonOutputs` to JSON
-- `dungeon/themes.ts` — `ThemeDef` type, built-in themes (dungeon, crypt, catacomb, industrial, ruins), `registerTheme()`
+- `dungeon/themes.ts` — `ThemeDef` type; `ThemeSelector` union (string | string[] | weighted array | callback); built-in themes (dungeon, crypt, catacomb, industrial, ruins); public exports `THEMES`, `THEME_KEYS`, `resolveTheme()`, `registerTheme()`, `getTheme()`
 - `utils/geometry.ts` — `MinHeap<T>`, `octile()` used internally by BSP helpers
 
 ---

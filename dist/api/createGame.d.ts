@@ -164,6 +164,12 @@ export type GameHandle = {
     combat: CombatHandle;
     /** Generate the dungeon and start the game. Call after attaching all callbacks. */
     generate(): void;
+    /**
+     * Tear down the current dungeon, reset all spawned actors and decorations,
+     * restore the player to full health, and regenerate from the current dungeon
+     * config (including any seed change made before calling this).
+     */
+    regenerate(): void;
     /** Unmount and clean up all listeners. */
     destroy(): void;
 };

@@ -224,6 +224,12 @@ export type GameHandle = {
   combat: CombatHandle;
   /** Generate the dungeon and start the game. Call after attaching all callbacks. */
   generate(): void;
+  /**
+   * Tear down the current dungeon, reset all spawned actors and decorations,
+   * restore the player to full health, and regenerate from the current dungeon
+   * config (including any seed change made before calling this).
+   */
+  regenerate(): void;
   /** Unmount and clean up all listeners. */
   destroy(): void;
 };
@@ -1201,6 +1207,26 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
 
     generate() {
       if (generated) return;
+      generated = true;
+      runGenerate(internal, dungeonHandle, turnsHandle);
+    },
+
+    regenerate() {
+      // Clear entities accumulated from the previous run — keep only the player.
+      internal.entityById.clear();
+      internal.entityById.set(internal.playerActorId, internal.playerState.entity);
+      // Clear decorations and surface paint.
+      internal.decorations.length = 0;
+      internal.paintMap.clear();
+      // Reset turn counter.
+      internal.turnCounter = 0;
+      // Restore the player to full health for the new run.
+      const playerOpts = internal.options.player ?? {};
+      internal.playerState.entity.hp    = playerOpts.maxHp ?? playerOpts.hp ?? 30;
+      internal.playerState.entity.alive = true;
+      internal.playerState.facing       = 0;
+      // Re-run generation.
+      generated = false;
       generated = true;
       runGenerate(internal, dungeonHandle, turnsHandle);
     },

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>r3f-crawl-lib — Themes Example</title>
+  <link rel="stylesheet" href="/examples/basic/styles.css" />
+  <style>
+    #theme-info {
+      font-size: 8px;
+      color: var(--desc);
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      line-height: 2.4;
+    }
+    #theme-info .label {
+      color: var(--gold-dim);
+      font-size: 7px;
+      letter-spacing: 0.1em;
+    }
+    #theme-info .value {
+      font-size: 9px;
+    }
+    #selector-line {
+      font-size: 7px;
+      color: var(--desc);
+      line-height: 1.7;
+      word-break: break-word;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      width: 196px;
+      height: 196px;
+      border: 2px solid var(--border);
+      background: #000;
+      box-shadow: 0 0 0 1px #000, 0 0 12px rgba(0,0,0,0.8);
+      image-rendering: pixelated;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>themes</h1>
+
+    <div id="stats">
+      HP: <span id="hp">—</span><br>
+      Turn: <span id="turn">0</span><br>
+      Pos: <span id="pos">—</span>
+    </div>
+
+    <div id="theme-info">
+      <div class="label">ROOM THEME</div>
+      <div class="value"><span id="theme">—</span></div>
+      <br>
+      <div class="label">SELECTOR</div>
+      <div id="selector" class="value">weighted — dungeon/ruins favoured</div>
+    </div>
+
+    <div id="log"></div>
+
+    <div id="controls">
+      WASD / Arrows — move<br>
+      Q / E — turn<br>
+      Space — wait<br>
+      T — cycle selector
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <div id="viewport"></div>
+    <canvas id="minimap" width="196" height="196"></canvas>
+  </div>
+
+  <script type="module">
+    import * as THREE from '/node_modules/three/build/three.module.js';
+    window.THREE = THREE;
+  </script>
+  <script src="/dist/r3f-crawl-lib.iife.js" defer></script>
+  <script src="/examples/themes/themes.js" defer></script>
+</body>
+</html>

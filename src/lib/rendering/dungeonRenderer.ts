@@ -165,6 +165,12 @@ export type DungeonRenderer = {
    */
   addLayer(spec: LayerSpec): LayerHandle;
   /**
+   * Tear down all existing dungeon geometry and rebuild it from the current
+   * dungeon outputs. Call this after `game.regenerate()` to keep the renderer
+   * in sync when the dungeon layout has changed (e.g. a new seed).
+   */
+  rebuild(): void;
+  /**
    * Create a new atlas `ShaderMaterial` using the same texture, fog, and
    * shader settings as the renderer's own geometry.  Useful when building a
    * layer material that should display tiles from the configured atlas.
@@ -730,6 +736,26 @@ export function createDungeonRenderer(
           if (i !== -1) layerEntries.splice(i, 1);
         },
       };
+    },
+    rebuild() {
+      // Remove and dispose existing dungeon meshes.
+      for (const mesh of [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh]) {
+        if (mesh) {
+          scene.remove(mesh);
+          mesh.geometry.dispose();
+        }
+      }
+      floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+      // Remove and dispose layer meshes — they will be rebuilt by buildDungeon.
+      for (const entry of layerEntries) {
+        if (entry.holder.mesh) {
+          scene.remove(entry.holder.mesh);
+          entry.holder.mesh.geometry.dispose();
+          entry.holder.mesh = null;
+        }
+      }
+      dungeonBuilt = false;
+      buildDungeon();
     },
     destroy() {
       cancelAnimationFrame(rafId);
