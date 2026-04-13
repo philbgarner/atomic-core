@@ -237,6 +237,23 @@ body::before {
 }
 
 /* ---------------------------------------------------------------------------
+   Minimap canvas overlay
+--------------------------------------------------------------------------- */
+
+#minimap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 160px;
+  height: 160px;
+  border: 2px solid var(--border);
+  background: #000;
+  image-rendering: pixelated;
+  z-index: 10;
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------
    Mission-complete banner
 --------------------------------------------------------------------------- */
 

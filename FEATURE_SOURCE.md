@@ -279,7 +279,22 @@ Dependency-injection layer that makes the server authoritative for all player ac
 
 ### Tutorial / mission example
 
-Demonstrates the mission system end-to-end with two chained tutorial missions. Mission 1 ("First Steps") tracks actual grid moves via the `metadata` bag across turns. Mission 2 ("Into the Dark") is registered inside mission 1's `onComplete`, uses `game.dungeon.outputs.startRoomId` plus `game.dungeon.rooms` to identify corridors adjacent to the start room, and completes when the player steps into one of them. Shows: `missions.add`, evaluator pattern, metadata accumulation, mission chaining via `onComplete`, `mission-complete` event subscription, and banner + log UI feedback.
+Demonstrates ten core systems through a set of chained and parallel missions. Missions 1 and 2 are chained (mission 2 registered in mission 1's `onComplete`); missions 3–10 are registered upfront so multiple objectives are visible simultaneously.
+
+| # | Mission | System demonstrated |
+|---|---------|---------------------|
+| 1 | First Steps | `missions.add`, metadata accumulation, position tracking |
+| 2 | Into the Dark | BSP room graph, `startRoomId`, corridor detection via `onComplete` chain |
+| 3 | Wait and Watch | Per-action flag (`_lastAction`) set before `turns.commit()`, consecutive-turn tracking |
+| 4 | Open a Chest | `dungeon.onPlace` for chest placement, `decorations.list` proximity search, `chest-open` event |
+| 5 | Pick Up an Item | `createItem`, `item-pickup` event, tutorial-bag flag |
+| 6 | Use an Item | Custom `useItem` keybinding, `_hasPotionInBag` flag |
+| 7 | First Blood | `combat.onDamage` callback, `defender.faction` check |
+| 8 | Enemy Slain | `combat.onDeath` callback, enemy placed via `place.enemy` in `onPlace` |
+| 9 | Explorer | `_solidData` cached post-generate, radius-3 FoV approximation via `_visitedCells` Set |
+| 10 | Find the Exit | `endRoomId` from BSP output, `_endRoom` captured in `onPlace`, bounding-rect player check |
+
+Also adds: `attachMinimap` on a `<canvas>` overlay; per-mission progress display in `renderMissions()`; F / U keybindings for interact and use-item.
 
 **Files:**
 - `examples/tutorial/index.html`
