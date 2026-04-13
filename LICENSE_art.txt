@@ -1,0 +1,41 @@
+DIGITAL ARTWORK LICENSE AGREEMENT
+
+Last Updated: October 2025
+
+This document grants a non-exclusive, non-transferable, worldwide, and perpetual license to use the accompanying artwork ("the Artwork") under the following terms.
+
+1. Grant of License
+
+Imaya Zing ("Licensor") grants the purchaser or authorized recipient ("Licensee") the right to use the Artwork for commercial and non-commercial purposes, including but not limited to inclusion in video games, videos, printed merchandise, and promotional materials.
+
+2. Ownership and Copyright
+
+All copyrights and intellectual property rights in the Artwork remain the sole property of the Licensor.
+The Licensee does not obtain ownership of the Artwork, and may not claim it as their own creation.
+
+3. Restrictions
+
+The Licensee may not:
+
+* Resell, redistribute, or sublicense the Artwork, whether on its own or as part of any collection, asset pack, or template.
+
+* Use or make the Artwork available in a way that allows others to extract or reuse it as a standalone file.
+
+* Register the Artwork (or derivatives thereof) as a trademark, logo, or product for resale.
+
+4. Permitted Modifications
+
+The Licensee may make reasonable modifications to the Artwork solely for integration into their own projects.
+Modified versions remain subject to the same license terms and restrictions.
+
+5. Termination
+
+This license is perpetual but will terminate automatically if the Licensee breaches any of these terms.
+Upon termination, the Licensee must cease all use of the Artwork and delete all copies in their possession.
+
+6. Disclaimer
+
+The Artwork is provided "as is," without warranty of any kind.
+The Licensor shall not be liable for any damages arising from its use.
+
+By purchasing, downloading, or using the Artwork, the Licensee agrees to these terms.
