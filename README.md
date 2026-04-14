@@ -1474,6 +1474,14 @@ The renderer uses nearest-neighbour filtering and per-face UV clamping to preven
 
 When serving examples directly from the filesystem (`file://`) or in sandboxed environments where external image fetches are blocked, you can embed the atlas image as a Base64 data URL in a plain JS file and load it with a `<script>` tag.
 
+**Why not just use `<img src="atlas.png">`?**
+
+It seems like the obvious approach — put the PNG next to your HTML and point an `<img>` tag at it — but it fails at the WebGL layer. When Three.js calls `texSubImage2D` to upload the image as a GPU texture, the browser checks the image's origin. Under `file://`, even a same-directory local file is treated as a potentially cross-origin resource by both Chrome and Firefox, and the upload is rejected with a `DOMException: The operation is insecure` error. The image renders fine on screen, but WebGL refuses to read its pixels.
+
+A Base64 data URL sidesteps this entirely: the image data is inline text embedded directly in the script, so it has no origin at all and is never subject to the cross-origin check. The resulting `Image` object loads cleanly and `texSubImage2D` can read it without restriction.
+
+If you serve your files through any HTTP server (even `python3 -m http.server`) you can use a plain `<img>` tag and skip the data-URL step — the same-origin policy is satisfied by the HTTP origin.
+
 Two helper scripts in `utils/` automate this conversion:
 
 **Linux / macOS (Bash):**
