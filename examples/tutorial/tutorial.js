@@ -179,44 +179,24 @@ attachMinimap(game, minimapEl, {
 });
 
 // ---------------------------------------------------------------------------
-// 3D renderer
+// 3D renderer — plain coloured cubes (no atlas required)
 // ---------------------------------------------------------------------------
 
-let renderer;
+const renderer = createDungeonRenderer(viewportEl, game);
 
-// Use the preloaded base64 data URL (set by atlas-data.js) so WebGL can
-// upload the texture when running directly from file://.
-const atlasImg = new Image();
-atlasImg.onload = () => {
-  renderer = createDungeonRenderer(viewportEl, game, {
-    atlas: {
-      image: atlasImg,
-      tileWidth: 64,
-      tileHeight: 64,
-      sheetWidth: 512,
-      sheetHeight: 1024,
-      columns: 8,
-    },
-    floorTileId: 20,
-    ceilTileId: 19,
-    wallTileId: 16,
-  });
+game.generate();
 
-  game.generate();
-
-  // Cache solid data for the exploration mission (mission 9).
-  const outputs = game.dungeon.outputs;
-  _solidData = outputs?.textures?.solid?.image?.data ?? null;
-  _dungeonW = outputs?.width ?? 0;
-  if (_solidData) {
-    for (let i = 0; i < _solidData.length; i++) {
-      if (_solidData[i] === 0) _totalWalkable++;
-    }
+// Cache solid data for the exploration mission (mission 9).
+const outputs = game.dungeon.outputs;
+_solidData = outputs?.textures?.solid?.image?.data ?? null;
+_dungeonW = outputs?.width ?? 0;
+if (_solidData) {
+  for (let i = 0; i < _solidData.length; i++) {
+    if (_solidData[i] === 0) _totalWalkable++;
   }
+}
 
-  setupTutorialMissions();
-};
-atlasImg.src = window.ATLAS_DATA_URL;
+setupTutorialMissions();
 
 // ---------------------------------------------------------------------------
 // Chest interaction helper
