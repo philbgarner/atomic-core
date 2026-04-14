@@ -32,14 +32,14 @@ const {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const viewportEl   = document.getElementById('viewport');
-const minimapEl    = document.getElementById('minimap');
-const logEl        = document.getElementById('log');
-const hpEl         = document.getElementById('hp');
-const turnEl       = document.getElementById('turn');
-const posEl        = document.getElementById('pos');
-const missionsList = document.getElementById('missions-list');
-const bannerEl     = document.getElementById('banner');
+const viewportEl = document.getElementById("viewport");
+const minimapEl = document.getElementById("minimap");
+const logEl = document.getElementById("log");
+const hpEl = document.getElementById("hp");
+const turnEl = document.getElementById("turn");
+const posEl = document.getElementById("pos");
+const missionsList = document.getElementById("missions-list");
+const bannerEl = document.getElementById("banner");
 
 // ---------------------------------------------------------------------------
 // Tutorial state — shared across missions and event handlers
@@ -47,6 +47,10 @@ const bannerEl     = document.getElementById('banner');
 
 /** Last committed action name; set just before game.turns.commit(). */
 let _lastAction = null;
+/** Incremented once per game.turns.commit(); used to deduplicate mission
+ *  evaluators that run multiple times per player action (once per time-step
+ *  the scheduler advances — enemy turns count too). */
+let _playerActionCount = 0;
 
 /** Position of the chest placed by onPlace. */
 let _chestPos = null;
@@ -76,6 +80,9 @@ let _visitedCells = new Set();
 /** The exit room (endRoomId → PublicRoom), captured in onPlace. */
 let _endRoom = null;
 
+/** Mission ids whose complete animation has already played; rendered hidden. */
+const _hiddenMissions = new Set();
+
 // ---------------------------------------------------------------------------
 // Create game
 // ---------------------------------------------------------------------------
@@ -84,7 +91,7 @@ const game = createGame(document.body, {
   dungeon: {
     width: 48,
     height: 48,
-    seed: 0xcafe1234,
+    seed: 0xdeadbeef,
     roomMinSize: 6,
     roomMaxSize: 12,
     roomCount: 10,
@@ -97,21 +104,26 @@ const game = createGame(document.body, {
 
       // Collect actual rooms that are neither the start nor end.
       const candidates = rooms.filter(
-        r => r.type === 'room' && r.id !== startRoom.id && r.id !== endRoom.id,
+        (r) =>
+          r.type === "room" && r.id !== startRoom.id && r.id !== endRoom.id,
       );
 
       // Place one chest at the centre of the first candidate room.
       if (candidates.length > 0) {
         const cr = candidates[0];
-        place.object(cr.cx, cr.cz, 'chest', { blocksMove: true });
+        place.object(cr.cx, cr.cz, "chest", { blocksMove: true });
         _chestPos = { x: cr.cx, z: cr.cz };
       }
 
       // Place one goblin in the second candidate room.
       if (candidates.length > 1) {
         const gr = candidates[1];
-        place.enemy(gr.cx, gr.cz, 'goblin', {
-          hp: 8, maxHp: 8, attack: 2, defense: 0, speed: 6,
+        place.enemy(gr.cx, gr.cz, "goblin", {
+          hp: 8,
+          maxHp: 8,
+          attack: 2,
+          defense: 0,
+          speed: 6,
         });
       }
     },
@@ -125,20 +137,23 @@ const game = createGame(document.body, {
   },
   combat: {
     onDamage({ attacker, defender, amount }) {
-      addLog(`${attacker.type} hits ${defender.type} for ${amount} dmg`, 'damage');
+      addLog(
+        `${attacker.type} hits ${defender.type} for ${amount} dmg`,
+        "damage",
+      );
       // defender.faction === 'enemy' means the player attacked an enemy.
-      if (defender.faction === 'enemy') {
+      if (defender.faction === "enemy") {
         _playerDealtDmg = true;
       }
     },
     onDeath({ entity }) {
-      addLog(`${entity.type} is slain!`, 'death');
-      if (entity.faction === 'enemy') {
+      addLog(`${entity.type} is slain!`, "death");
+      if (entity.faction === "enemy") {
         _enemyKilled = true;
       }
     },
     onMiss({ attacker, defender }) {
-      addLog(`${attacker.type} misses ${defender.type}`, 'turn');
+      addLog(`${attacker.type} misses ${defender.type}`, "turn");
     },
   },
 });
@@ -151,10 +166,10 @@ attachMinimap(game, minimapEl, {
   size: 160,
   showEntities: true,
   colors: {
-    explored: '#223',
-    visible:  '#778',
-    player:   '#0f0',
-    enemy:    '#f44',
+    explored: "#223",
+    visible: "#778",
+    player: "#0f0",
+    enemy: "#f44",
   },
 });
 
@@ -169,23 +184,23 @@ atlasImg.onload = () => {
   renderer = createDungeonRenderer(viewportEl, game, {
     atlas: {
       image: atlasImg,
-      tileWidth:   64,
-      tileHeight:  64,
-      sheetWidth:  512,
+      tileWidth: 64,
+      tileHeight: 64,
+      sheetWidth: 512,
       sheetHeight: 1024,
       columns: 8,
     },
     floorTileId: 20,
-    ceilTileId:  19,
-    wallTileId:  16,
+    ceilTileId: 19,
+    wallTileId: 16,
   });
 
   game.generate();
 
   // Cache solid data for the exploration mission (mission 9).
   const outputs = game.dungeon.outputs;
-  _solidData    = outputs?.textures?.solid?.image?.data ?? null;
-  _dungeonW     = outputs?.width ?? 0;
+  _solidData = outputs?.textures?.solid?.image?.data ?? null;
+  _dungeonW = outputs?.width ?? 0;
   if (_solidData) {
     for (let i = 0; i < _solidData.length; i++) {
       if (_solidData[i] === 0) _totalWalkable++;
@@ -194,7 +209,7 @@ atlasImg.onload = () => {
 
   setupTutorialMissions();
 };
-atlasImg.src = '/examples/basic/atlas.png';
+atlasImg.src = "/examples/basic/atlas.png";
 
 // ---------------------------------------------------------------------------
 // Chest interaction helper
@@ -205,19 +220,19 @@ atlasImg.src = '/examples/basic/atlas.png';
  * Emits chest-open and item-pickup events, arms the tutorial item bag.
  */
 function openChest(chest) {
-  _chestOpened   = true;
-  _tutorialItem  = createItem({ name: 'Health Potion', type: 'health_potion' });
+  _chestOpened = true;
+  _tutorialItem = createItem({ name: "Health Potion", type: "health_potion" });
   _hasPotionInBag = true;
 
   // Emit the events so any developer-registered handlers fire (mission 4 and
   // 5 track flags directly, but event subscribers also receive these payloads).
-  game.events.emit('chest-open', { chest, loot: [_tutorialItem] });
-  game.events.emit('item-pickup', {
-    item:   _tutorialItem,
-    entity: { id: 'player', type: 'player', faction: 'player' },
+  game.events.emit("chest-open", { chest, loot: [_tutorialItem] });
+  game.events.emit("item-pickup", {
+    item: _tutorialItem,
+    entity: { id: "player", type: "player", faction: "player" },
   });
 
-  addLog(`You found a ${_tutorialItem.name}!`, 'mission');
+  addLog(`You found a ${_tutorialItem.name}!`, "mission");
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +245,9 @@ function setupTutorialMissions() {
   // The null-guard on the first evaluator call prevents the initial turn from
   // counting as a move.
   game.missions.add({
-    id: 'first-steps',
-    name: 'First Steps',
-    description: 'Move 5 times to get your bearings.',
+    id: "first-steps",
+    name: "First Steps",
+    description: "Move 5 times to get your bearings.",
     metadata: { moves: 0, lastX: null, lastZ: null },
 
     evaluator({ player, mission }) {
@@ -251,44 +266,49 @@ function setupTutorialMissions() {
     },
 
     onComplete() {
-      addLog('Mission complete: First Steps!', 'mission');
-      showBanner('First Steps complete!');
+      addLog("Mission complete: First Steps!", "mission");
+      showBanner("First Steps complete!");
       renderMissions();
 
       // ── Mission 2 — Into the Dark (chained from mission 1) ──────────────
       // Collect corridors directly connected to the start room using the BSP
       // room graph, then check if the player steps into any of them.
-      const outputs     = game.dungeon.outputs;
-      const startRoomId = outputs && 'startRoomId' in outputs
-        ? outputs.startRoomId : null;
+      const outputs = game.dungeon.outputs;
+      const startRoomId =
+        outputs && "startRoomId" in outputs ? outputs.startRoomId : null;
       const rooms = game.dungeon.rooms;
 
-      const connectedCorridors = startRoomId !== null
-        ? Object.values(rooms).filter(
-            r => r.type === 'corridor' && r.connections.includes(startRoomId),
-          )
-        : [];
+      const connectedCorridors =
+        startRoomId !== null
+          ? Object.values(rooms).filter(
+              (r) =>
+                r.type === "corridor" && r.connections.includes(startRoomId),
+            )
+          : [];
 
       if (connectedCorridors.length === 0) {
-        addLog('No corridors from start — skipping mission 2.', 'mission');
+        addLog("No corridors from start — skipping mission 2.", "mission");
         return;
       }
 
       game.missions.add({
-        id: 'into-the-dark',
-        name: 'Into the Dark',
-        description: 'Step through a passage from your starting room.',
+        id: "into-the-dark",
+        name: "Into the Dark",
+        description: "Step through a passage from your starting room.",
 
         evaluator({ player }) {
-          return connectedCorridors.some(c =>
-            player.x >= c.x && player.x < c.x + c.w &&
-            player.z >= c.z && player.z < c.z + c.h,
+          return connectedCorridors.some(
+            (c) =>
+              player.x >= c.x &&
+              player.x < c.x + c.w &&
+              player.z >= c.z &&
+              player.z < c.z + c.h,
           );
         },
 
         onComplete() {
-          addLog('Mission complete: Into the Dark!', 'mission');
-          showBanner('Into the Dark complete!');
+          addLog("Mission complete: Into the Dark!", "mission");
+          showBanner("Into the Dark complete!");
           renderMissions();
         },
       });
@@ -301,14 +321,19 @@ function setupTutorialMissions() {
   // The _lastAction variable is set to the keybinding action name just before
   // game.turns.commit() is called. Any non-wait action resets the streak.
   game.missions.add({
-    id: 'wait-and-watch',
-    name: 'Wait and Watch',
-    description: 'Press Space to wait 3 turns in a row.',
-    metadata: { consecutive: 0 },
+    id: "wait-and-watch",
+    name: "Wait and Watch",
+    description: "Press Space to wait 3 turns in a row.",
+    metadata: { consecutive: 0, lastActionCount: 0 },
 
     evaluator({ mission }) {
       const m = mission.metadata;
-      if (_lastAction === 'wait') {
+      // The scheduler fires one turn event per time-step (enemy turns included),
+      // so a single Space press can trigger multiple evaluator calls. Guard so
+      // we only process once per player action.
+      if (m.lastActionCount === _playerActionCount) return m.consecutive >= 3;
+      m.lastActionCount = _playerActionCount;
+      if (_lastAction === "wait") {
         m.consecutive++;
       } else if (_lastAction !== null) {
         // Any real action breaks the streak; null = initial turn, skip.
@@ -318,8 +343,8 @@ function setupTutorialMissions() {
     },
 
     onComplete() {
-      addLog('Mission complete: Wait and Watch!', 'mission');
-      showBanner('Wait and Watch complete!');
+      addLog("Mission complete: Wait and Watch!", "mission");
+      showBanner("Wait and Watch complete!");
       renderMissions();
     },
   });
@@ -329,17 +354,17 @@ function setupTutorialMissions() {
   // adjacent. openChest() sets _chestOpened synchronously; the evaluator
   // sees it on the same turn commit.
   game.missions.add({
-    id: 'open-chest',
-    name: 'Open a Chest',
-    description: 'Press F when next to a chest to open it.',
+    id: "open-chest",
+    name: "Open a Chest",
+    description: "Press F when next to a chest to open it.",
 
     evaluator() {
       return _chestOpened;
     },
 
     onComplete() {
-      addLog('Mission complete: Open a Chest!', 'mission');
-      showBanner('Chest opened!');
+      addLog("Mission complete: Open a Chest!", "mission");
+      showBanner("Chest opened!");
       renderMissions();
     },
   });
@@ -348,17 +373,17 @@ function setupTutorialMissions() {
   // openChest() sets _hasPotionInBag at the same time as _chestOpened.
   // The item-pickup event is also emitted so external listeners can react.
   game.missions.add({
-    id: 'pickup-item',
-    name: 'Pick Up an Item',
-    description: 'Collect the item that drops from the chest.',
+    id: "pickup-item",
+    name: "Pick Up an Item",
+    description: "Collect the item that drops from the chest.",
 
     evaluator() {
       return _hasPotionInBag;
     },
 
     onComplete() {
-      addLog('Mission complete: Pick Up an Item!', 'mission');
-      showBanner('Item collected!');
+      addLog("Mission complete: Pick Up an Item!", "mission");
+      showBanner("Item collected!");
       renderMissions();
     },
   });
@@ -367,17 +392,17 @@ function setupTutorialMissions() {
   // Press U to use the Health Potion. The 'useItem' keybinding sets
   // _itemUsed synchronously and commits a wait action to advance the turn.
   game.missions.add({
-    id: 'use-item',
-    name: 'Use an Item',
-    description: 'Press U to use your Health Potion.',
+    id: "use-item",
+    name: "Use an Item",
+    description: "Press U to use your Health Potion.",
 
     evaluator() {
       return _itemUsed;
     },
 
     onComplete() {
-      addLog('Mission complete: Use an Item!', 'mission');
-      showBanner('Item used!');
+      addLog("Mission complete: Use an Item!", "mission");
+      showBanner("Item used!");
       renderMissions();
     },
   });
@@ -386,17 +411,17 @@ function setupTutorialMissions() {
   // combat.onDamage fires inside game.turns.commit() during action resolution,
   // before the turn event. The evaluator sees the flag on the same turn.
   game.missions.add({
-    id: 'first-blood',
-    name: 'First Blood',
-    description: 'Deal damage to an enemy.',
+    id: "first-blood",
+    name: "First Blood",
+    description: "Deal damage to an enemy.",
 
     evaluator() {
       return _playerDealtDmg;
     },
 
     onComplete() {
-      addLog('Mission complete: First Blood!', 'mission');
-      showBanner('First Blood!');
+      addLog("Mission complete: First Blood!", "mission");
+      showBanner("First Blood!");
       renderMissions();
     },
   });
@@ -404,17 +429,17 @@ function setupTutorialMissions() {
   // ── Mission 8 — Enemy Slain ──────────────────────────────────────────────
   // combat.onDeath fires when an enemy's HP reaches 0.
   game.missions.add({
-    id: 'enemy-slain',
-    name: 'Enemy Slain',
-    description: 'Defeat an enemy.',
+    id: "enemy-slain",
+    name: "Enemy Slain",
+    description: "Defeat an enemy.",
 
     evaluator() {
       return _enemyKilled;
     },
 
     onComplete() {
-      addLog('Mission complete: Enemy Slain!', 'mission');
-      showBanner('Enemy defeated!');
+      addLog("Mission complete: Enemy Slain!", "mission");
+      showBanner("Enemy defeated!");
       renderMissions();
     },
   });
@@ -424,18 +449,18 @@ function setupTutorialMissions() {
   // to _visitedCells. Only non-solid cells are counted, so the ratio against
   // _totalWalkable is accurate. 30% threshold requires exploring several rooms.
   game.missions.add({
-    id: 'explorer',
-    name: 'Explorer',
-    description: 'Reveal 30% of the dungeon.',
+    id: "explorer",
+    name: "Explorer",
+    description: "Reveal 30% of the dungeon.",
 
     evaluator() {
       if (_totalWalkable === 0) return false;
-      return _visitedCells.size / _totalWalkable >= 0.30;
+      return _visitedCells.size / _totalWalkable >= 0.3;
     },
 
     onComplete() {
-      addLog('Mission complete: Explorer!', 'mission');
-      showBanner('Dungeon explored!');
+      addLog("Mission complete: Explorer!", "mission");
+      showBanner("Dungeon explored!");
       renderMissions();
     },
   });
@@ -445,22 +470,24 @@ function setupTutorialMissions() {
   // The evaluator checks whether the player's grid position is inside the
   // room's bounding rectangle.
   game.missions.add({
-    id: 'find-exit',
-    name: 'Find the Exit',
-    description: 'Reach the exit room.',
+    id: "find-exit",
+    name: "Find the Exit",
+    description: "Reach the exit room.",
 
     evaluator({ player }) {
       if (!_endRoom) return false;
       return (
-        player.x >= _endRoom.x && player.x < _endRoom.x + _endRoom.w &&
-        player.z >= _endRoom.z && player.z < _endRoom.z + _endRoom.h
+        player.x >= _endRoom.x &&
+        player.x < _endRoom.x + _endRoom.w &&
+        player.z >= _endRoom.z &&
+        player.z < _endRoom.z + _endRoom.h
       );
     },
 
     onComplete() {
-      addLog('Mission complete: Find the Exit!', 'mission');
-      showBanner('Exit reached! Tutorial complete!');
-      addLog('--- Tutorial complete! Congratulations! ---', 'mission');
+      addLog("Mission complete: Find the Exit!", "mission");
+      showBanner("Exit reached! Tutorial complete!");
+      addLog("--- Tutorial complete! Congratulations! ---", "mission");
       renderMissions();
     },
   });
@@ -472,7 +499,7 @@ function setupTutorialMissions() {
 // Events
 // ---------------------------------------------------------------------------
 
-game.events.on('turn', ({ turn }) => {
+game.events.on("turn", ({ turn }) => {
   turnEl.textContent = String(turn);
   updateStats();
   renderMissions();
@@ -483,7 +510,7 @@ game.events.on('turn', ({ turn }) => {
   if (_solidData && _dungeonW > 0) {
     const px = game.player.x;
     const pz = game.player.z;
-    const R  = 3;
+    const R = 3;
     for (let dz = -R; dz <= R; dz++) {
       for (let dx = -R; dx <= R; dx++) {
         if (dx * dx + dz * dz <= R * R) {
@@ -504,8 +531,8 @@ game.events.on('turn', ({ turn }) => {
 // The mission-complete event fires after the evaluator returns true.
 // The onComplete callbacks above already handle UI; this listener demonstrates
 // how a developer can also subscribe directly to the event.
-game.events.on('mission-complete', ({ name, turn }) => {
-  addLog(`[event] mission-complete: "${name}" on turn ${turn}`, 'turn');
+game.events.on("mission-complete", ({ name, turn }) => {
+  addLog(`[event] mission-complete: "${name}" on turn ${turn}`, "turn");
 });
 
 // ---------------------------------------------------------------------------
@@ -514,29 +541,29 @@ game.events.on('mission-complete', ({ name, turn }) => {
 
 attachKeybindings(game, {
   bindings: {
-    moveForward:  ['w', 'W', 'ArrowUp'],
-    moveBackward: ['s', 'S', 'ArrowDown'],
-    moveLeft:     ['a', 'A', 'ArrowLeft'],
-    moveRight:    ['d', 'D', 'ArrowRight'],
-    turnLeft:     ['q', 'Q'],
-    turnRight:    ['e', 'E'],
-    wait:         [' '],
-    interact:     ['f', 'F'],
-    useItem:      ['u', 'U'],
+    moveForward: ["w", "W", "ArrowUp"],
+    moveBackward: ["s", "S", "ArrowDown"],
+    moveLeft: ["a", "A", "ArrowLeft"],
+    moveRight: ["d", "D", "ArrowRight"],
+    turnLeft: ["q", "Q"],
+    turnRight: ["e", "E"],
+    wait: [" "],
+    interact: ["f", "F"],
+    useItem: ["u", "U"],
   },
   onAction(action, event) {
     event.preventDefault();
     if (!game.player.alive) {
-      addLog('You are dead. Refresh to restart.', 'death');
+      addLog("You are dead. Refresh to restart.", "death");
       return;
     }
 
     function relativeMove(forward, strafe) {
       const yaw = game.player.facing;
-      const fx  = Math.round(-Math.sin(yaw));
-      const fz  = Math.round(-Math.cos(yaw));
-      const sx  = Math.round( Math.cos(yaw));
-      const sz  = Math.round(-Math.sin(yaw));
+      const fx = Math.round(-Math.sin(yaw));
+      const fz = Math.round(-Math.cos(yaw));
+      const sx = Math.round(Math.cos(yaw));
+      const sz = Math.round(-Math.sin(yaw));
       return game.player.move(
         forward * fx + strafe * sx,
         forward * fz + strafe * sz,
@@ -545,50 +572,67 @@ attachKeybindings(game, {
 
     let a;
     switch (action) {
-      case 'moveForward':  a = relativeMove( 1,  0); break;
-      case 'moveBackward': a = relativeMove(-1,  0); break;
-      case 'moveLeft':     a = relativeMove( 0, -1); break;
-      case 'moveRight':    a = relativeMove( 0,  1); break;
-      case 'turnLeft':     a = game.player.rotate( Math.PI / 2); break;
-      case 'turnRight':    a = game.player.rotate(-Math.PI / 2); break;
-      case 'wait':         a = game.player.wait(); break;
+      case "moveForward":
+        a = relativeMove(1, 0);
+        break;
+      case "moveBackward":
+        a = relativeMove(-1, 0);
+        break;
+      case "moveLeft":
+        a = relativeMove(0, -1);
+        break;
+      case "moveRight":
+        a = relativeMove(0, 1);
+        break;
+      case "turnLeft":
+        a = game.player.rotate(Math.PI / 2);
+        break;
+      case "turnRight":
+        a = game.player.rotate(-Math.PI / 2);
+        break;
+      case "wait":
+        a = game.player.wait();
+        break;
 
-      case 'interact': {
+      case "interact": {
         // Look for an adjacent chest decoration (Manhattan distance ≤ 1).
         const px = game.player.x;
         const pz = game.player.z;
-        const chest = game.dungeon.decorations.list.find(d =>
-          d.type === 'chest' &&
-          Math.abs(d.x - px) + Math.abs(d.z - pz) <= 1,
+        const chest = game.dungeon.decorations.list.find(
+          (d) =>
+            d.type === "chest" && Math.abs(d.x - px) + Math.abs(d.z - pz) <= 1,
         );
         if (chest && !_chestOpened) {
           openChest(chest);
           a = game.player.wait(); // opening costs one turn
         } else if (!chest) {
-          addLog('Nothing nearby to interact with.', 'turn');
+          addLog("Nothing nearby to interact with.", "turn");
           return; // no turn consumed
         } else {
-          addLog('The chest is already empty.', 'turn');
+          addLog("The chest is already empty.", "turn");
           return;
         }
         break;
       }
 
-      case 'useItem': {
+      case "useItem": {
         if (_hasPotionInBag && !_itemUsed) {
-          _itemUsed       = true;
+          _itemUsed = true;
           _hasPotionInBag = false;
-          addLog('You drink the Health Potion and feel better! (+10 HP)', 'mission');
+          addLog(
+            "You drink the Health Potion and feel better! (+10 HP)",
+            "mission",
+          );
           // In a real game, apply the heal:
           //   game.player._state.entity.hp = Math.min(
           //     game.player.maxHp, game.player.hp + 10,
           //   );
           a = game.player.wait(); // using an item costs one turn
         } else if (!_hasPotionInBag) {
-          addLog('Nothing to use.', 'turn');
+          addLog("Nothing to use.", "turn");
           return;
         } else {
-          addLog('Already used.', 'turn');
+          addLog("Already used.", "turn");
           return;
         }
         break;
@@ -599,6 +643,7 @@ attachKeybindings(game, {
       // Set _lastAction only when a turn will actually be committed so that
       // mission 3 (Wait and Watch) does not see stale values from no-op keys.
       _lastAction = action;
+      _playerActionCount++;
       game.turns.commit(a);
     }
   },
@@ -609,63 +654,79 @@ attachKeybindings(game, {
 // ---------------------------------------------------------------------------
 
 function addLog(text, cls) {
-  const div = document.createElement('div');
-  div.className = 'entry' + (cls ? ' ' + cls : '');
+  const div = document.createElement("div");
+  div.className = "entry" + (cls ? " " + cls : "");
   div.textContent = text;
   logEl.prepend(div);
   while (logEl.children.length > 40) logEl.lastElementChild.remove();
 }
 
 function updateStats() {
-  hpEl.textContent  = `${game.player.hp} / ${game.player.maxHp}`;
+  hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
   posEl.textContent = `${game.player.x}, ${game.player.z}`;
 }
 
 function renderMissions() {
-  missionsList.innerHTML = '';
+  missionsList.innerHTML = "";
 
-  const all = game.missions.list;
+  const all = [...game.missions.list].sort(
+    (a, b) => (a.status === "complete") - (b.status === "complete"),
+  );
   if (all.length === 0) {
-    const empty = document.createElement('div');
-    empty.style.cssText = 'font-size:7px;color:var(--muted);padding:4px 0';
-    empty.textContent   = 'No missions yet.';
+    const empty = document.createElement("div");
+    empty.style.cssText = "font-size:7px;color:var(--muted);padding:4px 0";
+    empty.textContent = "No missions yet.";
     missionsList.appendChild(empty);
     return;
   }
 
   for (const mission of all) {
-    const item = document.createElement('div');
+    const item = document.createElement("div");
     item.className = `mission-item ${mission.status}`;
 
-    const icon = document.createElement('span');
-    icon.className = 'mission-icon';
+    if (mission.status === "complete") {
+      if (_hiddenMissions.has(mission.id)) {
+        item.classList.add("hidden");
+      } else {
+        item.addEventListener(
+          "animationend",
+          () => {
+            _hiddenMissions.add(mission.id);
+            item.classList.add("hidden");
+          },
+          { once: true },
+        );
+      }
+    }
 
-    const body = document.createElement('span');
-    body.className = 'mission-body';
+    const icon = document.createElement("span");
+    icon.className = "mission-icon";
 
-    const nameEl = document.createElement('span');
-    nameEl.className   = 'mission-name';
+    const body = document.createElement("span");
+    body.className = "mission-body";
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "mission-name";
     nameEl.textContent = mission.name;
 
-    const desc = document.createElement('span');
-    desc.className   = 'mission-desc';
+    const desc = document.createElement("span");
+    desc.className = "mission-desc";
     desc.textContent = mission.description;
 
     // Append per-mission progress counters for active missions.
-    if (mission.status === 'active') {
+    if (mission.status === "active") {
       switch (mission.id) {
-        case 'first-steps':
-          desc.textContent =
-            `${mission.description} (${mission.metadata.moves ?? 0}/5)`;
+        case "first-steps":
+          desc.textContent = `${mission.description} (${mission.metadata.moves ?? 0}/5)`;
           break;
-        case 'wait-and-watch':
-          desc.textContent =
-            `${mission.description} (${mission.metadata.consecutive ?? 0}/3)`;
+        case "wait-and-watch":
+          desc.textContent = `${mission.description} (${mission.metadata.consecutive ?? 0}/3)`;
           break;
-        case 'explorer': {
-          const pct = _totalWalkable > 0
-            ? Math.floor(100 * _visitedCells.size / _totalWalkable)
-            : 0;
+        case "explorer": {
+          const pct =
+            _totalWalkable > 0
+              ? Math.floor((100 * _visitedCells.size) / _totalWalkable)
+              : 0;
           desc.textContent = `${mission.description} (${pct}%)`;
           break;
         }
@@ -683,10 +744,10 @@ function renderMissions() {
 let _bannerTimer = null;
 function showBanner(text) {
   bannerEl.textContent = text;
-  bannerEl.classList.add('visible');
+  bannerEl.classList.add("visible");
   if (_bannerTimer) clearTimeout(_bannerTimer);
   _bannerTimer = setTimeout(() => {
-    bannerEl.classList.remove('visible');
+    bannerEl.classList.remove("visible");
     _bannerTimer = null;
   }, 2500);
 }

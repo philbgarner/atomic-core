@@ -165,6 +165,21 @@ body::before {
   border-color: var(--mission-done-dim);
   color: var(--mission-done);
   opacity: 0.75;
+  animation: missionComplete 2.4s ease-in-out forwards;
+}
+
+.mission-item.complete.hidden {
+  display: none;
+  animation: none;
+}
+
+@keyframes missionComplete {
+  0%   { filter: brightness(1);   opacity: 0.75; transform: translateY(0); }
+  18%  { filter: brightness(3.5); opacity: 1;    transform: translateY(0); }
+  36%  { filter: brightness(1);   opacity: 0.75; transform: translateY(0); }
+  54%  { filter: brightness(3.5); opacity: 1;    transform: translateY(0); }
+  65%  { filter: brightness(1);   opacity: 0.75; transform: translateY(0); }
+  100% { filter: brightness(1);   opacity: 0;    transform: translateY(-18px); }
 }
 
 .mission-item.complete .mission-icon::before {
