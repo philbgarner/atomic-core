@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # imageToBase64Js.sh — Convert an image file to a Base64 JS module
-# Usage: imageToBase64Js.sh <image-file> <output-js-file>
+# Usage: imageToBase64Js.sh <atlas-data-url-var> <image-file> <output-js-file>
 
 set -euo pipefail
 
 # ── Help ────────────────────────────────────────────────────────────────────
-if [ $# -lt 2 ]; then
+if [ $# -lt 3 ]; then
   cat <<'EOF'
 
   imageToBase64Js.sh
@@ -17,17 +17,18 @@ if [ $# -lt 2 ]; then
   have access to the image at runtime.
 
   Usage:
-    imageToBase64Js.sh <image-file> <output-js-file>
+    imageToBase64Js.sh <atlas-data-url-var> <image-file> <output-js-file>
 
   Arguments:
-    image-file      Path to the source image (e.g. atlas.png)
-    output-js-file  Path for the generated JS file (e.g. atlas-data.js)
+    atlas-data-url-var  Name of the window variable to assign (e.g. ATLAS_DATA_URL)
+    image-file          Path to the source image (e.g. atlas.png)
+    output-js-file      Path for the generated JS file (e.g. atlas-data.js)
 
   The generated file will contain a single line:
-    window.ATLAS_DATA_URL = "data:<mime>;base64,<data>";
+    window.<atlas-data-url-var> = "data:<mime>;base64,<data>";
 
   Example:
-    ./imageToBase64Js.sh assets/atlas.png examples/basic/atlas-data.js
+    ./imageToBase64Js.sh ATLAS_DATA_URL assets/atlas.png examples/basic/atlas-data.js
 
   Supported MIME types are detected automatically from the file extension:
     .png             → image/png
@@ -41,8 +42,9 @@ EOF
   exit 0
 fi
 
-IMAGE_FILE="$1"
-OUTPUT_FILE="$2"
+ATLAS_VAR="$1"
+IMAGE_FILE="$2"
+OUTPUT_FILE="$3"
 
 # ── Validate input ───────────────────────────────────────────────────────────
 if [ ! -f "$IMAGE_FILE" ]; then
@@ -71,6 +73,6 @@ esac
 BASE64_DATA="$(base64 -w 0 "$IMAGE_FILE")"
 
 # ── Write output ─────────────────────────────────────────────────────────────
-printf 'window.ATLAS_DATA_URL = "data:%s;base64,%s";\n' "$MIME" "$BASE64_DATA" > "$OUTPUT_FILE"
+printf 'window.%s = "data:%s;base64,%s";\n' "$ATLAS_VAR" "$MIME" "$BASE64_DATA" > "$OUTPUT_FILE"
 
 echo "Written: $OUTPUT_FILE"

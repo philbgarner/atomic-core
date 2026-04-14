@@ -1,13 +1,14 @@
 # image.ToBase64Js.ps1 — Convert an image file to a Base64 JS module
-# Usage: .\image.ToBase64Js.ps1 <image-file> <output-js-file>
+# Usage: .\image.ToBase64Js.ps1 <atlas-data-url-var> <image-file> <output-js-file>
 
 param(
+    [string]$AtlasVar = "",
     [string]$ImageFile = "",
     [string]$OutputFile = ""
 )
 
 # ── Help ────────────────────────────────────────────────────────────────────
-if (-not $ImageFile -or -not $OutputFile) {
+if (-not $AtlasVar -or -not $ImageFile -or -not $OutputFile) {
     Write-Host @"
 
   image.ToBase64Js.ps1
@@ -19,17 +20,18 @@ if (-not $ImageFile -or -not $OutputFile) {
   have access to the image at runtime.
 
   Usage:
-    .\image.ToBase64Js.ps1 <image-file> <output-js-file>
+    .\image.ToBase64Js.ps1 <atlas-data-url-var> <image-file> <output-js-file>
 
   Arguments:
-    image-file      Path to the source image (e.g. atlas.png)
-    output-js-file  Path for the generated JS file (e.g. atlas-data.js)
+    atlas-data-url-var  Name of the window variable to assign (e.g. ATLAS_DATA_URL)
+    image-file          Path to the source image (e.g. atlas.png)
+    output-js-file      Path for the generated JS file (e.g. atlas-data.js)
 
   The generated file will contain a single line:
-    window.ATLAS_DATA_URL = "data:<mime>;base64,<data>";
+    window.<atlas-data-url-var> = "data:<mime>;base64,<data>";
 
   Example:
-    .\image.ToBase64Js.ps1 assets\atlas.png examples\basic\atlas-data.js
+    .\image.ToBase64Js.ps1 ATLAS_DATA_URL assets\atlas.png examples\basic\atlas-data.js
 
   Supported MIME types are detected automatically from the file extension:
     .png             -> image/png
@@ -71,7 +73,7 @@ $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $ImageFile))
 $base64 = [System.Convert]::ToBase64String($bytes)
 
 # ── Write output ─────────────────────────────────────────────────────────────
-$content = "window.ATLAS_DATA_URL = `"data:$mime;base64,$base64`";"
+$content = "window.$AtlasVar = `"data:$mime;base64,$base64`";"
 [System.IO.File]::WriteAllText((Join-Path (Get-Location) $OutputFile), $content)
 
 Write-Host "Written: $OutputFile"
