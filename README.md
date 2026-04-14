@@ -6,7 +6,7 @@ A dungeon crawler library.
 
 A composable JavaScript library built on [Three.js](https://threejs.org/) for building first-person 3D dungeon crawl games in the browser.
 
-Game logic lives entirely in your JS layer — the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like. No React, no JSX, no build step required.
+Game logic lives entirely in your JS layer – the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like. No React, no JSX, no build step required.
 
 ---
 
@@ -65,12 +65,12 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 
 ## Features
 
-- First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js — no React/R3F required)
+- First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js – no React/R3F required)
 - BSP dungeon generator or cellular automata generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
 - Built-in dungeon themes (`dungeon`, `crypt`, `catacomb`, `industrial`, `ruins`) with `registerTheme()` for custom themes
 - Ceiling and floor height offsets; pit markers that omit floor tiles
-- Dungeon serialization — save and restore `DungeonOutputs` to/from JSON
-- Renderer layer system — stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
+- Dungeon serialization – save and restore `DungeonOutputs` to/from JSON
+- Renderer layer system – stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
@@ -82,11 +82,11 @@ Game logic lives entirely in your JS layer — the library provides the renderin
 - Hidden passage traversal
 - Callback-driven enemy spawning
 - Stationary decoration entities (props, furniture, fixtures)
-- Atlas surface painting — apply tile layers to walls, floors, and ceilings per-tile
+- Atlas surface painting – apply tile layers to walls, floors, and ceilings per-tile
 - Configurable keybindings
 - Audio hooks (Howler.js compatible)
 - Optional multiplayer transport layer (WebSocket-based, server-authoritative)
-- Script tag API — no build step required
+- Script tag API – no build step required
 
 ---
 
@@ -113,7 +113,7 @@ Once loaded, `window.CrawlLib` exposes the full imperative API you can use from 
 
 ## Quick Start
 
-`CrawlLib.createGame()` sets up game logic and returns a `game` handle. Call `CrawlLib.createDungeonRenderer()` separately to mount the 3D viewport — this lets you attach event callbacks and a spawner before generating the dungeon.
+`CrawlLib.createGame()` sets up game logic and returns a `game` handle. Call `CrawlLib.createDungeonRenderer()` separately to mount the 3D viewport – this lets you attach event callbacks and a spawner before generating the dungeon.
 
 ```html
 <!DOCTYPE html>
@@ -174,7 +174,7 @@ Once loaded, `window.CrawlLib` exposes the full imperative API you can use from 
         },
       )
 
-      // Generate the dungeon — must be called after attaching all callbacks
+      // Generate the dungeon – must be called after attaching all callbacks
       game.generate()
     }
     atlasImg.src = './atlas.png'
@@ -220,7 +220,7 @@ Once loaded, `window.CrawlLib` exposes the full imperative API you can use from 
 
 ## Script Tag Developer Guide
 
-This section covers using r3f-crawl-lib entirely from a `<script>` tag — no JSX, no bundler, no build step.
+This section covers using r3f-crawl-lib entirely from a `<script>` tag – no JSX, no bundler, no build step.
 
 ### The `game` handle
 
@@ -228,10 +228,10 @@ This section covers using r3f-crawl-lib entirely from a `<script>` tag — no JS
 
 | Property | Type | Description |
 |---|---|---|
-| `game.generate()` | function | Generate the dungeon and start the game — call after attaching all callbacks |
-| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) — available after `generate()` |
+| `game.generate()` | function | Generate the dungeon and start the game – call after attaching all callbacks |
+| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) – available after `generate()` |
 | `game.player` | object | Player state and action methods |
-| `game.turns` | object | Turn scheduler — call `turns.commit()` to advance |
+| `game.turns` | object | Turn scheduler – call `turns.commit()` to advance |
 | `game.combat` | object | Combat system |
 | `game.events` | EventEmitter | Subscribe to game events |
 | `game.destroy()` | function | Unmount and clean up |
@@ -320,7 +320,7 @@ atlasImg.onload = function() {
     document.getElementById('viewport'),
     game,
     {
-      // Tile atlas — pass a pre-loaded HTMLImageElement
+      // Tile atlas – pass a pre-loaded HTMLImageElement
       atlas: {
         image:       atlasImg,
         tileWidth:   64,
@@ -391,15 +391,15 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 
 | | `renderer.addLayer` | `attachSurfacePainter` / `dungeon.paint` |
 |---|---|---|
-| **Where it lives** | Renderer — instanced meshes on top of geometry | Dungeon — tile data stored per-cell |
+| **Where it lives** | Renderer – instanced meshes on top of geometry | Dungeon – tile data stored per-cell |
 | **Driven by** | Per-face renderer callback | Per-position dungeon callback or imperative call |
 | **Serialized with dungeon** | No | Yes (via `dungeon.paint`) |
 | **Best for** | Visual overlays (decals, glows, trim) wired to renderer-side flags | Tile state tied to dungeon data (biomes, wear, wetness) |
 | **Update path** | `handle.rebuild()` after state changes | `game.dungeon.paint()` / `game.dungeon.unpaint()` |
 
-**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis — for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
+**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis – for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
 
-**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* — for example, wet tiles, moss growth, or biome zones — especially when that state needs to survive serialization or be shared over the network.
+**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* – for example, wet tiles, moss growth, or biome zones – especially when that state needs to survive serialization or be shared over the network.
 
 ### Loading a Tiled map
 
@@ -593,7 +593,7 @@ CrawlLib.attachKeybindings(game, {
 
 | Function | Description |
 |---|---|
-| `CrawlLib.createGame(element, options)` | Set up game logic; returns a `game` handle — does not generate the dungeon |
+| `CrawlLib.createGame(element, options)` | Set up game logic; returns a `game` handle – does not generate the dungeon |
 | `CrawlLib.createDungeonRenderer(element, game, opts)` | Mount the Three.js first-person renderer; returns a `DungeonRenderer` handle |
 | `CrawlLib.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
 | `CrawlLib.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
@@ -614,7 +614,7 @@ CrawlLib.attachKeybindings(game, {
 
 ### Dungeon
 
-The dungeon is a grid of tiles encoded as `DataTexture` maps (solid, floor type, wall type, ceiling type, overlays). It is decoupled from rendering — you can swap renderers without touching game logic.
+The dungeon is a grid of tiles encoded as `DataTexture` maps (solid, floor type, wall type, ceiling type, overlays). It is decoupled from rendering – you can swap renderers without touching game logic.
 
 ```js
 dungeon: {
@@ -716,7 +716,7 @@ import { serializeDungeon, deserializeDungeon } from 'r3f-crawl-lib'
 const snapshot = serializeDungeon(game.dungeon.outputs)
 localStorage.setItem('dungeon', JSON.stringify(snapshot))
 
-// On reload — pass the restored outputs as dungeon.restore:
+// On reload – pass the restored outputs as dungeon.restore:
 const saved = JSON.parse(localStorage.getItem('dungeon'))
 const game = CrawlLib.createGame(el, {
   dungeon: { restore: deserializeDungeon(saved) },
@@ -780,14 +780,14 @@ dungeon: {
   seed: 12345, width: 40, height: 40,
   onHeightOffset({ x, y, roomId, rng }) {
     // Return { floor?, ceiling? } in world units (positive = raise, negative = lower)
-    if (rng() < 0.05) return { floor: -1.5 }   // pit tile — floor is omitted from rendering
+    if (rng() < 0.05) return { floor: -1.5 }   // pit tile – floor is omitted from rendering
     if (rng() < 0.1)  return { ceiling: -0.5 }  // lower ceiling
     return null
   },
 }
 ```
 
-Tiles with a floor offset value of `0` are treated as **pits** — the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
+Tiles with a floor offset value of `0` are treated as **pits** – the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
 
 ---
 
@@ -798,7 +798,7 @@ player: {
   x: 2, z: 2,         // starting grid position (overridden by PlayerStart object if using Tiled)
   hp: 30, maxHp: 30,
   attack: 4, defense: 2,
-  speed: 5,            // turn cost — lower = faster
+  speed: 5,            // turn cost – lower = faster
 }
 ```
 
@@ -814,7 +814,7 @@ game.player.inventory  // array of item slots
 game.player.alive      // boolean
 
 // Imperative actions (pass to turns.commit)
-game.player.move(dx, dz)          // grid delta — use facing-relative math for first-person movement
+game.player.move(dx, dz)          // grid delta – use facing-relative math for first-person movement
 game.player.rotate(angle)         // radians; positive = counter-clockwise
 game.player.interact(entityId)    // pass null to interact with adjacent objects
 game.player.wait()
@@ -953,7 +953,7 @@ game.events.on('damage', function({ defender }) {
   })
 })
 
-// Advance effects each turn — returns events for any effect damage / expiry
+// Advance effects each turn – returns events for any effect damage / expiry
 game.turns.onAdvance = function({ entities }) {
   for (const e of entities) {
     const events = tickEffects(e)
@@ -992,7 +992,7 @@ CrawlLib.attachSpawner(game, {
 
 ### Decorations
 
-Decorations are stationary props — furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
+Decorations are stationary props – furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
 
 ```js
 var barrel = CrawlLib.createDecoration({
@@ -1093,7 +1093,7 @@ var healthPotion = CrawlLib.createItem({
   },
 })
 
-// Chest drops — configured via onPlace or object layer
+// Chest drops – configured via onPlace or object layer
 place.object(room.cx, room.cz, 'chest', {
   loot: [
     { id: 'health-potion', name: 'Health Potion', chance: 1.0 },
@@ -1182,7 +1182,7 @@ game.events.on('turn', function() {
 renderer.destroy()
 ```
 
-If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` — useful for prototyping before an atlas is ready.
+If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` – useful for prototyping before an atlas is ready.
 
 ---
 
@@ -1245,7 +1245,7 @@ handle.rebuild()
 | `target` | `LayerTarget` | Surface to attach to: `'floor'`, `'ceil'`, `'wall'`, `'floorSkirt'`, `'ceilSkirt'` |
 | `tileId` | number | Atlas tile index to render on this layer |
 | `yOffset` | number | World-unit Y offset (useful to prevent z-fighting) |
-| `filter` | function | Per-face callback — return `{ visible: true }` or `null` |
+| `filter` | function | Per-face callback – return `{ visible: true }` or `null` |
 
 ---
 
@@ -1281,15 +1281,15 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 
 | | Layer System (`addLayer`) | Surface Painting (`attachSurfacePainter` / `dungeon.paint`) |
 |---|---|---|
-| **Where it lives** | Renderer — instanced meshes on top of geometry | Dungeon — tile data stored per-cell |
+| **Where it lives** | Renderer – instanced meshes on top of geometry | Dungeon – tile data stored per-cell |
 | **Driven by** | Per-face renderer callback | Per-position dungeon callback or imperative call |
 | **Serialized with dungeon** | No | Yes (via `dungeon.paint`) |
 | **Best for** | Visual overlays (decals, glows, trim) wired to renderer-side flags | Tile state tied to dungeon data (biomes, wear, wetness) |
 | **Update path** | `handle.rebuild()` after state changes | `game.dungeon.paint()` / `game.dungeon.unpaint()` |
 
-**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis — for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
+**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis – for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
 
-**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* — for example, wet tiles, moss growth, or biome zones — especially when that state needs to survive serialization or be shared over the network.
+**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* – for example, wet tiles, moss growth, or biome zones – especially when that state needs to survive serialization or be shared over the network.
 
 ---
 
@@ -1422,9 +1422,9 @@ All settings are passed directly to `CrawlLib.createGame()` or the relevant `att
 | `transport` | `ActionTransport` instance (e.g. from `createWebSocketTransport`) |
 | `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
 | `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
-| `attachSpawner` | `onSpawn` — callback receiving `{ dungeon, roomId, x, y }` |
-| `attachDecorator` | `onDecorate` — callback receiving `{ dungeon, roomId, x, y }` |
-| `attachSurfacePainter` | `onPaint` — callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
+| `attachSpawner` | `onSpawn` – callback receiving `{ dungeon, roomId, x, y }` |
+| `attachDecorator` | `onDecorate` – callback receiving `{ dungeon, roomId, x, y }` |
+| `attachSurfacePainter` | `onPaint` – callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
 | `attachKeybindings` | `bindings`, `onAction` |
 
 ---
@@ -1476,32 +1476,32 @@ When serving examples directly from the filesystem (`file://`) or in sandboxed e
 
 **Why not just use `<img src="atlas.png">`?**
 
-It seems like the obvious approach — put the PNG next to your HTML and point an `<img>` tag at it — but it fails at the WebGL layer. When Three.js calls `texSubImage2D` to upload the image as a GPU texture, the browser checks the image's origin. Under `file://`, even a same-directory local file is treated as a potentially cross-origin resource by both Chrome and Firefox, and the upload is rejected with a `DOMException: The operation is insecure` error. The image renders fine on screen, but WebGL refuses to read its pixels.
+It seems like the obvious approach – put the PNG next to your HTML and point an `<img>` tag at it – but it fails at the WebGL layer. When Three.js calls `texSubImage2D` to upload the image as a GPU texture, the browser checks the image's origin. Under `file://`, even a same-directory local file is treated as a potentially cross-origin resource by both Chrome and Firefox, and the upload is rejected with a `DOMException: The operation is insecure` error. The image renders fine on screen, but WebGL refuses to read its pixels.
 
 A Base64 data URL sidesteps this entirely: the image data is inline text embedded directly in the script, so it has no origin at all and is never subject to the cross-origin check. The resulting `Image` object loads cleanly and `texSubImage2D` can read it without restriction.
 
-If you serve your files through any HTTP server (even `python3 -m http.server`) you can use a plain `<img>` tag and skip the data-URL step — the same-origin policy is satisfied by the HTTP origin.
+If you serve your files through any HTTP server (even `python3 -m http.server`) you can use a plain `<img>` tag and skip the data-URL step – the same-origin policy is satisfied by the HTTP origin.
 
 Two helper scripts in `utils/` automate this conversion:
 
 **Linux / macOS (Bash):**
 ```bash
 chmod +x utils/imageToBase64Js.sh
-./utils/imageToBase64Js.sh assets/atlas.png examples/basic/atlas-data.js
+./utils/imageToBase64Js.sh ATLAS_DATA_URL assets/atlas.png examples/basic/atlas-data.js
 ```
 
 **Windows (PowerShell):**
 ```powershell
-.\utils\image.ToBase64Js.ps1 assets\atlas.png examples\basic\atlas-data.js
+.\utils\image.ToBase64Js.ps1 ATLAS_DATA_URL assets\atlas.png examples\basic\atlas-data.js
 ```
 
-Both scripts accept the image path as the first argument and the output JS path as the second. Running either script without arguments prints full usage help. The generated file assigns the data URL to `window.ATLAS_DATA_URL`:
+Both scripts take three arguments in order: the **global variable name** to assign on `window`, the **source image path**, and the **output JS file path**. Running either script without all three arguments prints full usage help. The generated file assigns the data URL to the variable name you chose:
 
 ```js
 window.ATLAS_DATA_URL = "data:image/png;base64,iVBORw0K...";
 ```
 
-Include it before your main script and use `ATLAS_DATA_URL` as the image `src`:
+Include it before your main script and use the variable name you passed as the first argument:
 
 ```html
 <script src="atlas-data.js"></script>
@@ -1510,6 +1510,6 @@ Include it before your main script and use `ATLAS_DATA_URL` as the image `src`:
   atlasImg.onload = function () {
     var renderer = CrawlLib.createDungeonRenderer(el, game, { atlas: { image: atlasImg, ... }, ... })
   }
-  atlasImg.src = window.ATLAS_DATA_URL
+  atlasImg.src = window.ATLAS_DATA_URL  // matches the first argument passed to the script
 </script>
 ```
