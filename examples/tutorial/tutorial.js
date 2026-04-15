@@ -80,6 +80,8 @@ let _visitedCells = new Set();
 
 /** The exit room (endRoomId → PublicRoom), captured in onPlace. */
 let _endRoom = null;
+/** Set to true once all non-exit missions are complete and the exit mission unlocks. */
+let _exitMissionUnlocked = false;
 /** Entities placed via onPlace whose positions are synced in-place by the engine. */
 let _placedEnemies = [];
 
@@ -265,6 +267,62 @@ function openChest(chest) {
 // Tutorial missions
 // ---------------------------------------------------------------------------
 
+/**
+ * Called at the end of every mission's onComplete. When every currently-added
+ * mission (besides "find-exit" itself) is complete, the capstone exit mission
+ * is added. The evaluator guards against the player already standing in the
+ * exit room at the moment of unlock — they must leave and re-enter.
+ */
+function tryUnlockExitMission() {
+  if (_exitMissionUnlocked) return;
+
+  const pending = game.missions.list.filter(
+    (m) => m.id !== "find-exit" && m.status !== "complete",
+  );
+  if (pending.length > 0) return;
+
+  _exitMissionUnlocked = true;
+  addLog("All missions complete — find the exit!", "mission");
+  showBanner("Find the Exit!");
+
+  const alreadyInExit =
+    _endRoom != null &&
+    game.player.x >= _endRoom.x &&
+    game.player.x < _endRoom.x + _endRoom.w &&
+    game.player.z >= _endRoom.z &&
+    game.player.z < _endRoom.z + _endRoom.h;
+
+  game.missions.add({
+    id: "find-exit",
+    name: "Find the Exit",
+    description: "Reach the exit room.",
+    metadata: { alreadyInExitAtUnlock: alreadyInExit },
+
+    evaluator({ player, mission }) {
+      if (!_endRoom) return false;
+      const inRoom =
+        player.x >= _endRoom.x &&
+        player.x < _endRoom.x + _endRoom.w &&
+        player.z >= _endRoom.z &&
+        player.z < _endRoom.z + _endRoom.h;
+      if (!inRoom) {
+        // Once the player leaves the room, clear the "was already here" flag.
+        mission.metadata.alreadyInExitAtUnlock = false;
+        return false;
+      }
+      return !mission.metadata.alreadyInExitAtUnlock;
+    },
+
+    onComplete() {
+      addLog("Mission complete: Find the Exit!", "mission");
+      showBanner("Exit reached! Tutorial complete!");
+      addLog("--- Tutorial complete! Congratulations! ---", "mission");
+      renderMissions();
+    },
+  });
+  renderMissions();
+}
+
 function setupTutorialMissions() {
   // ── Mission 1 — First Steps ──────────────────────────────────────────────
   // Count actual grid moves each turn by comparing position via metadata.
@@ -314,6 +372,7 @@ function setupTutorialMissions() {
 
       if (connectedCorridors.length === 0) {
         addLog("No corridors from start — skipping mission 2.", "mission");
+        tryUnlockExitMission();
         return;
       }
 
@@ -336,10 +395,12 @@ function setupTutorialMissions() {
           addLog("Mission complete: Into the Dark!", "mission");
           showBanner("Into the Dark complete!");
           renderMissions();
+          tryUnlockExitMission();
         },
       });
 
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -372,6 +433,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Wait and Watch!", "mission");
       showBanner("Wait and Watch complete!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -392,6 +454,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Open a Chest!", "mission");
       showBanner("Chest opened!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -411,6 +474,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Pick Up an Item!", "mission");
       showBanner("Item collected!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -430,6 +494,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Use an Item!", "mission");
       showBanner("Item used!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -449,6 +514,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: First Blood!", "mission");
       showBanner("First Blood!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -467,6 +533,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Enemy Slain!", "mission");
       showBanner("Enemy defeated!");
       renderMissions();
+      tryUnlockExitMission();
     },
   });
 
@@ -488,33 +555,7 @@ function setupTutorialMissions() {
       addLog("Mission complete: Explorer!", "mission");
       showBanner("Dungeon explored!");
       renderMissions();
-    },
-  });
-
-  // ── Mission 10 — Find the Exit ───────────────────────────────────────────
-  // _endRoom is the PublicRoom for endRoomId from the BSP dungeon output.
-  // The evaluator checks whether the player's grid position is inside the
-  // room's bounding rectangle.
-  game.missions.add({
-    id: "find-exit",
-    name: "Find the Exit",
-    description: "Reach the exit room.",
-
-    evaluator({ player }) {
-      if (!_endRoom) return false;
-      return (
-        player.x >= _endRoom.x &&
-        player.x < _endRoom.x + _endRoom.w &&
-        player.z >= _endRoom.z &&
-        player.z < _endRoom.z + _endRoom.h
-      );
-    },
-
-    onComplete() {
-      addLog("Mission complete: Find the Exit!", "mission");
-      showBanner("Exit reached! Tutorial complete!");
-      addLog("--- Tutorial complete! Congratulations! ---", "mission");
-      renderMissions();
+      tryUnlockExitMission();
     },
   });
 
