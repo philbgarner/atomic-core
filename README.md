@@ -94,7 +94,7 @@ Game logic lives entirely in your JS layer – the library provides the renderin
 
 ### `<script>` tag (no build step)
 
-Load Three.js, then the library IIFE bundle. All exports are available on `window.CrawlLib`.
+Load Three.js, then the library IIFE bundle. All exports are available on `window.AtomicCore`.
 
 ```html
 <!-- Three.js (required) -->
@@ -107,13 +107,13 @@ Load Three.js, then the library IIFE bundle. All exports are available on `windo
 <script src="/dist/r3f-crawl-lib.iife.js" defer></script>
 ```
 
-Once loaded, `window.CrawlLib` exposes the full imperative API you can use from any HTML page without JSX or a build toolchain.
+Once loaded, `window.AtomicCore` exposes the full imperative API you can use from any HTML page without JSX or a build toolchain.
 
 ---
 
 ## Quick Start
 
-`CrawlLib.createGame()` sets up game logic and returns a `game` handle. Call `CrawlLib.createDungeonRenderer()` separately to mount the 3D viewport – this lets you attach event callbacks and a spawner before generating the dungeon.
+`AtomicCore.createGame()` sets up game logic and returns a `game` handle. Call `AtomicCore.createDungeonRenderer()` separately to mount the 3D viewport – this lets you attach event callbacks and a spawner before generating the dungeon.
 
 ```html
 <!DOCTYPE html>
@@ -132,7 +132,7 @@ Once loaded, `window.CrawlLib` exposes the full imperative API you can use from 
   </script>
   <script src="/dist/r3f-crawl-lib.iife.js" defer></script>
   <script defer>
-    const { createGame, createEnemy, attachSpawner, attachKeybindings, createDungeonRenderer } = CrawlLib
+    const { createGame, createEnemy, attachSpawner, attachKeybindings, createDungeonRenderer } = AtomicCore
 
     const game = createGame(document.body, {
       dungeon: {
@@ -284,7 +284,7 @@ game.events.on('audio', function({ name }) {
 
 ```js
 // NPCs are neutral towards the player; hostile only to enemies
-var villager = CrawlLib.createNpc({
+var villager = AtomicCore.createNpc({
   type: 'villager',
   sprite: 'v',
   x: 5, z: 3,
@@ -293,7 +293,7 @@ var villager = CrawlLib.createNpc({
 })
 
 // Enemies are hostile to both the player and NPCs
-var goblin = CrawlLib.createEnemy({
+var goblin = AtomicCore.createEnemy({
   type:    'goblin',
   sprite:  'g',
   x: 10, z: 10,
@@ -316,7 +316,7 @@ The 3D renderer is created separately from the game object. This allows you to d
 ```js
 const atlasImg = new Image()
 atlasImg.onload = function() {
-  var renderer = CrawlLib.createDungeonRenderer(
+  var renderer = AtomicCore.createDungeonRenderer(
     document.getElementById('viewport'),
     game,
     {
@@ -371,7 +371,7 @@ atlasImg.src = './atlas.png'
 Register a callback to paint atlas tile layers onto tiles per position. Return an ordered array of atlas tile IDs to composite over the base tile, or `null` to leave it unchanged.
 
 ```js
-CrawlLib.attachSurfacePainter(game, {
+AtomicCore.attachSurfacePainter(game, {
   onPaint: function({ dungeon, roomId, x, y }) {
     var room = dungeon.rooms[roomId]
     if (!room) return null
@@ -407,7 +407,7 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 fetch('./maps/dungeon-level-1.tmj')
   .then(function(r) { return r.json() })
   .then(function(tiledMap) {
-    var game = CrawlLib.createGame(document.getElementById('viewport'), {
+    var game = AtomicCore.createGame(document.getElementById('viewport'), {
       dungeon: {
         tiled: {
           map: tiledMap,
@@ -461,10 +461,10 @@ The renderer creates its own `<canvas>` inside the viewport element. Overlay HTM
 </div>
 
 <script>
-  var game = CrawlLib.createGame(document.getElementById('viewport'), { /* ... */ })
+  var game = AtomicCore.createGame(document.getElementById('viewport'), { /* ... */ })
 
   // Enable the built-in minimap renderer pointed at a 2D canvas
-  CrawlLib.attachMinimap(game, document.getElementById('minimap'), {
+  AtomicCore.attachMinimap(game, document.getElementById('minimap'), {
     size: 196,
     showEntities: true,
   })
@@ -488,12 +488,12 @@ Register a callback to control enemy spawning. It is called for each candidate r
 ```js
 var enemies = []
 
-CrawlLib.attachSpawner(game, {
+AtomicCore.attachSpawner(game, {
   onSpawn: function({ dungeon, roomId, x, y }) {
     if (roomId < 2) return null                 // skip early rooms
     if (Math.random() > 0.55) return null       // random density
 
-    var e = CrawlLib.createEnemy({
+    var e = AtomicCore.createEnemy({
       type:    'goblin',
       sprite:  'g',
       x:       x,
@@ -528,13 +528,13 @@ The `onSpawn` callback receives:
 Register a callback to place stationary props (furniture, barrels, fixtures, etc.). Return a decoration, an array of decorations, or `null`.
 
 ```js
-CrawlLib.attachDecorator(game, {
+AtomicCore.attachDecorator(game, {
   onDecorate: function({ dungeon, roomId, x, y }) {
     var room = dungeon.rooms[roomId]
     if (!room) return null
 
     if (Math.random() < 0.05) {
-      return CrawlLib.createDecoration({
+      return AtomicCore.createDecoration({
         type:       'barrel',
         x:          x,
         z:          y,
@@ -553,7 +553,7 @@ CrawlLib.attachDecorator(game, {
 Instead of writing your own `keydown` handler, use the built-in binding helper. Action names are arbitrary strings you define:
 
 ```js
-CrawlLib.attachKeybindings(game, {
+AtomicCore.attachKeybindings(game, {
   bindings: {
     moveForward:  ['w', 'ArrowUp'],
     moveBackward: ['s', 'ArrowDown'],
@@ -593,20 +593,20 @@ CrawlLib.attachKeybindings(game, {
 
 | Function | Description |
 |---|---|
-| `CrawlLib.createGame(element, options)` | Set up game logic; returns a `game` handle – does not generate the dungeon |
-| `CrawlLib.createDungeonRenderer(element, game, opts)` | Mount the Three.js first-person renderer; returns a `DungeonRenderer` handle |
-| `CrawlLib.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
-| `CrawlLib.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
-| `CrawlLib.attachDecorator(game, opts)` | Register a decoration callback to place stationary props |
-| `CrawlLib.attachSurfacePainter(game, opts)` | Register a callback to paint atlas layers on surfaces |
-| `CrawlLib.attachKeybindings(game, opts)` | Register keyboard bindings |
-| `CrawlLib.createNpc(opts)` | Create an NPC entity |
-| `CrawlLib.createEnemy(opts)` | Create an enemy entity |
-| `CrawlLib.createDecoration(opts)` | Create a stationary decoration |
-| `CrawlLib.createItem(opts)` | Create an item |
-| `CrawlLib.buildTilesetMap(tiledJson, options)` | Build a GID→atlas-name map from a Tiled tileset JSON |
-| `CrawlLib.createWebSocketTransport(url)` | Create a browser-side WebSocket transport for multiplayer |
-| `CrawlLib.registerTheme(name, def)` | Register a custom dungeon theme |
+| `AtomicCore.createGame(element, options)` | Set up game logic; returns a `game` handle – does not generate the dungeon |
+| `AtomicCore.createDungeonRenderer(element, game, opts)` | Mount the Three.js first-person renderer; returns a `DungeonRenderer` handle |
+| `AtomicCore.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
+| `AtomicCore.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
+| `AtomicCore.attachDecorator(game, opts)` | Register a decoration callback to place stationary props |
+| `AtomicCore.attachSurfacePainter(game, opts)` | Register a callback to paint atlas layers on surfaces |
+| `AtomicCore.attachKeybindings(game, opts)` | Register keyboard bindings |
+| `AtomicCore.createNpc(opts)` | Create an NPC entity |
+| `AtomicCore.createEnemy(opts)` | Create an enemy entity |
+| `AtomicCore.createDecoration(opts)` | Create a stationary decoration |
+| `AtomicCore.createItem(opts)` | Create an item |
+| `AtomicCore.buildTilesetMap(tiledJson, options)` | Build a GID→atlas-name map from a Tiled tileset JSON |
+| `AtomicCore.createWebSocketTransport(url)` | Create a browser-side WebSocket transport for multiplayer |
+| `AtomicCore.registerTheme(name, def)` | Register a custom dungeon theme |
 
 ---
 
@@ -676,7 +676,7 @@ dungeon: {
 Register custom themes at any time before `game.generate()`:
 
 ```js
-CrawlLib.registerTheme('marble', {
+AtomicCore.registerTheme('marble', {
   floorType:   'MarbleFloor',
   wallType:    'MarbleWall',
   ceilingType: 'MarbleCeiling',
@@ -718,7 +718,7 @@ localStorage.setItem('dungeon', JSON.stringify(snapshot))
 
 // On reload – pass the restored outputs as dungeon.restore:
 const saved = JSON.parse(localStorage.getItem('dungeon'))
-const game = CrawlLib.createGame(el, {
+const game = AtomicCore.createGame(el, {
   dungeon: { restore: deserializeDungeon(saved) },
   player:  { hp: 30 },
 })
@@ -845,7 +845,7 @@ The scheduler runs all registered actors (NPCs and enemies) in priority order af
 
 ```js
 // onAdvance fires each time the scheduler advances a tick
-var game = CrawlLib.createGame(element, {
+var game = AtomicCore.createGame(element, {
   turns: {
     onAdvance: function({ turn, dt }) {
       // called between player inputs as other actors take their turns
@@ -885,7 +885,7 @@ All entities share a common base interface.
 NPCs are friendly to the player but will fight back against enemies.
 
 ```js
-var villager = CrawlLib.createNpc({
+var villager = AtomicCore.createNpc({
   type:    'villager',
   sprite:  'v',
   x: 5, z: 3,
@@ -914,7 +914,7 @@ var villager = CrawlLib.createNpc({
 Enemies are hostile to both the player and NPCs.
 
 ```js
-var goblin = CrawlLib.createEnemy({
+var goblin = AtomicCore.createEnemy({
   type:    'goblin',
   sprite:  'g',
   x: 10, z: 10,
@@ -971,11 +971,11 @@ game.turns.onAdvance = function({ entities }) {
 `attachSpawner` lets you control enemy placement with a single callback. The library calls `onSpawn` for each candidate room tile during generation. Return an entity or array of entities to place them, or `null` / `undefined` to skip.
 
 ```js
-CrawlLib.attachSpawner(game, {
+AtomicCore.attachSpawner(game, {
   onSpawn: function({ dungeon, roomId, x, y }) {
     if (roomId < 2) return null   // skip spawn rooms near the start
 
-    return CrawlLib.createEnemy({
+    return AtomicCore.createEnemy({
       type:    'goblin',
       sprite:  'g',
       x:       x,
@@ -995,7 +995,7 @@ CrawlLib.attachSpawner(game, {
 Decorations are stationary props – furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
 
 ```js
-var barrel = CrawlLib.createDecoration({
+var barrel = AtomicCore.createDecoration({
   type:       'barrel',
   x:          8,
   z:          5,
@@ -1026,13 +1026,13 @@ Decoration fields on the returned entity:
 Use `attachDecorator` to place decorations via a per-tile callback during dungeon setup:
 
 ```js
-CrawlLib.attachDecorator(game, {
+AtomicCore.attachDecorator(game, {
   onDecorate: function({ dungeon, roomId, x, y }) {
     var room = dungeon.rooms[roomId]
     if (!room) return null
 
     if (Math.random() < 0.05) {
-      return CrawlLib.createDecoration({
+      return AtomicCore.createDecoration({
         type: 'barrel', x: x, z: y, sprite: 'barrel', blocksMove: true,
       })
     }
@@ -1045,7 +1045,7 @@ CrawlLib.attachDecorator(game, {
 Decorations can also be placed imperatively at any time:
 
 ```js
-var pillar = CrawlLib.createDecoration({ type: 'pillar', x: 4, z: 6, sprite: 'stone-pillar', blocksMove: true })
+var pillar = AtomicCore.createDecoration({ type: 'pillar', x: 4, z: 6, sprite: 'stone-pillar', blocksMove: true })
 game.dungeon.decorations.add(pillar)
 game.dungeon.decorations.remove(pillar.id)
 game.dungeon.decorations.list   // DecorationEntity[]
@@ -1084,7 +1084,7 @@ combat: {
 
 ```js
 // Create a generic item
-var healthPotion = CrawlLib.createItem({
+var healthPotion = AtomicCore.createItem({
   id:   'health-potion',
   name: 'Health Potion',
   kind: 'consumable',
@@ -1137,7 +1137,7 @@ game.dungeon.passages.list   // HiddenPassage[]
 `createDungeonRenderer(element, game, options)` mounts a plain Three.js first-person renderer into any `HTMLElement`. It listens for `'turn'` events internally to keep the camera in sync.
 
 ```js
-var renderer = CrawlLib.createDungeonRenderer(viewportEl, game, {
+var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   // ── Tile atlas ──────────────────────────────────────────────────────────────
   atlas: {
     image:       atlasImg,   // pre-loaded HTMLImageElement
@@ -1191,7 +1191,7 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 By default `floorTileId`, `ceilTileId`, and `wallTileId` apply to every face. For finer control, pass `wallTiles`, `floorSkirtTiles`, and `ceilSkirtTiles` as `DirectionFaceMap` objects to specify per-direction tile IDs and optional UV rotation:
 
 ```js
-var renderer = CrawlLib.createDungeonRenderer(el, game, {
+var renderer = AtomicCore.createDungeonRenderer(el, game, {
   atlas: { /* ... */ },
   floorTileId: 20,
   ceilTileId:  19,
@@ -1254,7 +1254,7 @@ handle.rebuild()
 Each tile position can have an ordered stack of atlas tile IDs composited over the base generated tile. Use `attachSurfacePainter` to drive painting from a per-tile callback, or paint imperatively via `game.dungeon.paint()`.
 
 ```js
-CrawlLib.attachSurfacePainter(game, {
+AtomicCore.attachSurfacePainter(game, {
   onPaint: function({ dungeon, roomId, x, y }) {
     var room = dungeon.rooms[roomId]
     if (!room) return null
@@ -1296,7 +1296,7 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 ### Keybindings
 
 ```js
-CrawlLib.attachKeybindings(game, {
+AtomicCore.attachKeybindings(game, {
   bindings: {
     // keys are arbitrary action names; values are arrays of KeyboardEvent.key strings
     moveForward:  ['w', 'ArrowUp'],
@@ -1359,13 +1359,13 @@ The library includes an optional server-authoritative multiplayer layer. When a 
 ### Browser side
 
 ```js
-const game = CrawlLib.createGame(el, {
+const game = AtomicCore.createGame(el, {
   dungeon: { /* ... */ },
   player: {
     id: 'player-abc',   // stable player ID for reconnections
     hp: 30,
   },
-  transport: CrawlLib.createWebSocketTransport('wss://your-server/game'),
+  transport: AtomicCore.createWebSocketTransport('wss://your-server/game'),
 })
 ```
 
@@ -1408,7 +1408,7 @@ Object layer entries become entity spawn points consumed by your `onPlace` callb
 
 ## Configuration Reference
 
-All settings are passed directly to `CrawlLib.createGame()` or the relevant `attach*` helper.
+All settings are passed directly to `AtomicCore.createGame()` or the relevant `attach*` helper.
 
 | Section | Key settings |
 |---|---|
@@ -1442,7 +1442,7 @@ Pass the atlas as a pre-loaded `HTMLImageElement` along with its dimensions to `
 ```js
 const atlasImg = new Image()
 atlasImg.onload = function() {
-  var renderer = CrawlLib.createDungeonRenderer(el, game, {
+  var renderer = AtomicCore.createDungeonRenderer(el, game, {
     atlas: {
       image:       atlasImg,
       tileWidth:   64,     // px per tile
@@ -1508,7 +1508,7 @@ Include it before your main script and use the variable name you passed as the f
 <script>
   const atlasImg = new Image()
   atlasImg.onload = function () {
-    var renderer = CrawlLib.createDungeonRenderer(el, game, { atlas: { image: atlasImg, ... }, ... })
+    var renderer = AtomicCore.createDungeonRenderer(el, game, { atlas: { image: atlasImg, ... }, ... })
   }
   atlasImg.src = window.ATLAS_DATA_URL  // matches the first argument passed to the script
 </script>

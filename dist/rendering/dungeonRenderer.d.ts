@@ -27,7 +27,7 @@ import { DirectionFaceMap } from './tileAtlas';
  *   // Pass live entity list on every turn:
  *   game.events.on('turn', () => renderer.setEntities(enemies));
  */
-import * as THREE from 'three';
+import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
 /** Describes a sprite-sheet atlas used for tile texturing. */
 export type TileAtlasConfig = {
@@ -98,7 +98,7 @@ export type DungeonRendererOptions = {
     entityAppearances?: Record<string, EntityAppearanceSpec>;
 };
 /** Which class of dungeon geometry a layer targets. */
-export type LayerTarget = 'floor' | 'ceil' | 'wall' | 'floorSkirt' | 'ceilSkirt';
+export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
 /**
  * Return value from a `LayerSpec.filter` callback.
  * Return an object (optionally overriding `tileId`/`rotation`) to include the
@@ -119,7 +119,7 @@ export type LayerSpec = {
      * `direction` is provided for 'wall', 'floorSkirt', and 'ceilSkirt' targets.
      * Default: include every face with tileId 0, rotation 0.
      */
-    filter?: (cx: number, cz: number, direction?: 'north' | 'south' | 'east' | 'west') => LayerFaceResult;
+    filter?: (cx: number, cz: number, direction?: "north" | "south" | "east" | "west") => LayerFaceResult;
     /**
      * Whether to attach atlas shader attributes (aTileId, aUvRotation, etc.)
      * to the instanced geometry.  Defaults to `true` when an atlas was passed
