@@ -62,6 +62,9 @@ src/lib/
   transport/
     types.ts
     websocket.ts
+  ui/
+    inventoryDialog.ts
+    inventoryDialog.css
   index.ts
 ```
 
@@ -304,6 +307,16 @@ Also adds: `attachMinimap` on a `<canvas>` overlay; per-mission progress display
 - `examples/tutorial/index.html`
 - `examples/tutorial/styles.css`
 - `examples/tutorial/tutorial.js`
+
+---
+
+### Inventory dialog UI
+
+RPG-style inventory dialog with a two-column layout: character profile + item grid on the left, equipment paper-doll + indicators + action buttons on the right. Supports drag-and-drop between inventory and equip slots, keyboard navigation, custom backgrounds, and a `customLayout` escape hatch for fully custom DOM.
+
+**Files:**
+- `ui/inventoryDialog.ts` — `showInventory(opts)` factory; builds and opens a `<dialog>` with the full default layout or a bare shell for `customLayout: true`; returns an `InventoryHandle`
+- `ui/inventoryDialog.css` — all `.inv-*` styles and CSS custom properties; emitted as `dist/atomic-core.css`; consumers import via `atomic-core/style.css` or link the dist file directly
 
 ---
 

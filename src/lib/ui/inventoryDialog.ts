@@ -9,6 +9,7 @@
 // Pass customLayout: true to receive a bare <dialog> element and build your
 // own DOM inside handle.getElement().
 
+import './inventoryDialog.css';
 import type { Item, InventorySlot } from '../entities/inventory';
 
 // ---------------------------------------------------------------------------

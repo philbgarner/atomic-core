@@ -14,7 +14,8 @@
       "import": "./dist/atomic-core.js",
       "require": "./dist/atomic-core.umd.cjs",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./style.css": "./dist/atomic-core.css"
   },
   "files": [
     "dist"
