@@ -6,7 +6,7 @@ A dungeon crawler library.
 
 A composable JavaScript library built on [Three.js](https://threejs.org/) for building first-person 3D dungeon crawl games in the browser.
 
-Game logic lives entirely in your JS layer – the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like. No React, no JSX, no build step required.
+Game logic lives entirely in your JS layer - the library provides the rendering engine, turn system, entity model, and dungeon tools. You wire them together however you like. No React, no JSX, no build step required.
 
 ---
 
@@ -15,6 +15,10 @@ Game logic lives entirely in your JS layer – the library provides the renderin
 - [Features](#features)
 - [Installation](#installation)
   - [`<script>` tag (no build step)](#script-tag-no-build-step)
+  - [npm run (localhost dev server)](#npm-run-localhost-dev-server)
+- [Examples](#examples)
+  - [localhost examples](#localhost-examples)
+  - [standalone examples](#standalone-examples)
 - [Quick Start](#quick-start)
 - [Script Tag Developer Guide](#script-tag-developer-guide)
   - [The `game` handle](#the-game-handle)
@@ -67,12 +71,12 @@ Game logic lives entirely in your JS layer – the library provides the renderin
 
 ## Features
 
-- First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js – no React/R3F required)
+- First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js - no React/R3F required)
 - BSP dungeon generator or cellular automata generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
 - Built-in dungeon themes (`dungeon`, `crypt`, `catacomb`, `industrial`, `ruins`) with `registerTheme()` for custom themes
 - Ceiling and floor height offsets; pit markers that omit floor tiles
-- Dungeon serialization – save and restore `DungeonOutputs` to/from JSON
-- Renderer layer system – stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
+- Dungeon serialization - save and restore `DungeonOutputs` to/from JSON
+- Renderer layer system - stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
@@ -84,12 +88,13 @@ Game logic lives entirely in your JS layer – the library provides the renderin
 - Hidden passage traversal
 - Callback-driven enemy spawning
 - Stationary decoration entities (props, furniture, fixtures)
-- Atlas surface painting – apply tile layers to walls, floors, and ceilings per-tile
+- Atlas surface painting - apply tile layers to walls, floors, and ceilings per-tile
 - Configurable keybindings
-- **Inventory dialog UI** – `showInventory()` renders a two-column RPG inventory screen (character profile, item grid, equipment paper-doll, stat bars, indicators, action buttons) with full drag-and-drop support; pass `customLayout: true` for a bare `<dialog>` you control
+- **Inventory dialog UI** - `showInventory()` renders a two-column RPG inventory screen (character profile, item grid, equipment paper-doll, stat bars, indicators, action buttons) with full drag-and-drop support; pass `customLayout: true` for a bare `<dialog>` you control
 - Audio hooks (Howler.js compatible)
 - Optional multiplayer transport layer (WebSocket-based, server-authoritative)
-- Script tag API – no build step required
+- Script tag API - no build step required
+- localhost friendly - if you want to serve it with Node.
 
 ---
 
@@ -112,11 +117,40 @@ Load Three.js, then the library IIFE bundle. All exports are available on `windo
 
 Once loaded, `window.AtomicCore` exposes the full imperative API you can use from any HTML page without JSX or a build toolchain.
 
+### `npm run` (localhost dev server)
+
+If you have the repo checked out, you can serve all examples locally with a single command:
+
+```bash
+npm install
+npm run examples
+```
+
+This starts a static file server at `http://localhost:3000` (or the next available port). Navigate to `examples/localhost/` to browse the example index. Because files are served over HTTP, images load without the Base64 workaround — see [localhost examples](#localhost-examples) below.
+
+---
+
+## Examples
+
+The `examples/` directory contains two sets of identical demos organized by how you intend to open them.
+
+### localhost examples
+
+**`examples/localhost/`** — designed for use with a local HTTP server (e.g. `npm run examples`). Atlas images are loaded as ordinary `<img>` tags pointing directly to `.png` files on disk. This is the **recommended starting point for development** because:
+
+- No Base64 conversion step required.
+- You can swap out atlas images instantly without regenerating an embedded data file.
+- Editing the JS and refreshing the browser is the full workflow.
+
+### standalone examples
+
+**`examples/standalone/`** — designed to open directly from the filesystem (`file://`) without any server. Atlas images are pre-embedded as Base64 data URLs (see [Embedding the atlas as a Base64 data URL](#embedding-the-atlas-as-a-base64-data-url)) to work around the WebGL cross-origin restriction that blocks local image files under `file://`. Use these when you want to share a zero-setup demo or drop files into an environment where running a server is not an option.
+
 ---
 
 ## Quick Start
 
-`AtomicCore.createGame()` sets up game logic and returns a `game` handle. Call `AtomicCore.createDungeonRenderer()` separately to mount the 3D viewport – this lets you attach event callbacks and a spawner before generating the dungeon.
+`AtomicCore.createGame()` sets up game logic and returns a `game` handle. Call `AtomicCore.createDungeonRenderer()` separately to mount the 3D viewport - this lets you attach event callbacks and a spawner before generating the dungeon.
 
 ```html
 <!DOCTYPE html>
@@ -177,7 +211,7 @@ Once loaded, `window.AtomicCore` exposes the full imperative API you can use fro
         },
       )
 
-      // Generate the dungeon – must be called after attaching all callbacks
+      // Generate the dungeon - must be called after attaching all callbacks
       game.generate()
     }
     atlasImg.src = './atlas.png'
@@ -223,7 +257,7 @@ Once loaded, `window.AtomicCore` exposes the full imperative API you can use fro
 
 ## Script Tag Developer Guide
 
-This section covers using r3f-crawl-lib entirely from a `<script>` tag – no JSX, no bundler, no build step.
+This section covers using r3f-crawl-lib entirely from a `<script>` tag - no JSX, no bundler, no build step.
 
 ### The `game` handle
 
@@ -231,10 +265,10 @@ This section covers using r3f-crawl-lib entirely from a `<script>` tag – no JS
 
 | Property | Type | Description |
 |---|---|---|
-| `game.generate()` | function | Generate the dungeon and start the game – call after attaching all callbacks |
-| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) – available after `generate()` |
+| `game.generate()` | function | Generate the dungeon and start the game - call after attaching all callbacks |
+| `game.dungeon` | object | Dungeon state (tiles, rooms, passages) - available after `generate()` |
 | `game.player` | object | Player state and action methods |
-| `game.turns` | object | Turn scheduler – call `turns.commit()` to advance |
+| `game.turns` | object | Turn scheduler - call `turns.commit()` to advance |
 | `game.combat` | object | Combat system |
 | `game.events` | EventEmitter | Subscribe to game events |
 | `game.destroy()` | function | Unmount and clean up |
@@ -323,7 +357,7 @@ atlasImg.onload = function() {
     document.getElementById('viewport'),
     game,
     {
-      // Tile atlas – pass a pre-loaded HTMLImageElement
+      // Tile atlas - pass a pre-loaded HTMLImageElement
       atlas: {
         image:       atlasImg,
         tileWidth:   64,
@@ -394,15 +428,15 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 
 | | `renderer.addLayer` | `attachSurfacePainter` / `dungeon.paint` |
 |---|---|---|
-| **Where it lives** | Renderer – instanced meshes on top of geometry | Dungeon – tile data stored per-cell |
+| **Where it lives** | Renderer - instanced meshes on top of geometry | Dungeon - tile data stored per-cell |
 | **Driven by** | Per-face renderer callback | Per-position dungeon callback or imperative call |
 | **Serialized with dungeon** | No | Yes (via `dungeon.paint`) |
 | **Best for** | Visual overlays (decals, glows, trim) wired to renderer-side flags | Tile state tied to dungeon data (biomes, wear, wetness) |
 | **Update path** | `handle.rebuild()` after state changes | `game.dungeon.paint()` / `game.dungeon.unpaint()` |
 
-**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis – for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
+**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis - for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
 
-**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* – for example, wet tiles, moss growth, or biome zones – especially when that state needs to survive serialization or be shared over the network.
+**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* - for example, wet tiles, moss growth, or biome zones - especially when that state needs to survive serialization or be shared over the network.
 
 ### Loading a Tiled map
 
@@ -639,7 +673,7 @@ See [Inventory Dialog](#inventory-dialog-1) in Core Concepts for the full option
 
 | Function | Description |
 |---|---|
-| `AtomicCore.createGame(element, options)` | Set up game logic; returns a `game` handle – does not generate the dungeon |
+| `AtomicCore.createGame(element, options)` | Set up game logic; returns a `game` handle - does not generate the dungeon |
 | `AtomicCore.createDungeonRenderer(element, game, opts)` | Mount the Three.js first-person renderer; returns a `DungeonRenderer` handle |
 | `AtomicCore.attachMinimap(game, canvas, opts)` | Wire up a 2D canvas minimap |
 | `AtomicCore.attachSpawner(game, opts)` | Register a spawn callback to control entity placement |
@@ -661,7 +695,7 @@ See [Inventory Dialog](#inventory-dialog-1) in Core Concepts for the full option
 
 ### Dungeon
 
-The dungeon is a grid of tiles encoded as `DataTexture` maps (solid, floor type, wall type, ceiling type, overlays). It is decoupled from rendering – you can swap renderers without touching game logic.
+The dungeon is a grid of tiles encoded as `DataTexture` maps (solid, floor type, wall type, ceiling type, overlays). It is decoupled from rendering - you can swap renderers without touching game logic.
 
 ```js
 dungeon: {
@@ -743,7 +777,7 @@ dungeon: {
   width:     64,
   height:    64,
   // Cellular-specific options
-  fillRatio:   0.45,   // initial wall density (0–1); default 0.45
+  fillRatio:   0.45,   // initial wall density (0-1); default 0.45
   iterations:  5,      // smoothing passes; default 5
 }
 ```
@@ -763,7 +797,7 @@ import { serializeDungeon, deserializeDungeon } from 'r3f-crawl-lib'
 const snapshot = serializeDungeon(game.dungeon.outputs)
 localStorage.setItem('dungeon', JSON.stringify(snapshot))
 
-// On reload – pass the restored outputs as dungeon.restore:
+// On reload - pass the restored outputs as dungeon.restore:
 const saved = JSON.parse(localStorage.getItem('dungeon'))
 const game = AtomicCore.createGame(el, {
   dungeon: { restore: deserializeDungeon(saved) },
@@ -827,14 +861,14 @@ dungeon: {
   seed: 12345, width: 40, height: 40,
   onHeightOffset({ x, y, roomId, rng }) {
     // Return { floor?, ceiling? } in world units (positive = raise, negative = lower)
-    if (rng() < 0.05) return { floor: -1.5 }   // pit tile – floor is omitted from rendering
+    if (rng() < 0.05) return { floor: -1.5 }   // pit tile - floor is omitted from rendering
     if (rng() < 0.1)  return { ceiling: -0.5 }  // lower ceiling
     return null
   },
 }
 ```
 
-Tiles with a floor offset value of `0` are treated as **pits** – the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
+Tiles with a floor offset value of `0` are treated as **pits** - the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
 
 ---
 
@@ -845,7 +879,7 @@ player: {
   x: 2, z: 2,         // starting grid position (overridden by PlayerStart object if using Tiled)
   hp: 30, maxHp: 30,
   attack: 4, defense: 2,
-  speed: 5,            // turn cost – lower = faster
+  speed: 5,            // turn cost - lower = faster
 }
 ```
 
@@ -861,7 +895,7 @@ game.player.inventory  // array of item slots
 game.player.alive      // boolean
 
 // Imperative actions (pass to turns.commit)
-game.player.move(dx, dz)          // grid delta – use facing-relative math for first-person movement
+game.player.move(dx, dz)          // grid delta - use facing-relative math for first-person movement
 game.player.rotate(angle)         // radians; positive = counter-clockwise
 game.player.interact(entityId)    // pass null to interact with adjacent objects
 game.player.wait()
@@ -968,7 +1002,7 @@ var goblin = AtomicCore.createEnemy({
   hp: 15, maxHp: 15,
   attack: 4, defense: 1,
   speed:  6,
-  danger: 1,   // 0–10 scale; affects detection radius and persistence
+  danger: 1,   // 0-10 scale; affects detection radius and persistence
   xp:     20,
 })
 ```
@@ -1000,7 +1034,7 @@ game.events.on('damage', function({ defender }) {
   })
 })
 
-// Advance effects each turn – returns events for any effect damage / expiry
+// Advance effects each turn - returns events for any effect damage / expiry
 game.turns.onAdvance = function({ entities }) {
   for (const e of entities) {
     const events = tickEffects(e)
@@ -1039,7 +1073,7 @@ AtomicCore.attachSpawner(game, {
 
 ### Decorations
 
-Decorations are stationary props – furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
+Decorations are stationary props - furniture, barrels, wall fixtures, etc. They have no AI or combat stats and are not alive in the turn sense.
 
 ```js
 var barrel = AtomicCore.createDecoration({
@@ -1140,7 +1174,7 @@ var healthPotion = AtomicCore.createItem({
   },
 })
 
-// Chest drops – configured via onPlace or object layer
+// Chest drops - configured via onPlace or object layer
 place.object(room.cx, room.cz, 'chest', {
   loot: [
     { id: 'health-potion', name: 'Health Potion', chance: 1.0 },
@@ -1307,7 +1341,7 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   // ── Torch lighting ────────────────────────────────────────────────────────
   bandNear:       8,         // world units before falloff begins; default 8
   torchColor:     new THREE.Color(1.0, 0.85, 0.4),  // warm yellow default
-  torchIntensity: 0.33,      // 0–2 multiplier; default 0.33
+  torchIntensity: 0.33,      // 0-2 multiplier; default 0.33
 })
 
 // Update entities on every turn
@@ -1319,7 +1353,7 @@ game.events.on('turn', function() {
 renderer.destroy()
 ```
 
-If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` – useful for prototyping before an atlas is ready.
+If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` - useful for prototyping before an atlas is ready.
 
 ---
 
@@ -1338,7 +1372,7 @@ var renderer = AtomicCore.createDungeonRenderer(el, game, {
   wallTiles: {
     north: { tileId: 16, rotation: 0 },
     south: { tileId: 17, rotation: 0 },
-    east:  { tileId: 16, rotation: 1 },  // rotation: 0–3 in 90° steps
+    east:  { tileId: 16, rotation: 1 },  // rotation: 0-3 in 90° steps
     west:  { tileId: 16, rotation: 3 },
   },
 
@@ -1348,7 +1382,7 @@ var renderer = AtomicCore.createDungeonRenderer(el, game, {
 })
 ```
 
-`FaceTileSpec` fields: `tileId` (number) and optional `rotation` (0–3, clockwise 90° steps).
+`FaceTileSpec` fields: `tileId` (number) and optional `rotation` (0-3, clockwise 90° steps).
 
 ---
 
@@ -1382,7 +1416,7 @@ handle.rebuild()
 | `target` | `LayerTarget` | Surface to attach to: `'floor'`, `'ceil'`, `'wall'`, `'floorSkirt'`, `'ceilSkirt'` |
 | `tileId` | number | Atlas tile index to render on this layer |
 | `yOffset` | number | World-unit Y offset (useful to prevent z-fighting) |
-| `filter` | function | Per-face callback – return `{ visible: true }` or `null` |
+| `filter` | function | Per-face callback - return `{ visible: true }` or `null` |
 
 ---
 
@@ -1418,15 +1452,15 @@ Both add visual detail on top of the base atlas tiles, but they operate at diffe
 
 | | Layer System (`addLayer`) | Surface Painting (`attachSurfacePainter` / `dungeon.paint`) |
 |---|---|---|
-| **Where it lives** | Renderer – instanced meshes on top of geometry | Dungeon – tile data stored per-cell |
+| **Where it lives** | Renderer - instanced meshes on top of geometry | Dungeon - tile data stored per-cell |
 | **Driven by** | Per-face renderer callback | Per-position dungeon callback or imperative call |
 | **Serialized with dungeon** | No | Yes (via `dungeon.paint`) |
 | **Best for** | Visual overlays (decals, glows, trim) wired to renderer-side flags | Tile state tied to dungeon data (biomes, wear, wetness) |
 | **Update path** | `handle.rebuild()` after state changes | `game.dungeon.paint()` / `game.dungeon.unpaint()` |
 
-**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis – for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
+**Use `addLayer`** when the overlay is purely visual and the renderer decides what to show on a per-face basis - for example, blood-splatter decals driven by a `cell.hasBlood` flag, or trim meshes along every north wall.
 
-**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* – for example, wet tiles, moss growth, or biome zones – especially when that state needs to survive serialization or be shared over the network.
+**Use `attachSurfacePainter`** (or `dungeon.paint`) when the overlay represents dungeon *state* - for example, wet tiles, moss growth, or biome zones - especially when that state needs to survive serialization or be shared over the network.
 
 ---
 
@@ -1559,9 +1593,9 @@ All settings are passed directly to `AtomicCore.createGame()` or the relevant `a
 | `transport` | `ActionTransport` instance (e.g. from `createWebSocketTransport`) |
 | `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
 | `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
-| `attachSpawner` | `onSpawn` – callback receiving `{ dungeon, roomId, x, y }` |
-| `attachDecorator` | `onDecorate` – callback receiving `{ dungeon, roomId, x, y }` |
-| `attachSurfacePainter` | `onPaint` – callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
+| `attachSpawner` | `onSpawn` - callback receiving `{ dungeon, roomId, x, y }` |
+| `attachDecorator` | `onDecorate` - callback receiving `{ dungeon, roomId, x, y }` |
+| `attachSurfacePainter` | `onPaint` - callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
 | `attachKeybindings` | `bindings`, `onAction` |
 
 ---
@@ -1600,7 +1634,7 @@ Example layout for a 512×1024 sheet with 64×64 tiles (8 columns):
 
 | Tile ID | Row | Col | Example use |
 |---|---|---|---|
-| 0–7 | 0 | 0–7 | First row of tiles |
+| 0-7 | 0 | 0-7 | First row of tiles |
 | 16 | 2 | 0 | Brick wall |
 | 19 | 2 | 3 | Cobblestone ceiling |
 | 20 | 2 | 4 | Flagstone floor |
@@ -1609,15 +1643,17 @@ The renderer uses nearest-neighbour filtering and per-face UV clamping to preven
 
 ### Embedding the atlas as a Base64 data URL
 
-When serving examples directly from the filesystem (`file://`) or in sandboxed environments where external image fetches are blocked, you can embed the atlas image as a Base64 data URL in a plain JS file and load it with a `<script>` tag.
+> **Tip:** If you have the repo cloned, run `npm run examples` to start a local HTTP server and use the `examples/localhost/` demos instead — they load atlas images directly from disk without any Base64 conversion.
+
+This section applies when you need to open an HTML file directly from the filesystem (`file://`) or in sandboxed environments where external image fetches are blocked. In those cases you can embed the atlas image as a Base64 data URL in a plain JS file and load it with a `<script>` tag.
 
 **Why not just use `<img src="atlas.png">`?**
 
-It seems like the obvious approach – put the PNG next to your HTML and point an `<img>` tag at it – but it fails at the WebGL layer. When Three.js calls `texSubImage2D` to upload the image as a GPU texture, the browser checks the image's origin. Under `file://`, even a same-directory local file is treated as a potentially cross-origin resource by both Chrome and Firefox, and the upload is rejected with a `DOMException: The operation is insecure` error. The image renders fine on screen, but WebGL refuses to read its pixels.
+It seems like the obvious approach - put the PNG next to your HTML and point an `<img>` tag at it - but it fails at the WebGL layer. When Three.js calls `texSubImage2D` to upload the image as a GPU texture, the browser checks the image's origin. Under `file://`, even a same-directory local file is treated as a potentially cross-origin resource by both Chrome and Firefox, and the upload is rejected with a `DOMException: The operation is insecure` error. The image renders fine on screen, but WebGL refuses to read its pixels.
 
 A Base64 data URL sidesteps this entirely: the image data is inline text embedded directly in the script, so it has no origin at all and is never subject to the cross-origin check. The resulting `Image` object loads cleanly and `texSubImage2D` can read it without restriction.
 
-If you serve your files through any HTTP server (even `python3 -m http.server`) you can use a plain `<img>` tag and skip the data-URL step – the same-origin policy is satisfied by the HTTP origin.
+If you serve your files through any HTTP server (even `python3 -m http.server` or `npm run examples`) you can use a plain `<img>` tag and skip the data-URL step - the same-origin policy is satisfied by the HTTP origin.
 
 Two helper scripts in `utils/` automate this conversion:
 
