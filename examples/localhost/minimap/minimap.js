@@ -123,7 +123,7 @@ atlasImg.onload = () => {
   });
   game.generate();
 };
-atlasImg.src = window.ATLAS_DATA_URL;
+atlasImg.src = '../basic/atlas.png';
 
 // ---------------------------------------------------------------------------
 // Spawn enemies — one per room, capped, skipping early rooms

@@ -237,7 +237,7 @@ atlasImg.onload = () => {
 
   setupTutorialMissions();
 };
-atlasImg.src = window.ATLAS_DATA_URL;
+atlasImg.src = '../basic/atlas.png';
 
 // ---------------------------------------------------------------------------
 // Chest interaction helper

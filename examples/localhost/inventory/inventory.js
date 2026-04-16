@@ -92,7 +92,7 @@ atlasImg.onload = () => {
   });
   game.generate();
 };
-atlasImg.src = window.ATLAS_DATA_URL;
+atlasImg.src = '../basic/atlas.png';
 
 // ---------------------------------------------------------------------------
 // Events
