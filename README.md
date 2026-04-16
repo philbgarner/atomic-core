@@ -111,8 +111,8 @@ Load Three.js, then the library IIFE bundle. All exports are available on `windo
   window.THREE = THREE;
 </script>
 
-<!-- r3f-crawl-lib IIFE bundle -->
-<script src="/dist/r3f-crawl-lib.iife.js" defer></script>
+<!-- atomic-core IIFE bundle -->
+<script src="/dist/atomic-core.iife.js" defer></script>
 ```
 
 Once loaded, `window.AtomicCore` exposes the full imperative API you can use from any HTML page without JSX or a build toolchain.
@@ -167,7 +167,7 @@ The `examples/` directory contains two sets of identical demos organized by how 
     import * as THREE from '/node_modules/three/build/three.module.js';
     window.THREE = THREE;
   </script>
-  <script src="/dist/r3f-crawl-lib.iife.js" defer></script>
+  <script src="/dist/atomic-core.iife.js" defer></script>
   <script defer>
     const { createGame, createEnemy, attachSpawner, attachKeybindings, createDungeonRenderer } = AtomicCore
 
@@ -257,7 +257,7 @@ The `examples/` directory contains two sets of identical demos organized by how 
 
 ## Script Tag Developer Guide
 
-This section covers using r3f-crawl-lib entirely from a `<script>` tag - no JSX, no bundler, no build step.
+This section covers using atomic-core entirely from a `<script>` tag - no JSX, no bundler, no build step.
 
 ### The `game` handle
 
@@ -791,7 +791,7 @@ Both generators return identical `DungeonOutputs` shapes, so all other systems (
 Save the full dungeon state to JSON and restore it later:
 
 ```js
-import { serializeDungeon, deserializeDungeon } from 'r3f-crawl-lib'
+import { serializeDungeon, deserializeDungeon } from 'atomic-core'
 
 // After game.generate():
 const snapshot = serializeDungeon(game.dungeon.outputs)
@@ -827,7 +827,7 @@ dungeon: {
       objects:  'Objects',     // object layer -> entity spawn points
     },
 
-    // Map Tiled object type strings to r3f-crawl-lib entity types
+    // Map Tiled object type strings to atomic-core entity types
     objectTypes: {
       'PlayerStart':  'playerStart',
       'Chest':        'chest',
@@ -1022,7 +1022,7 @@ The returned `EnemyEntity` also has `alertState: 'idle' | 'chasing' | 'searching
 Status effects can be applied to any entity and ticked each turn. Effects support three stacking modes: `replace` (newest wins), `stack` (additive), and `max` (keep highest value).
 
 ```js
-import { applyEffect, tickEffects } from 'r3f-crawl-lib'
+import { applyEffect, tickEffects } from 'atomic-core'
 
 // Apply a poison effect to a defender after combat
 game.events.on('damage', function({ defender }) {
