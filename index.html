@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Examples</title>
+        <style>
+            @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+
+            :root {
+                --gold: #f0c040;
+                --gold-dim: #a07820;
+                --bg: #0a0a1a;
+                --panel: #10102a;
+                --border: #304080;
+                --cursor: #f0c040;
+                --text: #c8d0f8;
+                --desc: #8090c0;
+            }
+
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: "Press Start 2P", monospace;
+                font-size: 11px;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 32px;
+                padding: 32px 16px;
+                image-rendering: pixelated;
+            }
+
+            /* Starfield background */
+            body::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background-image:
+                    radial-gradient(
+                        1px 1px at 10% 20%,
+                        #fff 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 30% 60%,
+                        #aaf 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 50% 10%,
+                        #fff 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 70% 80%,
+                        #ccf 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 85% 35%,
+                        #fff 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 15% 75%,
+                        #aaf 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 60% 50%,
+                        #fff 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 92% 15%,
+                        #ccf 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 45% 90%,
+                        #fff 0%,
+                        transparent 100%
+                    ),
+                    radial-gradient(
+                        1px 1px at 5% 45%,
+                        #aaf 0%,
+                        transparent 100%
+                    );
+                opacity: 0.5;
+                pointer-events: none;
+                z-index: 0;
+            }
+
+            .title-box {
+                position: relative;
+                z-index: 1;
+                text-align: center;
+                line-height: 2.2;
+            }
+
+            .title-box h1 {
+                font-size: 18px;
+                color: var(--gold);
+                text-shadow:
+                    0 0 12px var(--gold-dim),
+                    2px 2px 0 #000;
+                letter-spacing: 0.05em;
+            }
+
+            .title-box p {
+                font-size: 9px;
+                color: var(--desc);
+                margin-top: 8px;
+            }
+
+            .menu-panel {
+                position: relative;
+                z-index: 1;
+                border: 3px solid var(--border);
+                border-radius: 2px;
+                padding: 24px 32px;
+                background: var(--panel);
+                box-shadow:
+                    0 0 0 1px #000,
+                    0 0 24px rgba(48, 64, 128, 0.5),
+                    inset 0 0 0 1px #000;
+                min-width: 420px;
+                max-width: 560px;
+                width: 100%;
+            }
+
+            /* Corner decorations */
+            .menu-panel::before,
+            .menu-panel::after {
+                content: "+";
+                position: absolute;
+                color: var(--gold-dim);
+                font-size: 10px;
+                line-height: 1;
+            }
+            .menu-panel::before {
+                top: 6px;
+                left: 10px;
+            }
+            .menu-panel::after {
+                bottom: 6px;
+                right: 10px;
+            }
+
+            .menu-label {
+                font-size: 8px;
+                color: var(--gold-dim);
+                letter-spacing: 0.2em;
+                text-transform: uppercase;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+
+            .menu-list {
+                list-style: none;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .menu-item {
+                display: block;
+            }
+
+            .menu-item a {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 10px 12px;
+                text-decoration: none;
+                color: var(--text);
+                border: 1px solid transparent;
+                border-radius: 1px;
+                transition:
+                    border-color 0.1s,
+                    background 0.1s;
+                cursor: pointer;
+            }
+
+            .menu-item a:hover,
+            .menu-item a:focus {
+                background: rgba(48, 64, 128, 0.35);
+                border-color: var(--border);
+                outline: none;
+            }
+
+            .menu-item a:hover .cursor,
+            .menu-item a:focus .cursor {
+                opacity: 1;
+            }
+
+            .menu-item a:hover .item-name,
+            .menu-item a:focus .item-name {
+                color: var(--gold);
+            }
+
+            .cursor {
+                color: var(--cursor);
+                font-size: 10px;
+                opacity: 0;
+                width: 10px;
+                flex-shrink: 0;
+                transition: opacity 0.1s;
+            }
+
+            .item-body {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .item-name {
+                font-size: 10px;
+                letter-spacing: 0.05em;
+                transition: color 0.1s;
+            }
+
+            .item-desc {
+                font-size: 8px;
+                color: var(--desc);
+                line-height: 1.7;
+            }
+
+            .footer {
+                position: relative;
+                z-index: 1;
+                font-size: 8px;
+                color: #303060;
+                text-align: center;
+                line-height: 2;
+            }
+
+            /* Blinking cursor animation on title */
+            .blink {
+                animation: blink 1.1s step-end infinite;
+            }
+            @keyframes blink {
+                50% {
+                    opacity: 0;
+                }
+            }
+
+            /* Keyboard nav */
+            .menu-item a:focus-visible {
+                outline: 2px solid var(--gold);
+                outline-offset: -2px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="title-box">
+            <h1>atomic-core</h1>
+            <p>composable dungeon crawl library for react three fiber</p>
+        </div>
+
+        <div class="menu-panel">
+            <div class="menu-label">-- Select Example --</div>
+            <ul class="menu-list" id="menu">
+                <li class="menu-item">
+                    <a href="./examples/localhost/basic/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Basic</span>
+                            <span class="item-desc"
+                                >Dungeon generation, turn-based movement,<br />combat
+                                events and ASCII map rendering.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="./examples/localhost/layering/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Layering</span>
+                            <span class="item-desc"
+                                >Ceiling and floor height offsets driven<br />by
+                                distance-to-wall mask. Vaulted rooms<br />and
+                                open pits.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="./examples/localhost/minimap/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Minimap</span>
+                            <span class="item-desc"
+                                >2D canvas minimap overlaid on the viewport.<br />Shows
+                                explored cells and current FOV<br />via
+                                attachMinimap.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="./examples/localhost/themes/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Themes</span>
+                            <span class="item-desc"
+                                >Per-room theming via ThemeSelector.<br />Single,
+                                list, weighted, and callback<br />selectors —
+                                press T to cycle.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="./examples/localhost/tutorial/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Tutorial</span>
+                            <span class="item-desc"
+                                >Step-by-step walkthrough with missions,<br />turn-based
+                                movement, and a live<br />sidebar HUD.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="./examples/localhost/inventory/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Inventory</span>
+                            <span class="item-desc"
+                                >Inventory dialog with equipment slots,<br />stat bars,
+                                drag-and-drop, and<br />keybinding-driven navigation.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            use arrow keys or mouse to navigate &nbsp;<span class="blink"
+                >_</span
+            >
+        </div>
+
+        <script>
+            // Keyboard navigation
+            const items = Array.from(document.querySelectorAll(".menu-item a"));
+            let idx = -1;
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    idx = (idx + 1) % items.length;
+                    items[idx].focus();
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    idx = (idx - 1 + items.length) % items.length;
+                    items[idx].focus();
+                } else if ((e.key === "Enter" || e.key === " ") && idx >= 0) {
+                    e.preventDefault();
+                    items[idx].click();
+                }
+            });
+
+            items.forEach((a, i) => {
+                a.addEventListener("focus", () => {
+                    idx = i;
+                });
+            });
+        </script>
+    </body>
+</html>
