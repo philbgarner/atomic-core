@@ -14,9 +14,6 @@
 //
 // Atlas layout (atlas.png): 512×1024 px, 64 px tiles → 8 columns.
 // Tile ID = row * 8 + col  (row-major, top-left origin).
-//
-// Tiles used for billboard sprites are drawn from the atlas at their tileId.
-// In a real project you would use tiles from your own sprite sheet.
 
 const {
   createGame,
@@ -37,19 +34,15 @@ const posEl = document.getElementById("pos");
 // ---------------------------------------------------------------------------
 
 // Goblin: two layers — body (tile 20) + weapon overlay (tile 21).
-// When viewed from behind (camera behind entity) the "S" angle kicks in and
-// swaps both tiles to back-facing variants.
+// When viewed from behind the "S" angle swaps both tiles to back-facing variants.
 function goblinSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
     layers: [
-      // Layer 0: body — always visible, full opacity.
       { tileId: 20, opacity: 1.0 },
-      // Layer 1: weapon overlay — slightly above center, slightly transparent.
       { tileId: 21, offsetY: 0.15, opacity: 0.85 },
     ],
     angles: {
-      // Rear view — use back-facing tiles.
       S: [
         { layerIndex: 0, tileId: 28 },
         { layerIndex: 1, tileId: 29 },
@@ -61,19 +54,18 @@ function goblinSpriteMap() {
 }
 
 // Skeleton: single body layer with four distinct angle tiles.
-// N = front, S = back, W/E = left/right profiles.
 function skeletonSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
     layers: [{ tileId: 16, opacity: 1.0 }],
     angles: {
-      N: [{ layerIndex: 0, tileId: 16 }], // front
+      N: [{ layerIndex: 0, tileId: 16 }],
       NE: [{ layerIndex: 0, tileId: 17 }],
-      E: [{ layerIndex: 0, tileId: 17 }], // right profile
+      E: [{ layerIndex: 0, tileId: 17 }],
       SE: [{ layerIndex: 0, tileId: 24 }],
-      S: [{ layerIndex: 0, tileId: 24 }], // back
+      S: [{ layerIndex: 0, tileId: 24 }],
       SW: [{ layerIndex: 0, tileId: 25 }],
-      W: [{ layerIndex: 0, tileId: 25 }], // left profile
+      W: [{ layerIndex: 0, tileId: 25 }],
       NW: [{ layerIndex: 0, tileId: 16 }],
     },
   };
@@ -90,7 +82,7 @@ function orcSpriteMap() {
     ],
     angles: {
       // Only the rear sector needs an override; everything else uses the base.
-      S: [{ layerIndex: 0, tileId: 33 }], // back-facing tile
+      S:  [{ layerIndex: 0, tileId: 33 }], // back-facing tile
       SE: [{ layerIndex: 0, tileId: 33 }],
       SW: [{ layerIndex: 0, tileId: 33 }],
     },
@@ -102,6 +94,7 @@ function slimeSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
     layers: [{ tileId: 19, opacity: 0.9 }],
+    atlasImg: "./monsters.png",
   };
 }
 
@@ -114,10 +107,10 @@ let spawned = 0;
 const MAX_ENTITIES = 8;
 
 const TYPES = [
-  { type: "goblin", spriteMap: goblinSpriteMap },
-  { type: "skeleton", spriteMap: skeletonSpriteMap },
-  { type: "orc", spriteMap: orcSpriteMap },
-  { type: "slime", spriteMap: slimeSpriteMap },
+  { type: "goblin",   spriteMap: goblinSpriteMap   },
+  { type: "skeleton", spriteMap: skeletonSpriteMap  },
+  { type: "orc",      spriteMap: orcSpriteMap       },
+  { type: "slime",    spriteMap: slimeSpriteMap     },
 ];
 
 // ---------------------------------------------------------------------------
@@ -154,7 +147,7 @@ const game = createGame(document.body, {
 });
 
 // ---------------------------------------------------------------------------
-// 3D renderer
+// 3D renderer — atlas loaded directly from disk (localhost only)
 // ---------------------------------------------------------------------------
 
 let renderer;
@@ -176,7 +169,7 @@ atlasImg.onload = () => {
   });
   game.generate();
 };
-atlasImg.src = window.ATLAS_DATA_URL;
+atlasImg.src = "../basic/atlas.png";
 
 // ---------------------------------------------------------------------------
 // Spawner — places up to MAX_ENTITIES billboard-sprite enemies
@@ -203,7 +196,6 @@ attachSpawner(game, {
       speed: 5,
       danger: 1,
       xp: 10,
-      // spriteMap activates billboard rendering for this entity.
       spriteMap: def.spriteMap(),
     });
     entities.push(e);

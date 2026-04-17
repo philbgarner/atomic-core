@@ -134,7 +134,7 @@
                     0 0 24px rgba(48, 64, 128, 0.5),
                     inset 0 0 0 1px #000;
                 min-width: 420px;
-                max-width: 560px;
+                max-width: 900px;
                 width: 100%;
             }
 
@@ -168,8 +168,8 @@
 
             .menu-list {
                 list-style: none;
-                display: flex;
-                flex-direction: column;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
                 gap: 4px;
             }
 
@@ -284,6 +284,17 @@
                     </a>
                 </li>
                 <li class="menu-item">
+                    <a href="./examples/localhost/billboard-sprites/index.html" tabindex="0">
+                        <span class="cursor">&#9658;</span>
+                        <span class="item-body">
+                            <span class="item-name">Billboard Sprites</span>
+                            <span class="item-desc"
+                                >Camera-facing sprite billboards with<br />layered atlas tiles and multi-angle<br />variants via spriteMap.</span
+                            >
+                        </span>
+                    </a>
+                </li>
+                <li class="menu-item">
                     <a href="./examples/localhost/layering/index.html" tabindex="0">
                         <span class="cursor">&#9658;</span>
                         <span class="item-body">
@@ -334,7 +345,7 @@
                         </span>
                     </a>
                 </li>
-                <li class="menu-item">
+                <li class="menu-item" style="grid-column: 1 / -1;">
                     <a href="./examples/localhost/inventory/index.html" tabindex="0">
                         <span class="cursor">&#9658;</span>
                         <span class="item-body">

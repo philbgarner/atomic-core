@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Billboard Sprites</title>
+        <link rel="stylesheet" href="../basic/styles.css" />
+        <style>
+            #sidebar h2 {
+                font-size: 7px;
+                color: var(--gold-dim);
+                letter-spacing: 0.1em;
+                margin-top: 8px;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 6px;
+            }
+            #legend {
+                font-size: 8px;
+                line-height: 2;
+                color: var(--desc);
+            }
+            #legend span { color: var(--gold); }
+        </style>
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>Billboard Sprites</h1>
+
+            <div id="stats">
+                HP: <span id="hp">—</span><br />
+                Turn: <span id="turn">0</span><br />
+                Pos: <span id="pos">—</span>
+            </div>
+
+            <h2>Entities</h2>
+            <div id="legend">
+                <span>Goblin</span> — 2-layer body + weapon<br />
+                <span>Skeleton</span> — 4-angle variants<br />
+                <span>Slime</span> — single tile, no angles<br />
+            </div>
+
+            <div id="log"></div>
+
+            <div id="controls">
+                WASD / Arrows — move<br />
+                Q / E — rotate<br />
+                Space — wait
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./billboard-sprites.js" defer></script>
+    </body>
+</html>
