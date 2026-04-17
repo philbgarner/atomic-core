@@ -6,6 +6,19 @@
 
 import { defineConfig } from 'vite'
 import { resolve } from 'path'
+import type { Plugin } from 'vite'
+
+function shebangPlugin(): Plugin {
+  return {
+    name: 'shebang',
+    renderChunk(code, chunk) {
+      if (chunk.fileName === 'index.js') {
+        return { code: '#!/usr/bin/env node\n' + code, map: null }
+      }
+      return null
+    },
+  }
+}
 
 export default defineConfig({
   resolve: {
@@ -13,17 +26,19 @@ export default defineConfig({
       three: resolve(__dirname, 'src/server/three-shim.js'),
     },
   },
+  plugins: [shebangPlugin()],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/server/dungeon-entry.ts'),
-      fileName: 'dungeon',
+      entry: {
+        dungeon: resolve(__dirname, 'src/server/dungeon-entry.ts'),
+        index: resolve(__dirname, 'src/server/index.js'),
+      },
       formats: ['es'],
     },
     outDir: 'dist/server',
     emptyOutDir: true,
     rollupOptions: {
-      // Bundle the shim + bsp — no external deps needed in Node
-      external: [],
+      external: ['express', 'ws', 'node:http', 'node:path', 'node:url', 'node:os'],
     },
     sourcemap: true,
     minify: false,
