@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // src/server/index.js
 //
 // Authoritative multiplayer server for r3f-crawl-lib.

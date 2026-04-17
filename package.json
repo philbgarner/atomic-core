@@ -17,9 +17,16 @@
     },
     "./style.css": "./dist/atomic-core.css"
   },
+  "bin": {
+    "atomic-core-server": "dist/server/index.js"
+  },
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "express": "^4.22.1",
+    "ws": "^8.20.0"
+  },
   "scripts": {
     "build": "tsc && vite build",
     "build:server": "vite build --config vite.config.server.ts",
@@ -43,7 +50,6 @@
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.178.0",
     "@vitejs/plugin-react": "^6.0.1",
-    "express": "^4.22.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "three": "^0.183.2",
