@@ -1,6 +1,6 @@
 {
   "name": "atomic-core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Composable first-person dungeon crawl library for React Three Fiber",
   "type": "module",
   "main": "dist/atomic-core.umd.cjs",
@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "build:server": "vite build --config vite.config.server.ts",
-	"build:watch": "tsc --watch",
+    "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "dev": "vite build --watch",
     "multiplayer": "npm run build:server && node src/server/index.js",

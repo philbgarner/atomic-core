@@ -1,3 +1,5 @@
+import { SpriteMap } from '../rendering/billboardSprites';
+export type { SpriteMap } from '../rendering/billboardSprites';
 export type EntityKind = "player" | "npc" | "enemy" | "decoration";
 /**
  * Unified base for every game entity.
@@ -27,6 +29,11 @@ export type EntityBase = {
     faction: string;
     /** Turn-scheduler tick counter; incremented by the scheduler on each action. */
     tick: number;
+    /**
+     * When present, switches the dungeon renderer from box geometry to a
+     * camera-facing billboard quad with layered sprite support.
+     */
+    spriteMap?: SpriteMap;
 };
 /**
  * Alert state machine:

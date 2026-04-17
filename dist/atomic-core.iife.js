@@ -2820,6 +2820,115 @@ void main() {
 		};
 	}
 	//#endregion
+	//#region src/lib/rendering/billboardSprites.ts
+	var BILLBOARD_VERT = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+	var BILLBOARD_FRAG = `
+uniform sampler2D uAtlas;
+uniform vec2  uTileSize;
+uniform float uColumns;
+uniform float uTileId;
+uniform float uOpacity;
+
+varying vec2 vUv;
+
+void main() {
+  float col = mod(uTileId, uColumns);
+  float row = floor(uTileId / uColumns);
+  vec2 origin = vec2(col, row) * uTileSize;
+  vec2 atlasUv = origin + vUv * uTileSize;
+  vec4 color = texture2D(uAtlas, atlasUv);
+  if (color.a < 0.01) discard;
+  gl_FragColor = vec4(color.rgb, color.a * uOpacity);
+}
+`;
+	var ANGLE_KEYS = [
+		"N",
+		"NE",
+		"E",
+		"SE",
+		"S",
+		"SW",
+		"W",
+		"NW"
+	];
+	function selectAngleKey(entityFacing, cameraYaw) {
+		const rel = ((entityFacing - cameraYaw) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+		return ANGLE_KEYS[Math.round(rel / (Math.PI / 4)) % 8] ?? "N";
+	}
+	/**
+	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
+	* The atlas texture should already be created and cached by the caller.
+	*/
+	function createBillboard(entity, atlas, atlasColumns, tileSizeNorm, scene) {
+		const { spriteMap } = entity;
+		const group = new three.Group();
+		scene.add(group);
+		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
+			const uniforms = {
+				uAtlas: { value: atlas },
+				uTileSize: { value: tileSizeNorm },
+				uColumns: { value: atlasColumns },
+				uTileId: { value: layer.tileId },
+				uOpacity: { value: layer.opacity ?? 1 }
+			};
+			const mat = new three.ShaderMaterial({
+				vertexShader: BILLBOARD_VERT,
+				fragmentShader: BILLBOARD_FRAG,
+				uniforms,
+				transparent: true,
+				depthWrite: false,
+				side: three.DoubleSide
+			});
+			const geo = new three.PlaneGeometry(1, 1);
+			const mesh = new three.Mesh(geo, mat);
+			mesh.renderOrder = layerIndex + 1;
+			const s = layer.scale ?? 1;
+			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, layerIndex * .001);
+			mesh.scale.set(s, s, 1);
+			group.add(mesh);
+			return {
+				mesh,
+				uniforms,
+				baseLayer: layer,
+				layerIndex
+			};
+		});
+		return {
+			update(ent, cameraYaw, tileSize, ceilingH) {
+				const wx = (ent.x + .5) * tileSize;
+				const wz = (ent.z + .5) * tileSize;
+				const wy = ceilingH * .275;
+				group.position.set(wx, wy, wz);
+				group.rotation.set(0, cameraYaw, 0, "YXZ");
+				const sprW = tileSize * .8;
+				const sprH = ceilingH * .55;
+				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
+				const overrides = spriteMap.angles?.[angleKey];
+				for (const entry of layerEntries) {
+					const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
+					entry.uniforms.uTileId.value = override?.tileId ?? entry.baseLayer.tileId;
+					entry.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
+					const s = entry.baseLayer.scale ?? 1;
+					entry.mesh.scale.set(sprW * s, sprH * s, 1);
+					entry.mesh.position.set(entry.baseLayer.offsetX ?? 0, entry.baseLayer.offsetY ?? 0, entry.layerIndex * .001);
+				}
+			},
+			dispose() {
+				scene.remove(group);
+				for (const entry of layerEntries) {
+					entry.mesh.geometry.dispose();
+					entry.mesh.material.dispose();
+				}
+			}
+		};
+	}
+	//#endregion
 	//#region src/lib/rendering/dungeonRenderer.ts
 	/**
 	* dungeonRenderer.ts
@@ -3219,24 +3328,52 @@ void main() {
 			return entityMatCache.get(key);
 		}
 		const entityMeshMap = /* @__PURE__ */ new Map();
+		const billboardMap = /* @__PURE__ */ new Map();
+		let billboardAtlasTex = null;
+		function getBillboardAtlas() {
+			if (!atlas) return null;
+			if (!billboardAtlasTex) {
+				billboardAtlasTex = new three.Texture(atlas.image);
+				billboardAtlasTex.magFilter = three.NearestFilter;
+				billboardAtlasTex.minFilter = three.NearestFilter;
+				billboardAtlasTex.needsUpdate = true;
+			}
+			return billboardAtlasTex;
+		}
 		function syncEntities(entities) {
 			const aliveIds = new Set(entities.filter((e) => e.alive).map((e) => e.id));
 			for (const [id, mesh] of entityMeshMap) if (!aliveIds.has(id)) {
 				scene.remove(mesh);
 				entityMeshMap.delete(id);
 			}
+			for (const [id, handle] of billboardMap) if (!aliveIds.has(id)) {
+				handle.dispose();
+				billboardMap.delete(id);
+			}
 			for (const e of entities) {
 				if (!e.alive) continue;
-				const key = resolveAppearanceKey(e);
-				if (!entityMeshMap.has(e.id)) {
-					const mesh = new three.Mesh(getEntityGeo(key), getEntityMat(key));
-					entityMeshMap.set(e.id, mesh);
-					scene.add(mesh);
+				if (e.spriteMap) {
+					if (!billboardMap.has(e.id)) {
+						const atlasTex = getBillboardAtlas();
+						if (atlasTex && atlas) {
+							const tileSizeNorm = new three.Vector2(atlas.tileWidth / atlas.sheetWidth, atlas.tileHeight / atlas.sheetHeight);
+							const handle = createBillboard(e, atlasTex, atlas.columns, tileSizeNorm, scene);
+							billboardMap.set(e.id, handle);
+						}
+					}
+				} else {
+					const key = resolveAppearanceKey(e);
+					if (!entityMeshMap.has(e.id)) {
+						const mesh = new three.Mesh(getEntityGeo(key), getEntityMat(key));
+						entityMeshMap.set(e.id, mesh);
+						scene.add(mesh);
+					}
+					const hf = (appearances[key] ?? {}).heightFactor ?? .55;
+					entityMeshMap.get(e.id).position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
 				}
-				const hf = (appearances[key] ?? {}).heightFactor ?? .55;
-				entityMeshMap.get(e.id).position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
 			}
 		}
+		let currentEntities = [];
 		let tgtX = 0, tgtZ = 0, tgtYaw = 0;
 		let curX = 0, curZ = 0, curYaw = 0;
 		let initialized = false;
@@ -3269,6 +3406,11 @@ void main() {
 				curYaw += dy * k;
 				camera.position.set(curX, ceilingH * EYE_HEIGHT_FACTOR, curZ);
 				camera.rotation.set(0, curYaw, 0, "YXZ");
+				for (const e of currentEntities) {
+					if (!e.alive || !e.spriteMap) continue;
+					const handle = billboardMap.get(e.id);
+					if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+				}
 			}
 			glRenderer.render(scene, camera);
 		}
@@ -3285,6 +3427,7 @@ void main() {
 		rafId = requestAnimationFrame(tick);
 		return {
 			setEntities(entities) {
+				currentEntities = entities;
 				syncEntities(entities);
 			},
 			createAtlasMaterial() {
@@ -3337,6 +3480,8 @@ void main() {
 				game.events.off("turn", onTurn);
 				for (const geo of entityGeoCache.values()) geo.dispose();
 				for (const mat of entityMatCache.values()) mat.dispose();
+				for (const handle of billboardMap.values()) handle.dispose();
+				billboardAtlasTex?.dispose();
 				glRenderer.dispose();
 				canvas.remove();
 			}

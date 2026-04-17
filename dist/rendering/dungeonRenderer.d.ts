@@ -29,6 +29,7 @@ import { DirectionFaceMap } from './tileAtlas';
  */
 import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
+export type { SpriteMap } from './billboardSprites';
 /** Describes a sprite-sheet atlas used for tile texturing. */
 export type TileAtlasConfig = {
     /**
