@@ -3,6 +3,9 @@
 // Unified entity base for all game entities (players, NPCs, enemies, decorations).
 // Merges ActorBase/MonsterActor (turn system) with MobilePlacement (content system).
 
+import type { SpriteMap } from "../rendering/billboardSprites";
+export type { SpriteMap } from "../rendering/billboardSprites";
+
 // --------------------------------
 // Core entity types
 // --------------------------------
@@ -37,6 +40,11 @@ export type EntityBase = {
   faction: string;
   /** Turn-scheduler tick counter; incremented by the scheduler on each action. */
   tick: number;
+  /**
+   * When present, switches the dungeon renderer from box geometry to a
+   * camera-facing billboard quad with layered sprite support.
+   */
+  spriteMap?: SpriteMap;
 };
 
 // --------------------------------

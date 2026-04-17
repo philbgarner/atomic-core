@@ -20,7 +20,8 @@ export { createDungeonRenderer } from './rendering/dungeonRenderer'
 // Themes
 export { THEMES, THEME_KEYS, resolveTheme, registerTheme, getTheme } from './dungeon/themes'
 export type { ThemeDef, ThemeSelector }                               from './dungeon/themes'
-export type { DungeonRendererOptions, DungeonRenderer, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle } from './rendering/dungeonRenderer'
+export type { DungeonRendererOptions, DungeonRenderer, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle, SpriteMap } from './rendering/dungeonRenderer'
+export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites'
 
 // Transport
 export { createWebSocketTransport }                  from './transport/websocket'

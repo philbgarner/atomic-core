@@ -8,6 +8,14 @@ Maps each feature to the files in `src/lib` that implement it. Use this as a loo
 
 ```
 src/lib/
+  rendering/
+    dungeonRenderer.ts
+    torchLighting.ts
+    basicLighting.ts
+    camera.ts
+    tileAtlas.ts
+    temperatureMask.ts
+    billboardSprites.ts
   dungeon/
     bsp.ts
     cellular.ts
@@ -36,13 +44,6 @@ src/lib/
   passages/
     traversal.ts
     mask.ts
-  rendering/
-    dungeonRenderer.ts
-    torchLighting.ts
-    basicLighting.ts
-    camera.ts
-    tileAtlas.ts
-    temperatureMask.ts
   atlas/
     atlas.ts
   events/
@@ -74,10 +75,26 @@ src/lib/
 
 ---
 
+### Billboarded sprite rendering for mobile entities
+
+Camera-facing billboard quads driven by a multi-layer sprite system. Actors declare a `spriteMap` field; its presence switches the dungeon renderer from box geometry to billboard quads automatically. Supports up to N texture layers per billboard (independent tile ID, x/y offset, scale, opacity) and up to 8 viewing angles (N/NE/E/SE/S/SW/W/NW) with per-layer tile overrides. The box fallback remains for entities without `spriteMap`.
+
+**Files:**
+- `rendering/billboardSprites.ts` — `SpriteMap`, `SpriteLayer`, `AngleOverride`, `AngleKey` public types; `createBillboard()` allocates per-layer `PlaneGeometry` meshes using a custom `ShaderMaterial` (GLSL UV atlas sampling, `uTileId`/`uOpacity` uniforms, alpha discard); `BillboardHandle.update()` rotates the group to face the camera each RAF frame, selects the active angle key, and pushes uniform updates; `BillboardHandle.dispose()` cleans up geometry and materials
+- `rendering/dungeonRenderer.ts` — holds a `Map<string, BillboardHandle>` alongside `entityMeshMap`; `syncEntities()` routes entities with `spriteMap` to `createBillboard()` and others to the box path; RAF loop calls `handle.update()` with the current `curYaw`; `destroy()` disposes all billboard handles and the shared atlas texture
+- `entities/types.ts` — `spriteMap?: SpriteMap` optional field added to `EntityBase`
+
+**Example:**
+- `examples/standalone/billboard-sprites/index.html`
+- `examples/standalone/billboard-sprites/billboard-sprites.js` — goblin (2-layer body + weapon), skeleton (4-angle variants), slime (single tile)
+
+---
+
 ### First-person 3D dungeon rendering with lighting and fog
 
 **Files:**
-- `rendering/dungeonRenderer.ts` — main Three.js scene, render loop, shader uniforms; supports per-cell floor/ceiling height offsets via `aHeightOffset`, per-instance UV rotation via `aUvRotation`, and UV height scaling via `aUvHeightScale`; per-direction tile specs via `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles` options; public `addLayer(spec)` API for stacking additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering and deferred application; uses `basicLighting.ts` shaders; exports `LayerTarget`, `LayerFaceResult`, `LayerSpec`, `LayerHandle`
+- `rendering/dungeonRenderer.ts` — main Three.js scene, render loop, shader uniforms; supports per-cell floor/ceiling height offsets via `aHeightOffset`, per-instance UV rotation via `aUvRotation`, and UV height scaling via `aUvHeightScale`; per-direction tile specs via `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles` options; public `addLayer(spec)` API for stacking additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering and deferred application; uses `basicLighting.ts` shaders; routes entities with `spriteMap` to `billboardSprites.ts`; exports `LayerTarget`, `LayerFaceResult`, `LayerSpec`, `LayerHandle`, `SpriteMap`
+- `rendering/billboardSprites.ts` — see "Billboarded sprite rendering" feature entry above
 - `rendering/basicLighting.ts` — minimal atlas and object shaders: texture sampling + linear fog; `aUvRotation` rotates UVs in 90° steps (0–3); `aUvHeightScale` clips UVs to the top fraction of a tile (top-aligned) so partial-height skirt panels keep brick aspect ratio; no torch flicker or tint bands; used by `dungeonRenderer.ts`
 - `rendering/torchLighting.ts` — torch color, intensity, banding constants, and flickering GLSL chunks; available for custom renderers that want animated torch lighting
 - `rendering/camera.ts` — camera state, `tryMove` wall-collision logic, lerp movement, EotB-style movement as secondary export
@@ -129,7 +146,7 @@ src/lib/
 
 **Files:**
 - `api/player.ts` — reactive player handle (`x`, `z`, `hp`, `facing`, `inventory`, `alive`), action methods (`move`, `rotate`, `interact`, `wait`, `pickup`, `useItem`, `dropItem`, `heal`)
-- `entities/types.ts` — unified entity base interface (`id`, `kind`, `type`, `sprite`, `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed`, `alive`, `blocksMove`, `faction`, `tick`), `Decoration`, `ObjectPlacement`, `MobilePlacement`, `HiddenPassage`
+- `entities/types.ts` — unified entity base interface (`id`, `kind`, `type`, `sprite`, `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed`, `alive`, `blocksMove`, `faction`, `tick`, optional `spriteMap`), `Decoration`, `ObjectPlacement`, `MobilePlacement`, `HiddenPassage`; re-exports `SpriteMap` from `rendering/billboardSprites.ts`
 - `entities/factory.ts` — `createNpc()`, `createEnemy()`, `createDecoration()`, `createMonstersFromMobiles()` (internal Tiled helper)
 - `entities/inventory.ts` — `Item`, `ItemType`, `InventorySlot`, `createItem()`, `rollLoot()`
 - `entities/effects.ts` — `ActiveEffect`, `applyEffect()`, `tickEffects()`, `StackMode`, `RpsEffect`

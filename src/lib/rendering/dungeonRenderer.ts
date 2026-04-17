@@ -35,6 +35,9 @@ import {
 } from "./basicLighting";
 import type { FaceTileSpec, DirectionFaceMap } from "./tileAtlas";
 export type { FaceTileSpec, DirectionFaceMap } from "./tileAtlas";
+import { createBillboard } from "./billboardSprites";
+import type { BillboardHandle, SpriteMap } from "./billboardSprites";
+export type { SpriteMap } from "./billboardSprites";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1048,6 +1051,21 @@ export function createDungeonRenderer(
   }
 
   const entityMeshMap = new Map<string, THREE.Mesh>();
+  const billboardMap = new Map<string, BillboardHandle>();
+
+  // Lazily-created atlas texture shared across all billboard layers.
+  let billboardAtlasTex: THREE.Texture | null = null;
+
+  function getBillboardAtlas(): THREE.Texture | null {
+    if (!atlas) return null;
+    if (!billboardAtlasTex) {
+      billboardAtlasTex = new THREE.Texture(atlas.image);
+      billboardAtlasTex.magFilter = THREE.NearestFilter;
+      billboardAtlasTex.minFilter = THREE.NearestFilter;
+      billboardAtlasTex.needsUpdate = true;
+    }
+    return billboardAtlasTex;
+  }
 
   function syncEntities(entities: EntityBase[]) {
     const aliveIds = new Set(entities.filter((e) => e.alive).map((e) => e.id));
@@ -1058,25 +1076,58 @@ export function createDungeonRenderer(
         entityMeshMap.delete(id);
       }
     }
+    for (const [id, handle] of billboardMap) {
+      if (!aliveIds.has(id)) {
+        handle.dispose();
+        billboardMap.delete(id);
+      }
+    }
 
     for (const e of entities) {
       if (!e.alive) continue;
-      const key = resolveAppearanceKey(e);
-      if (!entityMeshMap.has(e.id)) {
-        const mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
-        entityMeshMap.set(e.id, mesh);
-        scene.add(mesh);
+
+      if (e.spriteMap) {
+        // Billboard path
+        if (!billboardMap.has(e.id)) {
+          const atlasTex = getBillboardAtlas();
+          if (atlasTex && atlas) {
+            const tileSizeNorm = new THREE.Vector2(
+              atlas.tileWidth / atlas.sheetWidth,
+              atlas.tileHeight / atlas.sheetHeight,
+            );
+            const handle = createBillboard(
+              e as EntityBase & { spriteMap: SpriteMap },
+              atlasTex,
+              atlas.columns,
+              tileSizeNorm,
+              scene,
+            );
+            billboardMap.set(e.id, handle);
+          }
+        }
+        // update() is called in the RAF loop using the current camera yaw
+      } else {
+        // Box geometry path
+        const key = resolveAppearanceKey(e);
+        if (!entityMeshMap.has(e.id)) {
+          const mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
+          entityMeshMap.set(e.id, mesh);
+          scene.add(mesh);
+        }
+        const hf = (appearances[key] ?? {}).heightFactor ?? 0.55;
+        entityMeshMap
+          .get(e.id)!
+          .position.set(
+            (e.x + 0.5) * tileSize,
+            (ceilingH * hf) / 2,
+            (e.z + 0.5) * tileSize,
+          );
       }
-      const hf = (appearances[key] ?? {}).heightFactor ?? 0.55;
-      entityMeshMap
-        .get(e.id)!
-        .position.set(
-          (e.x + 0.5) * tileSize,
-          (ceilingH * hf) / 2,
-          (e.z + 0.5) * tileSize,
-        );
     }
   }
+
+  // Kept so the RAF loop can call billboard updates with current camera yaw.
+  let currentEntities: EntityBase[] = [];
 
   // ── Camera lerp state ─────────────────────────────────────────────────────
   let tgtX = 0,
@@ -1123,6 +1174,13 @@ export function createDungeonRenderer(
 
       camera.position.set(curX, ceilingH * EYE_HEIGHT_FACTOR, curZ);
       camera.rotation.set(0, curYaw, 0, "YXZ");
+
+      // Update all live billboard handles with current camera yaw.
+      for (const e of currentEntities) {
+        if (!e.alive || !e.spriteMap) continue;
+        const handle = billboardMap.get(e.id);
+        if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+      }
     }
 
     glRenderer.render(scene, camera);
@@ -1146,6 +1204,7 @@ export function createDungeonRenderer(
   // ── Public handle ─────────────────────────────────────────────────────────
   return {
     setEntities(entities) {
+      currentEntities = entities;
       syncEntities(entities);
     },
     createAtlasMaterial() {
@@ -1203,6 +1262,8 @@ export function createDungeonRenderer(
       game.events.off("turn", onTurn);
       for (const geo of entityGeoCache.values()) geo.dispose();
       for (const mat of entityMatCache.values()) mat.dispose();
+      for (const handle of billboardMap.values()) handle.dispose();
+      billboardAtlasTex?.dispose();
       glRenderer.dispose();
       canvas.remove();
     },

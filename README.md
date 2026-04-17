@@ -47,6 +47,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
   - [Entities](#entities)
     - [NPCs](#npcs)
     - [Enemies](#enemies)
+    - [Billboard Sprites](#billboard-sprites)
     - [Active Effects](#active-effects)
     - [Spawn Callback](#spawn-callback-1)
   - [Decorations](#decorations)
@@ -80,7 +81,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
-- Sprite billboard rendering with separate body/head UV layers
+- **Billboard sprite rendering** — `spriteMap` field on any entity activates camera-facing billboard quads with layered atlas tiles, x/y offsets, per-layer opacity, and up to 8 viewing angles (N/NE/E/SE/S/SW/W/NW) with per-layer tile overrides; box geometry fallback when `spriteMap` is absent
 - Active status effects with configurable stacking modes
 - Three-faction combat model: `player`, `npc`, `enemy`
 - Minimap with entity overlays
@@ -145,6 +146,17 @@ The `examples/` directory contains two sets of identical demos organized by how 
 ### standalone examples
 
 **`examples/standalone/`** — designed to open directly from the filesystem (`file://`) without any server. Atlas images are pre-embedded as Base64 data URLs (see [Embedding the atlas as a Base64 data URL](#embedding-the-atlas-as-a-base64-data-url)) to work around the WebGL cross-origin restriction that blocks local image files under `file://`. Use these when you want to share a zero-setup demo or drop files into an environment where running a server is not an option.
+
+Available standalone examples:
+
+| Directory | What it shows |
+|---|---|
+| `basic/` | Core rendering, movement, combat events |
+| `billboard-sprites/` | `spriteMap` billboard rendering — goblin (2-layer body + weapon), skeleton (4-angle variants), slime (single tile) |
+| `layering/` | `renderer.addLayer()` instanced mesh overlays |
+| `minimap/` | `attachMinimap()` canvas overlay |
+| `themes/` | Built-in dungeon theme presets |
+| `inventory/` | `showInventory()` dialog UI |
 
 ---
 
@@ -1016,6 +1028,73 @@ var goblin = AtomicCore.createEnemy({
 | `rpsEffect` | string | `'none'` |
 
 The returned `EnemyEntity` also has `alertState: 'idle' | 'chasing' | 'searching'` and `searchTurnsLeft`.
+
+#### Billboard Sprites
+
+Adding a `spriteMap` field to any entity switches the renderer from a coloured box to a camera-facing billboard quad. Layers are drawn back-to-front; each layer samples one tile from the shared atlas. Angle overrides swap tiles when the camera views the entity from a particular direction.
+
+```js
+var goblin = AtomicCore.createEnemy({
+  type: 'goblin', sprite: 'g',
+  x: 5, z: 7,
+  hp: 8, maxHp: 8, attack: 2, defense: 0,
+  speed: 6, danger: 1, xp: 10,
+
+  spriteMap: {
+    // Pixel size of one atlas cell
+    frameSize: { w: 64, h: 64 },
+
+    // Layers rendered back-to-front (index 0 = bottommost)
+    layers: [
+      // Layer 0: body — full opacity, centered
+      { tileId: 42, opacity: 1.0 },
+      // Layer 1: weapon overlay — shifted up slightly, semi-transparent
+      { tileId: 55, offsetY: 0.1, opacity: 0.9 },
+    ],
+
+    // Optional per-angle overrides (8 directions supported)
+    angles: {
+      // When the camera is behind the entity, swap to back-facing tiles
+      S:  [{ layerIndex: 0, tileId: 43 }, { layerIndex: 1, tileId: 56 }],
+      SW: [{ layerIndex: 0, tileId: 44 }],
+      SE: [{ layerIndex: 0, tileId: 44 }],
+    },
+  },
+})
+```
+
+**`SpriteMap` fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `frameSize` | `{ w, h }` | Pixel dimensions of one atlas tile |
+| `layers` | `SpriteLayer[]` | Ordered layer stack (0 = back) |
+| `angles` | `Partial<Record<AngleKey, AngleOverride[]>>` | Per-direction overrides (optional) |
+
+**`SpriteLayer` fields:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `tileId` | number | required | Atlas tile index (row × columns + col) |
+| `offsetX` | number | `0` | Horizontal shift from center in world units |
+| `offsetY` | number | `0` | Vertical shift from center in world units |
+| `scale` | number | `1` | Uniform scale multiplier |
+| `opacity` | number | `1` | Alpha multiplier [0,1] |
+
+**`AngleKey`** values: `"N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW"`.  
+The active key is determined by `(entityFacing − cameraYaw) mod 2π` rounded to the nearest 45° sector.
+
+**`AngleOverride` fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `layerIndex` | number | Which layer to override |
+| `tileId` | number | Replacement tile |
+| `opacity` | number | Replacement opacity (optional) |
+
+Entities without a `spriteMap` continue to render as coloured box geometry — nothing breaks if you omit it.
+
+---
 
 #### Active Effects
 
