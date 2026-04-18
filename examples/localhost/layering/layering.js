@@ -12,7 +12,7 @@
 //
 // One offset step = tileSize * 0.5 = 1.5 world units (default tileSize 3).
 
-const { createGame, attachKeybindings, createDungeonRenderer } = AtomicCore;
+const { createGame, attachKeybindings, createDungeonRenderer, loadTextureAtlas, packedAtlasResolver } = AtomicCore;
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -100,27 +100,24 @@ game.events.on("turn", () => {
 
 let renderer;
 
-// Use the preloaded base64 data URL (set by atlas-data.js) so WebGL can
-// upload the texture when running directly from file://.
-const atlasImg = new Image();
-atlasImg.onload = () => {
+async function init() {
+  const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
+  const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
+    showLoadingScreen: false,
+  });
+  const resolver = packedAtlasResolver(packed);
+
   renderer = createDungeonRenderer(viewportEl, game, {
-    atlas: {
-      image: atlasImg,
-      tileWidth: 64,
-      tileHeight: 64,
-      sheetWidth: 512,
-      sheetHeight: 1024,
-      columns: 8,
-    },
-    floorTileId: 20, // Flagstone    uv [256, 128]
-    ceilTileId: 19, // Cobblestone  uv [192, 128]
-    wallTileId: 31, // Corridor base; room walls use tile 16 via a layer (see below).
+    packedAtlas: packed,
+    tileNameResolver: resolver,
+    floorTile: "flagstone_floor_stone.png",
+    ceilTile:  "plaster_ceiling.png",
+    wallTile:  "cobble_wall_stone.png", // corridor base; room walls use brick via a layer
     ceilSkirtTiles: {
-      north: { tileId: 19, rotation: 0 },
-      south: { tileId: 19, rotation: 0 },
-      east: { tileId: 19, rotation: 1 },
-      west: { tileId: 19, rotation: 3 },
+      north: { tile: "plaster_ceiling.png", rotation: 0 },
+      south: { tile: "plaster_ceiling.png", rotation: 0 },
+      east:  { tile: "plaster_ceiling.png", rotation: 1 },
+      west:  { tile: "plaster_ceiling.png", rotation: 3 },
     },
   });
 
@@ -128,16 +125,13 @@ atlasImg.onload = () => {
   //
   // textures.regionId: 0 = corridor cell, >0 = room cell.
   //
-  // Base wallTileId (31) covers all walls.  Three layers refine this:
-  //   1. Room walls → tile 16 (Brick), replacing the corridor base for rooms.
-  //   2. Room walls, odd coords → tile 18 overlay.
-  //   3. Corridor walls, odd coords → tile 43 overlay.
+  // Base wallTile (cobble) covers all walls.  Three layers refine this:
+  //   1. Room walls → brick_wall_stone.png
+  //   2. Room walls, odd coords → alt_brick_wall_stone.png overlay
+  //   3. Corridor walls → concrete_stone.png overlay
   //
   // For N/S walls the face runs along X, so oddness is checked on cx.
   // For E/W walls the face runs along Z, so oddness is checked on cz.
-  //
-  // createAtlasMaterial() returns a new ShaderMaterial wired to the same
-  // atlas texture, fog settings, and shaders the renderer uses internally.
 
   function isRoom(cx, cz) {
     const outputs = game.dungeon.outputs;
@@ -153,45 +147,46 @@ atlasImg.onload = () => {
       : cz % 2 !== 0;
   }
 
-  // Layer 1 — room base: tile 16 (Brick) over all room wall faces.
+  // Layer 1 — room base: brick over all room wall faces.
   renderer.addLayer({
     target: "wall",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (isRoom(cx, cz) ? { tileId: 16 } : null),
+    filter: (cx, cz) => (isRoom(cx, cz) ? { tile: "brick_wall_stone.png" } : null),
   });
 
-  // Layer 2 — room overlay: tile 18 on odd-coordinate room wall faces.
+  // Layer 2 — room overlay: alternate brick on odd-coordinate room wall faces.
   renderer.addLayer({
     target: "wall",
     material: renderer.createAtlasMaterial(),
     filter: (cx, cz, direction) =>
-      isRoom(cx, cz) && isOdd(cx, cz, direction) ? { tileId: 18 } : null,
+      isRoom(cx, cz) && isOdd(cx, cz, direction) ? { tile: "alt_brick_wall_stone.png" } : null,
   });
 
-  // Layer 3 — corridor overlay: tile 43 on odd-coordinate corridor wall faces.
+  // Layer 3 — corridor overlay: concrete on corridor wall faces.
   renderer.addLayer({
     target: "wall",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz, direction) => (!isRoom(cx, cz) ? { tileId: 43 } : null),
+    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "concrete_stone.png" } : null),
   });
 
-  // Layer 4 — corridor ceiling: tile 20.
+  // Layer 4 — corridor ceiling: concrete.
   renderer.addLayer({
     target: "ceil",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (!isRoom(cx, cz) ? { tileId: 22 } : null),
+    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "concrete_stone.png" } : null),
   });
 
-  // Layer 5 — corridor floor: tile 6.
+  // Layer 5 — corridor floor: wood planks.
   renderer.addLayer({
     target: "floor",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (!isRoom(cx, cz) ? { tileId: 6 } : null),
+    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "plank_floor_wood.png" } : null),
   });
 
   game.generate();
-};
-atlasImg.src = '../basic/atlas.png';
+}
+
+init();
 
 // ---------------------------------------------------------------------------
 // Events

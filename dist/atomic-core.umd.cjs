@@ -2661,6 +2661,7 @@
 			blocksMove: false,
 			faction: opts.faction ?? "none",
 			tick: 0,
+			...opts.spriteMap !== void 0 ? { spriteMap: opts.spriteMap } : {},
 			...overrides
 		};
 	}
@@ -3138,6 +3139,13 @@ void main() {
 				h: 0
 			};
 		}
+		function getPivot(tile) {
+			const id = resolveTile(tile, resolver);
+			return packedAtlas.getById(id)?.pivot ?? {
+				x: .5,
+				y: .5
+			};
+		}
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
 			const rect = getRect(layer.tile);
 			const uniforms = {
@@ -3174,11 +3182,14 @@ void main() {
 			update(ent, cameraYaw, tileSize, ceilingH) {
 				const wx = (ent.x + .5) * tileSize;
 				const wz = (ent.z + .5) * tileSize;
-				const wy = ceilingH * .275;
+				const wy = (1 - (spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : {
+					x: .5,
+					y: .5
+				}).y) * tileSize;
 				group.position.set(wx, wy, wz);
 				group.rotation.set(0, cameraYaw, 0, "YXZ");
-				const sprW = tileSize * .8;
-				const sprH = ceilingH * .55;
+				const sprW = tileSize;
+				const sprH = tileSize;
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {

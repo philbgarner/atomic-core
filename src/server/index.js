@@ -185,9 +185,9 @@ function applyAction(room, playerId, action) {
 
 const app = express()
 
-// Serve the multiplayer example at the root
+// Redirect root to the multiplayer example so relative asset paths resolve correctly
 app.get('/', (_req, res) => {
-  res.sendFile(path.join(ROOT, 'examples', 'multiplayer', 'index.html'))
+  res.redirect('/examples/localhost/multiplayer/')
 })
 
 // Serve all static assets (examples, dist, node_modules/three)

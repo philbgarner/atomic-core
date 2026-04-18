@@ -150,6 +150,12 @@ export function createBillboard(
     return sprite ? spriteToUvRect(sprite) : { x: 0, y: 0, w: 0, h: 0 };
   }
 
+  function getPivot(tile: string | number) {
+    const id = resolveTile(tile, resolver);
+    const sprite = packedAtlas.getById(id);
+    return sprite?.pivot ?? { x: 0.5, y: 0.5 };
+  }
+
   const layerEntries: LayerMeshEntry[] = spriteMap.layers.map((layer, layerIndex) => {
     const rect = getRect(layer.tile);
     const uniforms = {
@@ -187,15 +193,16 @@ export function createBillboard(
       // Position group at entity world coordinates.
       const wx = (ent.x + 0.5) * tileSize;
       const wz = (ent.z + 0.5) * tileSize;
-      const wy = ceilingH * 0.275; // vertical center roughly mid-torso
+      const basePivot = spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : { x: 0.5, y: 0.5 };
+      const wy = (1 - basePivot.y) * tileSize;
       group.position.set(wx, wy, wz);
 
       // Rotate the group to always face the camera (Y-axis billboard).
       group.rotation.set(0, cameraYaw, 0, "YXZ");
 
       // Scale layers to world-unit sprite size.
-      const sprW = tileSize * 0.8;
-      const sprH = ceilingH * 0.55;
+      const sprW = tileSize;
+      const sprH = tileSize;
 
       // Determine active angle key for override lookup.
       const facing = (ent as { facing?: number }).facing ?? 0;

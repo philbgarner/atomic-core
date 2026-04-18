@@ -17,6 +17,8 @@ const {
   attachKeybindings,
   createDungeonRenderer,
   createWebSocketTransport,
+  loadTextureAtlas,
+  packedAtlasResolver,
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
@@ -137,7 +139,7 @@ function updatePlayerList(players, myPlayerId) {
 // Main game setup
 // ---------------------------------------------------------------------------
 
-function startGame(transport, { playerId, isHost, dungeonConfig }) {
+async function startGame(transport, { playerId, isHost, dungeonConfig }) {
   addLog(`Connected as ${playerId} (${isHost ? 'host' : 'peer'})`, 'turn');
 
   // Non-host clients receive the dungeon config from the server so they
@@ -171,20 +173,20 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
   // ── 3D renderer ──────────────────────────────────────────────────────────
 
   let renderer;
-  const atlasImg = new Image();
-  atlasImg.onload = () => {
+
+  {
+    const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
+    const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
+      showLoadingScreen: false,
+    });
+    const resolver = packedAtlasResolver(packed);
+
     renderer = createDungeonRenderer(viewportEl, game, {
-      atlas: {
-        image: atlasImg,
-        tileWidth: 64,
-        tileHeight: 64,
-        sheetWidth: 512,
-        sheetHeight: 1024,
-        columns: 8,
-      },
-      floorTileId: 20,
-      ceilTileId:  19,
-      wallTileId:  16,
+      packedAtlas: packed,
+      tileNameResolver: resolver,
+      floorTile: "flagstone_floor_stone.png",
+      ceilTile:  "plaster_ceiling.png",
+      wallTile:  "brick_wall_stone.png",
     });
 
     game.generate();
@@ -199,8 +201,7 @@ function startGame(transport, { playerId, isHost, dungeonConfig }) {
         config: MY_DUNGEON_CONFIG,
       });
     }
-  };
-  atlasImg.src = '../basic/atlas.png';
+  }
 
   // ── Spawner (host generates enemies; server syncs their positions) ────────
 

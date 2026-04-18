@@ -26,6 +26,8 @@ const {
   attachMinimap,
   createItem,
   createDungeonRenderer,
+  loadTextureAtlas,
+  packedAtlasResolver,
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
@@ -196,28 +198,23 @@ attachMinimap(game, minimapEl, {
 
 let renderer;
 
-const atlasImg = new Image();
-atlasImg.onload = () => {
+async function init() {
+  const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
+  const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
+    showLoadingScreen: false,
+  });
+  const resolver = packedAtlasResolver(packed);
+
   renderer = createDungeonRenderer(viewportEl, game, {
-    atlas: {
-      image: atlasImg,
-      tileWidth: 64,
-      tileHeight: 64,
-      sheetWidth: 512,
-      sheetHeight: 1024,
-      columns: 8,
-    },
-    floorTileId: 20,
-    ceilTileId: 19,
-    wallTileId: 16,
+    packedAtlas: packed,
+    tileNameResolver: resolver,
+    floorTile: "flagstone_floor_stone.png",
+    ceilTile:  "plaster_ceiling.png",
+    wallTile:  "brick_wall_stone.png",
     entityAppearances: {
-      // Enemies — tall red cube
       goblin:        { color: 0xcc2222, widthFactor: 0.35, heightFactor: 0.55, depthFactor: 0.35 },
-      // Fallback for any unrecognised enemy kind
       enemy:         { color: 0xcc2222, widthFactor: 0.35, heightFactor: 0.55, depthFactor: 0.35 },
-      // Chest — squat wide tan rectangular box
       chest:         { color: 0xc8922a, widthFactor: 0.55, heightFactor: 0.28, depthFactor: 0.40 },
-      // Items — small bright-blue cube
       health_potion: { color: 0x4488ee, widthFactor: 0.18, heightFactor: 0.22, depthFactor: 0.18 },
       item:          { color: 0x4488ee, widthFactor: 0.18, heightFactor: 0.22, depthFactor: 0.18 },
     },
@@ -236,8 +233,9 @@ atlasImg.onload = () => {
   }
 
   setupTutorialMissions();
-};
-atlasImg.src = '../basic/atlas.png';
+}
+
+init();
 
 // ---------------------------------------------------------------------------
 // Chest interaction helper

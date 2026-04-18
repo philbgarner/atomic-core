@@ -10,6 +10,8 @@ const {
   attachKeybindings,
   attachMinimap,
   createDungeonRenderer,
+  loadTextureAtlas,
+  packedAtlasResolver,
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
@@ -91,39 +93,29 @@ attachMinimap(game, minimapCanvas, {
 });
 
 // ---------------------------------------------------------------------------
-// 3D renderer — with tile atlas
+// 3D renderer
 // ---------------------------------------------------------------------------
-//
-// atlas.png: 512×1024 px, 64 px tiles → 8 columns.
-// Tile ID = (pixelY / 64) * 8 + (pixelX / 64)  (row-major, top-left origin).
-//
-// atlas.json entries used (uv = [pixelX, pixelY]):
-//   Floor   – Flagstone   uv [256, 128] → id 20
-//   Ceiling – Cobblestone uv [192, 128] → id 19
-//   Wall    – Brick       uv [0,   128] → id 16
 
 let renderer;
 
-// Use the preloaded base64 data URL (set by atlas-data.js) so WebGL can
-// upload the texture when running directly from file://.
-const atlasImg = new Image();
-atlasImg.onload = () => {
+async function init() {
+  const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
+  const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
+    showLoadingScreen: false,
+  });
+  const resolver = packedAtlasResolver(packed);
+
   renderer = createDungeonRenderer(viewportEl, game, {
-    atlas: {
-      image: atlasImg,
-      tileWidth: 64,
-      tileHeight: 64,
-      sheetWidth: 512,
-      sheetHeight: 1024,
-      columns: 8,
-    },
-    floorTileId: 20, // Flagstone   uv [256, 128]
-    ceilTileId: 19,  // Cobblestone uv [192, 128]
-    wallTileId: 16,  // Brick       uv [0,   128]
+    packedAtlas: packed,
+    tileNameResolver: resolver,
+    floorTile: "flagstone_floor_stone.png",
+    ceilTile:  "plaster_ceiling.png",
+    wallTile:  "brick_wall_stone.png",
   });
   game.generate();
-};
-atlasImg.src = '../basic/atlas.png';
+}
+
+init();
 
 // ---------------------------------------------------------------------------
 // Spawn enemies — one per room, capped, skipping early rooms
