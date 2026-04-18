@@ -1,5 +1,8 @@
-// Seeded LCG RNG (Numerical Recipes constants).
-// Returns a deterministic pseudo-random function in [0, 1).
+/**
+ * Create a seeded LCG pseudo-random number generator.
+ * Uses Numerical Recipes constants. Returns a function that yields
+ * deterministic values in [0, 1) for a given seed.
+ */
 export function makeRng(seed: number): () => number {
   let s = seed >>> 0;
   return () => {

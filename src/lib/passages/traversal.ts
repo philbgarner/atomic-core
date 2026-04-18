@@ -58,6 +58,7 @@ export function consumePassageStep(
   return { cell, next };
 }
 
+/** Cancel any active traversal and return the idle state. */
 export function cancelPassageTraversal(): PassageTraversalState {
   return { kind: "idle" };
 }

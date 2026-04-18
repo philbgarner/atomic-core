@@ -24,6 +24,7 @@ export function actionDelay(speed: number, action: TurnAction): number {
   return (BASE_TIME / speed) * mult;
 }
 
+/** Clamp `value` to the inclusive range [min, max]. */
 export function clamp(min: number, max: number, value: number): number {
   return Math.max(min, Math.min(max, value));
 }

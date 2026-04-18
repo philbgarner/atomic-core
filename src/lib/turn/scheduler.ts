@@ -121,6 +121,7 @@ export class TurnScheduler {
     this.add(actorId, delay);
   }
 
+  /** Return the current absolute time (updated by `next()`). */
   getNow(): number {
     return this.now;
   }

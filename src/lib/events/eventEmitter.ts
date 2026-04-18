@@ -74,6 +74,7 @@ export interface EventEmitter {
   ): void;
 }
 
+/** Create a typed event emitter that dispatches `GameEventMap` events. */
 export function createEventEmitter(): EventEmitter {
   const handlers: HandlerMap = {};
 

@@ -9,15 +9,18 @@
 export class MinHeap<T> {
   private _heap: Array<{ priority: number; value: T }> = [];
 
+  /** Number of elements currently in the heap. */
   get size(): number {
     return this._heap.length;
   }
 
+  /** Insert a value with the given numeric priority. */
   push(priority: number, value: T): void {
     this._heap.push({ priority, value });
     this._bubbleUp(this._heap.length - 1);
   }
 
+  /** Remove and return the value with the lowest priority, or `undefined` if empty. */
   pop(): T | undefined {
     if (this._heap.length === 0) return undefined;
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -30,10 +33,12 @@ export class MinHeap<T> {
     return top;
   }
 
+  /** Return the lowest-priority value without removing it, or `undefined` if empty. */
   peek(): T | undefined {
     return this._heap[0]?.value;
   }
 
+  /** Return the lowest priority value in the heap, or `Infinity` if empty. */
   peekPriority(): number {
     return this._heap[0]?.priority ?? Infinity;
   }

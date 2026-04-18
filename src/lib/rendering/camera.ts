@@ -104,6 +104,10 @@ function tryMove(
   return { x: ox, z: oz };
 }
 
+/**
+ * Create an analog first-person camera with wall-sliding collision.
+ * Moves continuously while keys are held (WASD / arrows). Call `update(dt)` each frame.
+ */
 export function createCamera(options: CameraOptions): Camera {
   let { solidData, width, height } = options;
   let state: CameraState = { x: options.startX, z: options.startZ, yaw: 0 };
@@ -246,6 +250,11 @@ export type EotBCamera = {
   destroy(): void;
 };
 
+/**
+ * Create a grid-locked Eye of the Beholder style camera.
+ * Moves one cell per key press with lerp animation and configurable keybindings.
+ * Call `update(timestamp)` each frame with the value from `requestAnimationFrame`.
+ */
 export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
   const lerpMs = options.moveLerpMs ?? DEFAULT_LERP_MS;
   const startYaw = options.startYaw ?? 0;

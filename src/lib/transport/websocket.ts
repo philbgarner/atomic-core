@@ -25,6 +25,12 @@ import type {
 } from './types';
 import type { TurnAction } from '../turn/types';
 
+/**
+ * Create a browser-side WebSocket transport for multiplayer.
+ * Pass the returned `ActionTransport` to `createGame()` via `GameOptions.transport`.
+ *
+ * @param url  WebSocket server URL (e.g. `"ws://localhost:3001"`).
+ */
 export function createWebSocketTransport(url: string): ActionTransport {
   let ws: WebSocket | null = null;
   let _playerId: string | null = null;

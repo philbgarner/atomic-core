@@ -100,6 +100,10 @@ function _pathTo(
   return maxSteps != null ? result.path.slice(0, maxSteps) : result.path;
 }
 
+/**
+ * Compute an A* path from `monsterId` to the player.
+ * Returns the full path (inclusive of start) or null if unreachable / either actor is dead.
+ */
 export function computeChasePathToPlayer(
   state: TurnSystemState,
   monsterId: ActorId,

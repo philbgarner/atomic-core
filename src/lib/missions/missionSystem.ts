@@ -45,6 +45,13 @@ function recordToPublic(r: MissionRecord): Mission {
 // Factory
 // ---------------------------------------------------------------------------
 
+/**
+ * Create the mission system.
+ *
+ * @param events     Game event emitter — used to fire `mission-complete` on success.
+ * @param transport  Optional multiplayer transport — used to broadcast completions to peers.
+ * @returns          A `MissionsHandle` for adding, removing, and evaluating missions.
+ */
 export function createMissionSystem(
   events: EventEmitter,
   transport: ActionTransport | undefined,
