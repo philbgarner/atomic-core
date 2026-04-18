@@ -12,7 +12,13 @@
 //
 // One offset step = tileSize * 0.5 = 1.5 world units (default tileSize 3).
 
-const { createGame, attachKeybindings, createDungeonRenderer, loadTextureAtlas, packedAtlasResolver } = AtomicCore;
+const {
+  createGame,
+  attachKeybindings,
+  createDungeonRenderer,
+  loadTextureAtlas,
+  packedAtlasResolver,
+} = AtomicCore;
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -111,13 +117,13 @@ async function init() {
     packedAtlas: packed,
     tileNameResolver: resolver,
     floorTile: "flagstone_floor_stone.png",
-    ceilTile:  "plaster_ceiling.png",
-    wallTile:  "cobble_wall_stone.png", // corridor base; room walls use brick via a layer
+    ceilTile: "plaster_ceiling.png",
+    wallTile: "cobble_wall_stone.png", // corridor base; room walls use brick via a layer
     ceilSkirtTiles: {
       north: { tile: "plaster_ceiling.png", rotation: 0 },
       south: { tile: "plaster_ceiling.png", rotation: 0 },
-      east:  { tile: "plaster_ceiling.png", rotation: 1 },
-      west:  { tile: "plaster_ceiling.png", rotation: 3 },
+      east: { tile: "plaster_ceiling.png", rotation: 1 },
+      west: { tile: "plaster_ceiling.png", rotation: 3 },
     },
   });
 
@@ -151,7 +157,8 @@ async function init() {
   renderer.addLayer({
     target: "wall",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (isRoom(cx, cz) ? { tile: "brick_wall_stone.png" } : null),
+    filter: (cx, cz) =>
+      isRoom(cx, cz) ? { tile: "brick_wall_stone.png" } : null,
   });
 
   // Layer 2 — room overlay: alternate brick on odd-coordinate room wall faces.
@@ -159,28 +166,33 @@ async function init() {
     target: "wall",
     material: renderer.createAtlasMaterial(),
     filter: (cx, cz, direction) =>
-      isRoom(cx, cz) && isOdd(cx, cz, direction) ? { tile: "alt_brick_wall_stone.png" } : null,
+      isRoom(cx, cz) && isOdd(cx, cz, direction)
+        ? { tile: "brick_column.png" }
+        : null,
   });
 
   // Layer 3 — corridor overlay: concrete on corridor wall faces.
   renderer.addLayer({
     target: "wall",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "concrete_stone.png" } : null),
+    filter: (cx, cz) =>
+      !isRoom(cx, cz) ? { tile: "jacobean_panel_wall_wood.png" } : null,
   });
 
   // Layer 4 — corridor ceiling: concrete.
   renderer.addLayer({
     target: "ceil",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "concrete_stone.png" } : null),
+    filter: (cx, cz) =>
+      !isRoom(cx, cz) ? { tile: "plaster_ceiling.png" } : null,
   });
 
   // Layer 5 — corridor floor: wood planks.
   renderer.addLayer({
     target: "floor",
     material: renderer.createAtlasMaterial(),
-    filter: (cx, cz) => (!isRoom(cx, cz) ? { tile: "plank_floor_wood.png" } : null),
+    filter: (cx, cz) =>
+      !isRoom(cx, cz) ? { tile: "plank_floor_wood.png" } : null,
   });
 
   game.generate();
