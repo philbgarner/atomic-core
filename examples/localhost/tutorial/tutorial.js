@@ -31,6 +31,33 @@ const {
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
+// spriteMap definitions
+// ---------------------------------------------------------------------------
+
+function chestSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_notAmimic.png", opacity: 1.0, offsetY: -0.8, scale: 0.6 },
+    ],
+  };
+}
+
+function goblinSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      {
+        tile: "mob_goblin_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 
@@ -119,12 +146,9 @@ const game = createGame(document.body, {
           r.type === "room" && r.id !== startRoom.id && r.id !== endRoom.id,
       );
 
-      // Place one chest at the centre of the first candidate room.
-      if (candidates.length > 0) {
-        const cr = candidates[0];
-        place.object(cr.cx, cr.cz, "chest", { blocksMove: true });
-        _chestPos = { x: cr.cx, z: cr.cz };
-      }
+      // Place a chest in the start room.
+      place.object(startRoom.cx, startRoom.cz, "chest", { blocksMove: true });
+      _chestPos = { x: startRoom.cx, z: startRoom.cz };
 
       // Place one goblin in the second candidate room.
       // We create the entity directly (mirroring what place.enemy does) so we
@@ -138,9 +162,16 @@ const game = createGame(document.body, {
           sprite: "goblin",
           x: gr.cx,
           z: gr.cz,
-          hp: 8, maxHp: 8, attack: 2, defense: 0,
-          speed: 6, alive: true, blocksMove: true,
-          faction: "enemy", tick: 0,
+          hp: 8,
+          maxHp: 8,
+          attack: 2,
+          defense: 0,
+          speed: 6,
+          alive: true,
+          blocksMove: true,
+          faction: "enemy",
+          tick: 0,
+          spriteMap: goblinSpriteMap(),
         };
         game.turns.addActor(goblin);
         _placedEnemies.push(goblin);
@@ -209,14 +240,21 @@ async function init() {
     packedAtlas: packed,
     tileNameResolver: resolver,
     floorTile: "flagstone_floor_stone.png",
-    ceilTile:  "plaster_ceiling.png",
-    wallTile:  "brick_wall_stone.png",
+    ceilTile: "plaster_ceiling.png",
+    wallTile: "brick_wall_stone.png",
     entityAppearances: {
-      goblin:        { color: 0xcc2222, widthFactor: 0.35, heightFactor: 0.55, depthFactor: 0.35 },
-      enemy:         { color: 0xcc2222, widthFactor: 0.35, heightFactor: 0.55, depthFactor: 0.35 },
-      chest:         { color: 0xc8922a, widthFactor: 0.55, heightFactor: 0.28, depthFactor: 0.40 },
-      health_potion: { color: 0x4488ee, widthFactor: 0.18, heightFactor: 0.22, depthFactor: 0.18 },
-      item:          { color: 0x4488ee, widthFactor: 0.18, heightFactor: 0.22, depthFactor: 0.18 },
+      health_potion: {
+        color: 0x4488ee,
+        widthFactor: 0.18,
+        heightFactor: 0.22,
+        depthFactor: 0.18,
+      },
+      item: {
+        color: 0x4488ee,
+        widthFactor: 0.18,
+        heightFactor: 0.22,
+        depthFactor: 0.18,
+      },
     },
   });
 
@@ -572,9 +610,20 @@ game.events.on("turn", ({ turn }) => {
   // Sync cubes: live enemies (positions updated in-place by engine) + chest
   // (static decoration — shown until opened).
   if (renderer) {
-    const chestCubes = (_chestPos && !_chestOpened)
-      ? [{ id: "chest_cube", type: "chest", kind: "decoration", x: _chestPos.x, z: _chestPos.z, alive: true }]
-      : [];
+    const chestCubes =
+      _chestPos && !_chestOpened
+        ? [
+            {
+              id: "chest_cube",
+              type: "chest",
+              kind: "decoration",
+              x: _chestPos.x,
+              z: _chestPos.z,
+              alive: true,
+              spriteMap: chestSpriteMap(),
+            },
+          ]
+        : [];
     renderer.setEntities([..._placedEnemies, ...chestCubes]);
   }
 

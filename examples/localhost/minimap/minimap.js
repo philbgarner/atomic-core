@@ -15,6 +15,58 @@ const {
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
+// spriteMap definitions
+// ---------------------------------------------------------------------------
+
+function goblinSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      {
+        tile: "mob_goblin_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
+  };
+}
+
+function skeletonSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_skel_base.png", opacity: 1.0 },
+      {
+        tile: "mob_skel_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
+  };
+}
+
+function trollSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_troll_base.png", opacity: 1.0 },
+      {
+        tile: "mob_troll_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
+  };
+}
+
+const TYPES = [
+  { type: "goblin", spriteMap: goblinSpriteMap },
+  { type: "skeleton", spriteMap: skeletonSpriteMap },
+  { type: "troll", spriteMap: trollSpriteMap },
+];
+
+// ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 
@@ -41,7 +93,7 @@ const game = createGame(document.body, {
   dungeon: {
     width: 40,
     height: 40,
-    seed: 0xdeadbeef,
+    seed: (Math.random() * 0xffffffff) >>> 0,
     roomMinSize: 5,
     roomMaxSize: 11,
     roomCount: 12,
@@ -109,8 +161,8 @@ async function init() {
     packedAtlas: packed,
     tileNameResolver: resolver,
     floorTile: "flagstone_floor_stone.png",
-    ceilTile:  "plaster_ceiling.png",
-    wallTile:  "brick_wall_stone.png",
+    ceilTile: "plaster_ceiling.png",
+    wallTile: "brick_wall_stone.png",
   });
   game.generate();
 }
@@ -126,10 +178,13 @@ attachSpawner(game, {
     if (spawned >= MAX_ENEMIES) return null;
     if (roomId < 2) return null;
     if (Math.random() > 0.55) return null;
+
+    const def = TYPES[spawned % TYPES.length];
     spawned++;
+
     const e = createEnemy({
-      type: "goblin",
-      sprite: "g",
+      type: def.type,
+      sprite: def.type,
       x,
       z: y,
       hp: 8,
@@ -139,6 +194,7 @@ attachSpawner(game, {
       speed: 6,
       danger: 1,
       xp: 10,
+      spriteMap: def.spriteMap(),
     });
     enemies.push(e);
     return e;

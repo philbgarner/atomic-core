@@ -49,9 +49,9 @@ function skeletonSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
     layers: [
-      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      { tile: "mob_skel_base.png", opacity: 1.0 },
       {
-        tile: "mob_goblin_happy_head.png",
+        tile: "mob_skel_happy_head.png",
         opacity: 1.0,
         bob: { amplitudeY: 0.015, speed: 2 },
       },
@@ -59,13 +59,13 @@ function skeletonSpriteMap() {
   };
 }
 
-function orcSpriteMap() {
+function trollSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
     layers: [
-      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      { tile: "mob_troll_base.png", opacity: 1.0 },
       {
-        tile: "mob_goblin_happy_head.png",
+        tile: "mob_troll_happy_head.png",
         opacity: 1.0,
         bob: { amplitudeY: 0.015, speed: 2 },
       },
@@ -84,7 +84,7 @@ const MAX_ENTITIES = 8;
 const TYPES = [
   { type: "goblin", spriteMap: goblinSpriteMap },
   { type: "skeleton", spriteMap: skeletonSpriteMap },
-  { type: "orc", spriteMap: orcSpriteMap },
+  { type: "troll", spriteMap: trollSpriteMap },
 ];
 
 // ---------------------------------------------------------------------------
