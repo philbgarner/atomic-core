@@ -213,8 +213,9 @@ export function createBillboard(
       // Rotate the group to always face the camera (Y-axis billboard).
       group.rotation.set(0, cameraYaw, 0, "YXZ");
 
-      // Scale layers to world-unit sprite size.
-      const sprW = tileSize;
+      // Scale layers to world-unit sprite size, preserving frameSize aspect ratio.
+      const aspect = spriteMap.frameSize.w / spriteMap.frameSize.h;
+      const sprW = tileSize * aspect;
       const sprH = tileSize;
 
       // Determine active angle key for override lookup.

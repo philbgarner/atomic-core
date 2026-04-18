@@ -3162,7 +3162,7 @@ function createBillboard(entity, packedAtlas, scene, resolver) {
 			}).y) * tileSize;
 			group.position.set(wx, wy, wz);
 			group.rotation.set(0, cameraYaw, 0, "YXZ");
-			const sprW = tileSize;
+			const sprW = tileSize * (spriteMap.frameSize.w / spriteMap.frameSize.h);
 			const sprH = tileSize;
 			const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 			const overrides = spriteMap.angles?.[angleKey];
@@ -3874,13 +3874,14 @@ function createWebSocketTransport(url) {
 		get playerId() {
 			return _playerId;
 		},
-		connect() {
+		connect(meta) {
 			return new Promise((resolve, reject) => {
 				ws = new WebSocket(url);
 				ws.onopen = () => {
 					ws.send(JSON.stringify({
 						type: "join",
-						roomId: "default"
+						roomId: "default",
+						meta: meta ?? {}
 					}));
 				};
 				ws.onmessage = (evt) => {
@@ -3933,6 +3934,13 @@ function createWebSocketTransport(url) {
 			ws.send(JSON.stringify({
 				type: "chat",
 				text
+			}));
+		},
+		sendMeta(meta) {
+			if (!ws || !_playerId) return;
+			ws.send(JSON.stringify({
+				type: "player_meta",
+				meta
 			}));
 		},
 		onChat(handler) {

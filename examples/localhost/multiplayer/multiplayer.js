@@ -15,6 +15,7 @@ const {
   createEnemy,
   attachSpawner,
   attachKeybindings,
+  attachMinimap,
   createDungeonRenderer,
   createWebSocketTransport,
   loadTextureAtlas,
@@ -22,9 +23,52 @@ const {
 } = AtomicCore;
 
 // ---------------------------------------------------------------------------
+// spriteMap definitions
+// ---------------------------------------------------------------------------
+
+function rogueSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_rogue_base.png", opacity: 1.0 },
+      { tile: "mob_rogue_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+    ],
+  };
+}
+
+function warriorSpriteMap() {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [
+      { tile: "mob_warrior_base.png", opacity: 1.0 },
+      { tile: "mob_warrior_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+    ],
+  };
+}
+
+function mageSpriteMap() {
+  return {
+    frameSize: { w: 128, h: 64 },
+    layers: [
+      { tile: "mob_mage_base.png", opacity: 1.0 },
+      { tile: "mob_mage_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+    ],
+  };
+}
+
+const SPRITE_MAPS = { rogue: rogueSpriteMap, warrior: warriorSpriteMap, mage: mageSpriteMap };
+
+function spriteForPlayer(ps) {
+  const key = ps.meta?.sprite;
+  const fn = SPRITE_MAPS[key] ?? rogueSpriteMap;
+  return fn();
+}
+
+// ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 
+const minimapCanvas  = document.getElementById('minimap');
 const connectScreen  = document.getElementById('connect-screen');
 const connectBtn     = document.getElementById('connect-btn');
 const serverUrlEl    = document.getElementById('server-url');
@@ -51,10 +95,11 @@ connectBtn.addEventListener('click', async () => {
 
   const url = serverUrlEl.value.trim();
   const transport = createWebSocketTransport(url);
+  const chosenSprite = document.querySelector('input[name="sprite"]:checked')?.value ?? 'rogue';
 
   let info;
   try {
-    info = await transport.connect();
+    info = await transport.connect({ sprite: chosenSprite });
   } catch (err) {
     connectError.textContent = 'Could not connect: ' + (err?.message ?? err);
     connectError.style.display = 'block';
@@ -63,7 +108,7 @@ connectBtn.addEventListener('click', async () => {
   }
 
   connectScreen.style.display = 'none';
-  startGame(transport, info);
+  startGame(transport, info, chosenSprite);
 });
 
 // ---------------------------------------------------------------------------
@@ -139,8 +184,8 @@ function updatePlayerList(players, myPlayerId) {
 // Main game setup
 // ---------------------------------------------------------------------------
 
-async function startGame(transport, { playerId, isHost, dungeonConfig }) {
-  addLog(`Connected as ${playerId} (${isHost ? 'host' : 'peer'})`, 'turn');
+async function startGame(transport, { playerId, isHost, dungeonConfig }, chosenSprite = 'rogue') {
+  addLog(`Connected as ${playerId} (${isHost ? 'host' : 'peer'}) — ${chosenSprite}`, 'turn');
 
   // Non-host clients receive the dungeon config from the server so they
   // generate the identical dungeon (same seed). Host uses its own config.
@@ -168,6 +213,14 @@ async function startGame(transport, { playerId, isHost, dungeonConfig }) {
       },
     },
     transport,
+  });
+
+  // ── Minimap ──────────────────────────────────────────────────────────────
+
+  attachMinimap(game, minimapCanvas, {
+    size: 196,
+    showEntities: true,
+    colors: { explored: "#334", visible: "#aac", player: "#0f0", enemy: "#f44" },
   });
 
   // ── 3D renderer ──────────────────────────────────────────────────────────
@@ -257,6 +310,7 @@ async function startGame(transport, { playerId, isHost, dungeonConfig }) {
         blocksMove: false,
         faction: 'player',
         tick: 0,
+        spriteMap: spriteForPlayer(ps),
       }));
 
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
