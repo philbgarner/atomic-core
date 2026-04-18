@@ -18,10 +18,11 @@
     "./style.css": "./dist/atomic-core.css"
   },
   "bin": {
-    "atomic-core-server": "dist/server/index.js"
+    "atomic-core-server": "src/server/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/server/index.js"
   ],
   "dependencies": {
     "express": "^4.22.1",
