@@ -17,6 +17,10 @@ export { loadTiledMap }                              from './dungeon/tiled'
 
 export { createDungeonRenderer } from './rendering/dungeonRenderer'
 
+// Texture loader / sprite packer
+export { loadTextureAtlas, resolveSprite, toFaceRotation } from './rendering/textureLoader'
+export type { AtlasFrameRect, AtlasFrame, TextureAtlasJson, PackedSprite, PackedAtlas, LoadingOptions } from './rendering/textureLoader'
+
 // Themes
 export { THEMES, THEME_KEYS, resolveTheme, registerTheme, getTheme } from './dungeon/themes'
 export type { ThemeDef, ThemeSelector }                               from './dungeon/themes'

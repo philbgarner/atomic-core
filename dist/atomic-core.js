@@ -3464,6 +3464,151 @@ function createDungeonRenderer(element, game, options = {}) {
 	};
 }
 //#endregion
+//#region src/lib/rendering/textureLoader.ts
+/**
+* Convert a PackedSprite rotation (degrees CW) to a FaceRotation index
+* compatible with the FaceTileSpec / billboard shader pathway.
+*
+* FaceRotation: 0=0°, 1=90° CCW, 2=180°, 3=270° CCW
+* PackedSprite.rotation: 0=0°, 90=90° CW, 180=180°, 270=270° CW
+*/
+function toFaceRotation(rotation) {
+	return {
+		0: 0,
+		90: 3,
+		180: 2,
+		270: 1
+	}[rotation] ?? 0;
+}
+/**
+* Resolve a sprite from a PackedAtlas by either name or insertion-order id.
+*/
+function resolveSprite(atlas, nameOrId) {
+	return typeof nameOrId === "string" ? atlas.getByName(nameOrId) : atlas.getById(nameOrId);
+}
+var PADDING = 2;
+function computeLayout(frames) {
+	const entries = Object.entries(frames).map(([name, af]) => ({
+		name,
+		frame: af,
+		outW: af.sourceSize.w,
+		outH: af.sourceSize.h,
+		destX: 0,
+		destY: 0
+	}));
+	const sorted = [...entries].sort((a, b) => b.outH - a.outH);
+	for (let texSize = 512; texSize <= 4096; texSize *= 2) {
+		let cursorX = 0;
+		let cursorY = 0;
+		let shelfH = 0;
+		let fits = true;
+		for (const e of sorted) {
+			const cellW = e.outW + PADDING * 2;
+			const cellH = e.outH + PADDING * 2;
+			if (cellW > texSize) {
+				fits = false;
+				break;
+			}
+			if (cursorX + cellW > texSize) {
+				cursorY += shelfH;
+				cursorX = 0;
+				shelfH = 0;
+			}
+			if (cursorY + cellH > texSize) {
+				fits = false;
+				break;
+			}
+			e.destX = cursorX + PADDING;
+			e.destY = cursorY + PADDING;
+			cursorX += cellW;
+			shelfH = Math.max(shelfH, cellH);
+		}
+		if (fits) return {
+			entries,
+			texSize
+		};
+	}
+	throw new Error("[textureLoader] Sprites cannot fit into a 4096×4096 texture.");
+}
+function blitSprite(ctx, source, e) {
+	const { frame: af, destX, destY, outW, outH } = e;
+	const src = af.frame;
+	ctx.save();
+	ctx.translate(destX + outW / 2, destY + outH / 2);
+	if (af.rotated) ctx.rotate(-Math.PI / 2);
+	ctx.drawImage(source, src.x, src.y, src.w, src.h, -outW / 2, -outH / 2, outW, outH);
+	ctx.restore();
+}
+function injectOverlay(text, container) {
+	const el = document.createElement("div");
+	el.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);color:#fff;font-family:monospace;font-size:16px;z-index:9999;";
+	el.textContent = text;
+	container.appendChild(el);
+	return el;
+}
+/**
+* Load a TexturePacker-format sprite atlas, repack all sprites into a
+* power-of-two OffscreenCanvas, and return a PackedAtlas with UV data and
+* name/id lookups.
+*
+* @param imageUrl  URL of the source sprite sheet image.
+* @param atlasJson Parsed TextureAtlasJson (frames + meta).
+* @param options   Optional loading screen and progress options.
+*/
+async function loadTextureAtlas(imageUrl, atlasJson, options = {}) {
+	const { showLoadingScreen = true, loadingText = "Loading...", container = typeof document !== "undefined" ? document.body : void 0, onProgress } = options;
+	let overlay = null;
+	if (showLoadingScreen && container) overlay = injectOverlay(loadingText, container);
+	try {
+		const blob = await (await fetch(imageUrl)).blob();
+		const source = await createImageBitmap(blob);
+		onProgress?.(1, 2);
+		const { entries, texSize } = computeLayout(atlasJson.frames);
+		let canvas;
+		let ctx;
+		if (typeof OffscreenCanvas !== "undefined") {
+			canvas = new OffscreenCanvas(texSize, texSize);
+			ctx = canvas.getContext("2d");
+		} else {
+			const el = document.createElement("canvas");
+			el.width = texSize;
+			el.height = texSize;
+			canvas = el;
+			ctx = el.getContext("2d");
+		}
+		for (const e of entries) blitSprite(ctx, source, e);
+		source.close();
+		onProgress?.(2, 2);
+		const sprites = /* @__PURE__ */ new Map();
+		const byId = [];
+		entries.forEach((e, idx) => {
+			const sprite = {
+				name: e.name,
+				id: idx,
+				uvX: e.destX / texSize,
+				uvY: e.destY / texSize,
+				uvW: e.outW / texSize,
+				uvH: e.outH / texSize,
+				pivot: e.frame.pivot ?? {
+					x: .5,
+					y: .5
+				},
+				rotation: e.frame.rotation ?? 0
+			};
+			sprites.set(e.name, sprite);
+			byId.push(sprite);
+		});
+		return {
+			texture: canvas,
+			sprites,
+			getByName: (name) => sprites.get(name),
+			getById: (id) => byId[id]
+		};
+	} finally {
+		overlay?.remove();
+	}
+}
+//#endregion
 //#region src/lib/dungeon/themes.ts
 var registry = /* @__PURE__ */ new Map();
 /** Built-in themes — available without calling registerTheme(). */
@@ -4248,6 +4393,6 @@ function showInventory(opts = {}) {
 	return handle;
 }
 //#endregion
-export { THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, getTheme, loadTiledMap, registerTheme, resolveTheme, showInventory };
+export { THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, getTheme, loadTextureAtlas, loadTiledMap, registerTheme, resolveSprite, resolveTheme, showInventory, toFaceRotation };
 
 //# sourceMappingURL=atomic-core.js.map

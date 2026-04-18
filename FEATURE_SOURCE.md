@@ -16,6 +16,7 @@ src/lib/
     tileAtlas.ts
     temperatureMask.ts
     billboardSprites.ts
+    textureLoader.ts
   dungeon/
     bsp.ts
     cellular.ts
@@ -72,6 +73,19 @@ src/lib/
 ---
 
 ## Feature map
+
+---
+
+### Texture Loader / Sprite Packer
+
+Two-phase system: load phase fetches a source image and a TexturePacker-format atlas JSON, unpacks each named sprite (undoing packer `rotated: true` during blit), and shelf-packs sprites into a power-of-two `OffscreenCanvas`. Runtime phase exposes a `PackedAtlas` that maps string names → UV rects, with `getByName()` / `getById()` helpers and a `resolveSprite()` utility that accepts `string | number`. `toFaceRotation()` converts the optional per-frame `rotation` field (0/90/180/270° CW) to the `FaceRotation` index used by the billboard / `FaceTileSpec` shader pathway.
+
+**Files:**
+- `rendering/textureLoader.ts` — public types (`AtlasFrame`, `TextureAtlasJson`, `PackedSprite`, `PackedAtlas`, `LoadingOptions`); `computeLayout()` shelf packer (POT, 2px padding, tallest-first sort); `blitSprite()` OffscreenCanvas blit with packer-rotation undo; `loadTextureAtlas()` orchestrates fetch → pack → blit → return; `injectOverlay()` full-screen loading screen; `resolveSprite()` name-or-id lookup helper; `toFaceRotation()` degree → FaceRotation index converter
+
+**Example:**
+- `examples/standalone/texture-loader/index.html`
+- `examples/standalone/texture-loader/texture-loader.js` — loads `textureAtlas.png` via embedded data URL, displays the baked packed texture, lists first 20 sprite names with UV coords, demonstrates `resolveSprite()` by name and id
 
 ---
 
