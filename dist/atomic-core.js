@@ -3176,7 +3176,11 @@ function createBillboard(entity, packedAtlas, scene, resolver) {
 				entry.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
 				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
-				entry.mesh.position.set(entry.baseLayer.offsetX ?? 0, entry.baseLayer.offsetY ?? 0, entry.layerIndex * .001);
+				const bob = entry.baseLayer.bob;
+				const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
+				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
+				const bobY = bob ? (bob.amplitudeY ?? 0) * Math.sin(bobTheta) : 0;
+				entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .001);
 			}
 		},
 		dispose() {

@@ -2,6 +2,16 @@ import { EntityBase } from '../entities/types';
 import { PackedAtlas } from './textureLoader';
 import * as THREE from "three";
 export type AngleKey = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
+export interface SpriteBob {
+    /** Peak horizontal displacement left/right of offsetX, in world units. Default 0. */
+    amplitudeX?: number;
+    /** Peak vertical displacement above/below offsetY, in world units. Default 0. */
+    amplitudeY?: number;
+    /** Oscillation speed in radians per second. Default 2. */
+    speed?: number;
+    /** Phase offset in radians, useful for staggering multiple layers. Default 0. */
+    phase?: number;
+}
 export interface SpriteLayer {
     /** Atlas tile: string name (resolved via resolver) or numeric tile index. */
     tile: string | number;
@@ -13,6 +23,8 @@ export interface SpriteLayer {
     scale?: number;
     /** Alpha multiplier [0,1]. Default 1. */
     opacity?: number;
+    /** Sinusoidal vertical bobbing animation applied on top of offsetY. */
+    bob?: SpriteBob;
 }
 export interface AngleOverride {
     /** Which layer index this override targets. */

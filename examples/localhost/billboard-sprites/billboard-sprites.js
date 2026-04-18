@@ -34,24 +34,42 @@ const posEl = document.getElementById("pos");
 function goblinSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
-    layers: [{ tile: "mob_goblin_base.png", opacity: 1.0 }],
-    layers: [{ tile: "mob_goblin_happy_head.png", opacity: 1.0 }],
+    layers: [
+      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      {
+        tile: "mob_goblin_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
   };
 }
 
 function skeletonSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
-    layers: [{ tile: "mob_goblin_base.png", opacity: 1.0 }],
-    layers: [{ tile: "mob_goblin_happy_head.png", opacity: 1.0 }],
+    layers: [
+      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      {
+        tile: "mob_goblin_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
   };
 }
 
 function orcSpriteMap() {
   return {
     frameSize: { w: 64, h: 64 },
-    layers: [{ tile: "mob_goblin_base.png", opacity: 1.0 }],
-    layers: [{ tile: "mob_goblin_happy_head.png", opacity: 1.0 }],
+    layers: [
+      { tile: "mob_goblin_base.png", opacity: 1.0 },
+      {
+        tile: "mob_goblin_happy_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
+    ],
   };
 }
 
