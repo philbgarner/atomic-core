@@ -19,7 +19,8 @@ const toggleAllBtn   = document.getElementById("toggle-all-btn");
 const popup       = document.getElementById("json-popup");
 const popupTitle  = document.getElementById("json-popup-title");
 const popupBody   = document.getElementById("json-popup-body");
-const popupClose  = document.getElementById("json-popup-close");
+const popupClose   = document.getElementById("json-popup-close");
+const popupSprite  = document.getElementById("json-popup-sprite");
 
 const ctx = outputCanvas.getContext("2d");
 
@@ -170,7 +171,31 @@ function renderList() {
 function showPopup(name) {
   popupTitle.textContent = name;
   popupBody.textContent  = JSON.stringify(sourceFrames[name], null, 2);
-  popup.style.display    = "flex";
+
+  const sprite = currentAtlas && currentAtlas.getByName(name);
+  if (sprite && baseImageData) {
+    const aw = outputCanvas.width;
+    const ah = outputCanvas.height;
+    const sx = Math.round(sprite.uvX * aw);
+    const sy = Math.round(sprite.uvY * ah);
+    const sw = Math.round(sprite.uvW * aw);
+    const sh = Math.round(sprite.uvH * ah);
+    popupSprite.width  = sw;
+    popupSprite.height = sh;
+    popupSprite.style.display = "block";
+    const sCtx = popupSprite.getContext("2d");
+    const regionData = new ImageData(sw, sh);
+    for (let row = 0; row < sh; row++) {
+      const srcOff = ((sy + row) * aw + sx) * 4;
+      const dstOff = row * sw * 4;
+      regionData.data.set(baseImageData.data.subarray(srcOff, srcOff + sw * 4), dstOff);
+    }
+    sCtx.putImageData(regionData, 0, 0);
+  } else {
+    popupSprite.style.display = "none";
+  }
+
+  popup.style.display = "flex";
 }
 
 toggleAllBtn.addEventListener("click", () => {
