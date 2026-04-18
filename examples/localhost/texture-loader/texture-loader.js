@@ -16,6 +16,7 @@ const spriteListEl = document.getElementById("sprite-list");
 const outputCanvas = document.getElementById("packed-canvas");
 const downloadBtn    = document.getElementById("download-btn");
 const toggleAllBtn   = document.getElementById("toggle-all-btn");
+const spriteFilterEl = document.getElementById("sprite-filter");
 const popup       = document.getElementById("json-popup");
 const popupTitle  = document.getElementById("json-popup-title");
 const popupBody   = document.getElementById("json-popup-body");
@@ -30,6 +31,7 @@ let showOverlay   = false;
 let sourceFrames  = null;   // merged frames from all atlases, for JSON popup
 let allSources    = null;   // [{ imageUrl, atlasJson }, ...]
 let enabledSprites = new Set();
+let filterText     = "";
 let baseImageData  = null;  // canvas pixels after overlays, used for hover restore
 let repacking      = false;
 
@@ -116,15 +118,22 @@ function clearHighlight() {
 // Sprite list
 // ---------------------------------------------------------------------------
 
+function visibleNames() {
+  const needle = filterText.toLowerCase();
+  const names  = Object.keys(sourceFrames ?? {});
+  return needle ? names.filter((n) => n.toLowerCase().includes(needle)) : names;
+}
+
 function updateToggleLabel() {
-  const allEnabled = enabledSprites.size === Object.keys(sourceFrames ?? {}).length;
+  const visible    = visibleNames();
+  const allEnabled = visible.length > 0 && visible.every((n) => enabledSprites.has(n));
   toggleAllBtn.textContent = allEnabled ? "select none" : "select all";
 }
 
 function renderList() {
   spriteListEl.innerHTML = "";
 
-  for (const name of Object.keys(sourceFrames)) {
+  for (const name of visibleNames()) {
     const sprite  = currentAtlas.getByName(name);
     const enabled = enabledSprites.has(name);
 
@@ -204,17 +213,23 @@ function showPopup(name) {
 
 toggleAllBtn.addEventListener("click", () => {
   if (repacking) return;
-  const allEnabled = enabledSprites.size === Object.keys(sourceFrames ?? {}).length;
+  const visible    = visibleNames();
+  const allEnabled = visible.length > 0 && visible.every((n) => enabledSprites.has(n));
   if (allEnabled) {
-    enabledSprites.clear();
+    for (const name of visible) enabledSprites.delete(name);
   } else {
-    for (const name of Object.keys(sourceFrames ?? {})) enabledSprites.add(name);
+    for (const name of visible) enabledSprites.add(name);
   }
   repack();
 });
 
 popupClose.addEventListener("click", () => { popup.style.display = "none"; });
 popup.addEventListener("click", (e) => { if (e.target === popup) popup.style.display = "none"; });
+
+spriteFilterEl.addEventListener("input", () => {
+  filterText = spriteFilterEl.value.trim();
+  if (currentAtlas) renderList();
+});
 
 overlayCb.addEventListener("change", () => {
   showOverlay = overlayCb.checked;

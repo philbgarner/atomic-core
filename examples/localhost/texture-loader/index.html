@@ -205,9 +205,11 @@
                 </label>
             </div>
 
-            <h2 style="display:flex;align-items:center;justify-content:space-between;">
-                <span>Packed Sprites</span>
-                <button id="toggle-all-btn" style="font-family:monospace;font-size:7px;padding:1px 5px;background:transparent;border:1px solid var(--border);color:var(--desc);cursor:pointer;letter-spacing:0.05em;">none</button>
+            <h2 style="display:flex;align-items:center;gap:4px;">
+                <span style="flex-shrink:0;">Packed Sprites</span>
+                <input id="sprite-filter" type="search" placeholder="filter…"
+                    style="flex:1;min-width:0;font-family:monospace;font-size:7px;padding:1px 4px;background:transparent;border:1px solid var(--border);color:var(--desc);outline:none;letter-spacing:0.05em;" />
+                <button id="toggle-all-btn" style="flex-shrink:0;font-family:monospace;font-size:7px;padding:1px 5px;background:transparent;border:1px solid var(--border);color:var(--desc);cursor:pointer;letter-spacing:0.05em;">none</button>
             </h2>
             <div id="sprite-list"></div>
 
