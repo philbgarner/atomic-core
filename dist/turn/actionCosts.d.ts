@@ -6,5 +6,6 @@ export declare const BASE_TIME = 100;
  * Faster actors (higher speed) get smaller delays.
  */
 export declare function actionDelay(speed: number, action: TurnAction): number;
+/** Clamp `value` to the inclusive range [min, max]. */
 export declare function clamp(min: number, max: number, value: number): number;
 //# sourceMappingURL=actionCosts.d.ts.map

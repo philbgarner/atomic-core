@@ -32,5 +32,6 @@ export declare function consumePassageStep(state: PassageTraversalState & {
     };
     next: PassageTraversalState;
 };
+/** Cancel any active traversal and return the idle state. */
 export declare function cancelPassageTraversal(): PassageTraversalState;
 //# sourceMappingURL=traversal.d.ts.map

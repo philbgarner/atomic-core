@@ -12,6 +12,10 @@ export type MonsterAlertConfig = {
  * danger 10 → detectionRadius 10, giveUpTurns 12
  */
 export declare function monsterAlertConfig(danger: number): MonsterAlertConfig;
+/**
+ * Compute an A* path from `monsterId` to the player.
+ * Returns the full path (inclusive of start) or null if unreachable / either actor is dead.
+ */
 export declare function computeChasePathToPlayer(state: TurnSystemState, monsterId: ActorId, dungeon: DungeonOutputs, isWalkable: (x: number, y: number) => boolean, opts?: {
     maxSteps?: number;
 }): GridPos[] | null;

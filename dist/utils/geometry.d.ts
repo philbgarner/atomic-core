@@ -4,10 +4,15 @@
  */
 export declare class MinHeap<T> {
     private _heap;
+    /** Number of elements currently in the heap. */
     get size(): number;
+    /** Insert a value with the given numeric priority. */
     push(priority: number, value: T): void;
+    /** Remove and return the value with the lowest priority, or `undefined` if empty. */
     pop(): T | undefined;
+    /** Return the lowest-priority value without removing it, or `undefined` if empty. */
     peek(): T | undefined;
+    /** Return the lowest priority value in the heap, or `Infinity` if empty. */
     peekPriority(): number;
     private _bubbleUp;
     private _siftDown;

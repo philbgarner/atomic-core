@@ -42,6 +42,10 @@ export type Camera = {
     /** Remove DOM event listeners. */
     destroy(): void;
 };
+/**
+ * Create an analog first-person camera with wall-sliding collision.
+ * Moves continuously while keys are held (WASD / arrows). Call `update(dt)` each frame.
+ */
 export declare function createCamera(options: CameraOptions): Camera;
 export type EotBKeybindings = {
     moveForward: string[];
@@ -102,5 +106,10 @@ export type EotBCamera = {
     /** Remove DOM event listeners. */
     destroy(): void;
 };
+/**
+ * Create a grid-locked Eye of the Beholder style camera.
+ * Moves one cell per key press with lerp animation and configurable keybindings.
+ * Call `update(timestamp)` each frame with the value from `requestAnimationFrame`.
+ */
 export declare function createEotBCamera(options: EotBCameraOptions): EotBCamera;
 //# sourceMappingURL=camera.d.ts.map

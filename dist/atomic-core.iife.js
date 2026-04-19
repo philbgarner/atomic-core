@@ -848,6 +848,7 @@ var AtomicCore = (function(exports, three) {
 		reschedule(actorId, delay) {
 			this.add(actorId, delay);
 		}
+		/** Return the current absolute time (updated by `next()`). */
 		getNow() {
 			return this.now;
 		}
@@ -966,6 +967,7 @@ var AtomicCore = (function(exports, three) {
 	}
 	//#endregion
 	//#region src/lib/events/eventEmitter.ts
+	/** Create a typed event emitter that dispatches `GameEventMap` events. */
 	function createEventEmitter() {
 		const handlers = {};
 		return {
@@ -1111,9 +1113,11 @@ var AtomicCore = (function(exports, three) {
 		constructor() {
 			this._heap = [];
 		}
+		/** Number of elements currently in the heap. */
 		get size() {
 			return this._heap.length;
 		}
+		/** Insert a value with the given numeric priority. */
 		push(priority, value) {
 			this._heap.push({
 				priority,
@@ -1121,6 +1125,7 @@ var AtomicCore = (function(exports, three) {
 			});
 			this._bubbleUp(this._heap.length - 1);
 		}
+		/** Remove and return the value with the lowest priority, or `undefined` if empty. */
 		pop() {
 			if (this._heap.length === 0) return void 0;
 			const top = this._heap[0].value;
@@ -1131,9 +1136,11 @@ var AtomicCore = (function(exports, three) {
 			}
 			return top;
 		}
+		/** Return the lowest-priority value without removing it, or `undefined` if empty. */
 		peek() {
 			return this._heap[0]?.value;
 		}
+		/** Return the lowest priority value in the heap, or `Infinity` if empty. */
 		peekPriority() {
 			return this._heap[0]?.priority ?? Infinity;
 		}
@@ -1743,9 +1750,17 @@ var AtomicCore = (function(exports, three) {
 	function createKeybindings(options) {
 		const keyToAction = /* @__PURE__ */ new Map();
 		for (const [action, keys] of Object.entries(options.bindings)) for (const key of keys) keyToAction.set(key, action);
+		const repeatDelayMs = options.repeatDelayMs ?? 150;
+		const lastFired = /* @__PURE__ */ new Map();
 		function handleKeydown(event) {
 			const action = keyToAction.get(event.key);
-			if (action !== void 0) options.onAction(action, event);
+			if (action === void 0) return;
+			if (event.repeat && repeatDelayMs > 0) {
+				const last = lastFired.get(event.key) ?? 0;
+				if (event.timeStamp - last < repeatDelayMs) return;
+			}
+			lastFired.set(event.key, event.timeStamp);
+			options.onAction(action, event);
 		}
 		document.addEventListener("keydown", handleKeydown);
 		return { destroy() {
@@ -1754,6 +1769,11 @@ var AtomicCore = (function(exports, three) {
 	}
 	//#endregion
 	//#region src/lib/utils/rng.ts
+	/**
+	* Create a seeded LCG pseudo-random number generator.
+	* Uses Numerical Recipes constants. Returns a function that yields
+	* deterministic values in [0, 1) for a given seed.
+	*/
 	function makeRng(seed) {
 		let s = seed >>> 0;
 		return () => {
@@ -1766,6 +1786,13 @@ var AtomicCore = (function(exports, three) {
 	function recordToPublic(r) {
 		return r;
 	}
+	/**
+	* Create the mission system.
+	*
+	* @param events     Game event emitter — used to fire `mission-complete` on success.
+	* @param transport  Optional multiplayer transport — used to broadcast completions to peers.
+	* @returns          A `MissionsHandle` for adding, removing, and evaluating missions.
+	*/
 	function createMissionSystem(events, transport) {
 		const records = /* @__PURE__ */ new Map();
 		function completeRecord(record, turn) {
@@ -3861,6 +3888,12 @@ void main() {
 	}
 	//#endregion
 	//#region src/lib/transport/websocket.ts
+	/**
+	* Create a browser-side WebSocket transport for multiplayer.
+	* Pass the returned `ActionTransport` to `createGame()` via `GameOptions.transport`.
+	*
+	* @param url  WebSocket server URL (e.g. `"ws://localhost:3001"`).
+	*/
 	function createWebSocketTransport(url) {
 		let ws = null;
 		let _playerId = null;

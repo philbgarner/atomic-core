@@ -22,6 +22,12 @@ export type KeybindingsOptions = {
    * @param event   The raw KeyboardEvent.
    */
   onAction(action: string, event: KeyboardEvent): void;
+  /**
+   * Minimum milliseconds between repeated firings when a key is held down.
+   * The first press always fires immediately; subsequent auto-repeats are
+   * throttled to at most one per `repeatDelayMs`. Defaults to 150 ms.
+   */
+  repeatDelayMs?: number;
 };
 
 /** Handle returned by `createKeybindings`; call `destroy()` to remove the listener. */
@@ -48,11 +54,21 @@ export function createKeybindings(options: KeybindingsOptions): KeybindingsHandl
     }
   }
 
+  const repeatDelayMs = options.repeatDelayMs ?? 150;
+  // Tracks the timestamp of the last fired event per key (for repeat throttling).
+  const lastFired = new Map<string, number>();
+
   function handleKeydown(event: KeyboardEvent): void {
     const action = keyToAction.get(event.key);
-    if (action !== undefined) {
-      options.onAction(action, event);
+    if (action === undefined) return;
+
+    if (event.repeat && repeatDelayMs > 0) {
+      const last = lastFired.get(event.key) ?? 0;
+      if (event.timeStamp - last < repeatDelayMs) return;
     }
+
+    lastFired.set(event.key, event.timeStamp);
+    options.onAction(action, event);
   }
 
   document.addEventListener("keydown", handleKeydown);

@@ -21,6 +21,7 @@ export declare class TurnScheduler {
     } | null;
     /** Re-schedule an actor after it has acted. */
     reschedule(actorId: ActorId, delay: number): void;
+    /** Return the current absolute time (updated by `next()`). */
     getNow(): number;
     get size(): number;
 }

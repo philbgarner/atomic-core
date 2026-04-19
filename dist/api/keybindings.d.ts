@@ -9,6 +9,12 @@ export type KeybindingsOptions = {
      * @param event   The raw KeyboardEvent.
      */
     onAction(action: string, event: KeyboardEvent): void;
+    /**
+     * Minimum milliseconds between repeated firings when a key is held down.
+     * The first press always fires immediately; subsequent auto-repeats are
+     * throttled to at most one per `repeatDelayMs`. Defaults to 150 ms.
+     */
+    repeatDelayMs?: number;
 };
 /** Handle returned by `createKeybindings`; call `destroy()` to remove the listener. */
 export type KeybindingsHandle = {
