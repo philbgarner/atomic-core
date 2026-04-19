@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Mouse Handlers</title>
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>atomic-core</h1>
+
+            <div id="stats">
+                HP: <span id="hp">—</span><br />
+                Turn: <span id="turn">0</span><br />
+                Pos: <span id="pos">—</span>
+            </div>
+
+            <div id="cell-info">
+                <div class="section-label">-- hover --</div>
+                <div id="hover-info" class="cell-row muted">none</div>
+
+                <div class="section-label" style="margin-top:12px">-- click --</div>
+                <div id="click-info" class="cell-row muted">none</div>
+            </div>
+
+            <div id="debug-panel">
+                <div class="section-label">-- debug --</div>
+                <button id="btn-region-colors" class="debug-btn">Region Colors: OFF</button>
+            </div>
+
+            <div id="log"></div>
+
+            <div id="controls">
+                WASD / Arrows — move<br />
+                Q / E — turn<br />
+                Space — wait<br />
+                Mouse — hover / click cell
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./mouse-handlers.js" defer></script>
+    </body>
+</html>

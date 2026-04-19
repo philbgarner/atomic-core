@@ -3979,6 +3979,78 @@ void main() {
 		ro.observe(element);
 		resize();
 		rafId = requestAnimationFrame(tick);
+		const raycaster = new three.Raycaster();
+		const floorPlane = new three.Plane(new three.Vector3(0, 1, 0), 0);
+		const _mouseNdc = new three.Vector2();
+		const _hitPt = new three.Vector3();
+		function getCellAtPointer(clientX, clientY) {
+			const outputs = game.dungeon.outputs;
+			if (!outputs) return null;
+			const rect = canvas.getBoundingClientRect();
+			_mouseNdc.x = (clientX - rect.left) / rect.width * 2 - 1;
+			_mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+			raycaster.setFromCamera(_mouseNdc, camera);
+			if (!raycaster.ray.intersectPlane(floorPlane, _hitPt)) return null;
+			const cx = Math.floor(_hitPt.x / tileSize);
+			const cz = Math.floor(_hitPt.z / tileSize);
+			const { width, height } = outputs;
+			if (cx < 0 || cz < 0 || cx >= width || cz >= height) return null;
+			const idx = cz * width + cx;
+			if ((outputs.textures.solid.image.data[idx] ?? 1) > 0) return null;
+			const regionData = outputs.textures.regionId?.image.data;
+			return {
+				cx,
+				cz,
+				regionId: regionData ? regionData[idx] ?? 0 : 0
+			};
+		}
+		let _lastHoverKey = null;
+		function onCanvasClick(e) {
+			if (!options.onCellClick) return;
+			const info = getCellAtPointer(e.clientX, e.clientY);
+			if (info) options.onCellClick(info);
+		}
+		function onCanvasPointerMove(e) {
+			if (!options.onCellHover) return;
+			const info = getCellAtPointer(e.clientX, e.clientY);
+			const key = info ? `${info.cx},${info.cz}` : null;
+			if (key === _lastHoverKey) return;
+			_lastHoverKey = key;
+			options.onCellHover(info);
+		}
+		function onCanvasPointerLeave() {
+			if (!options.onCellHover) return;
+			if (_lastHoverKey !== null) {
+				_lastHoverKey = null;
+				options.onCellHover(null);
+			}
+		}
+		if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);
+		if (options.onCellHover) {
+			canvas.addEventListener("pointermove", onCanvasPointerMove);
+			canvas.addEventListener("pointerleave", onCanvasPointerLeave);
+		}
+		function internalAddLayer(spec) {
+			const holder = { mesh: null };
+			if (dungeonBuilt) {
+				holder.mesh = buildLayerMesh(spec);
+				if (holder.mesh) scene.add(holder.mesh);
+			}
+			const entry = {
+				spec,
+				holder
+			};
+			layerEntries.push(entry);
+			return { remove() {
+				if (holder.mesh) {
+					scene.remove(holder.mesh);
+					holder.mesh.geometry.dispose();
+					holder.mesh = null;
+				}
+				const i = layerEntries.indexOf(entry);
+				if (i !== -1) layerEntries.splice(i, 1);
+			} };
+		}
 		return {
 			setEntities(entities) {
 				currentEntities = entities;
@@ -4004,24 +4076,53 @@ void main() {
 				return packedAtlas ? makeAtlasMaterial() : null;
 			},
 			addLayer(spec) {
-				const holder = { mesh: null };
-				if (dungeonBuilt) {
-					holder.mesh = buildLayerMesh(spec);
-					if (holder.mesh) scene.add(holder.mesh);
-				}
-				const entry = {
-					spec,
-					holder
-				};
-				layerEntries.push(entry);
-				return { remove() {
-					if (holder.mesh) {
-						scene.remove(holder.mesh);
-						holder.mesh.geometry.dispose();
-						holder.mesh = null;
+				return internalAddLayer(spec);
+			},
+			highlightCells(filter) {
+				const outputs = game.dungeon.outputs;
+				const regionData = outputs?.textures.regionId?.image.data;
+				const solid = outputs?.textures.solid?.image.data;
+				const width = outputs?.width ?? 0;
+				const height = outputs?.height ?? 0;
+				const colorGroups = /* @__PURE__ */ new Map();
+				for (let cz = 0; cz < height; cz++) for (let cx = 0; cx < width; cx++) {
+					const idx = cz * width + cx;
+					if (solid && (solid[idx] ?? 1) > 0) continue;
+					const regionId = regionData ? regionData[idx] ?? 0 : 0;
+					const color = filter(cx, cz, regionId);
+					if (!color) continue;
+					let group = colorGroups.get(color);
+					if (!group) {
+						group = /* @__PURE__ */ new Set();
+						colorGroups.set(color, group);
 					}
-					const i = layerEntries.indexOf(entry);
-					if (i !== -1) layerEntries.splice(i, 1);
+					group.add(idx);
+				}
+				const subHandles = [];
+				const subMaterials = [];
+				for (const [color, cellIdxSet] of colorGroups) {
+					const mat = new three.MeshBasicMaterial({
+						color: new three.Color(color),
+						transparent: true,
+						opacity: .4,
+						depthWrite: false
+					});
+					subMaterials.push(mat);
+					const handle = internalAddLayer({
+						target: "floor",
+						material: mat,
+						useAtlas: false,
+						polygonOffset: true,
+						filter(cx, cz) {
+							const i = cz * width + cx;
+							return cellIdxSet.has(i) ? {} : false;
+						}
+					});
+					subHandles.push(handle);
+				}
+				return { remove() {
+					for (const h of subHandles) h.remove();
+					for (const m of subMaterials) m.dispose();
 				} };
 			},
 			rebuild() {
@@ -4048,6 +4149,9 @@ void main() {
 				cancelAnimationFrame(rafId);
 				ro.disconnect();
 				game.events.off("turn", onTurn);
+				canvas.removeEventListener("click", onCanvasClick);
+				canvas.removeEventListener("pointermove", onCanvasPointerMove);
+				canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
 				for (const geo of entityGeoCache.values()) geo.dispose();
 				for (const mat of entityMatCache.values()) mat.dispose();
 				for (const handle of billboardMap.values()) handle.dispose();

@@ -44,6 +44,18 @@ export type { SpriteMap } from "./billboardSprites";
 // Public types
 // ---------------------------------------------------------------------------
 
+/**
+ * Information about a dungeon cell returned by mouse interaction callbacks.
+ */
+export type CellInfo = {
+  /** Grid column (0-based). */
+  cx: number;
+  /** Grid row (0-based). */
+  cz: number;
+  /** Region/room ID from the dungeon's regionId texture (0 = unassigned). */
+  regionId: number;
+};
+
 export type DungeonRendererOptions = {
   /** Camera field of view in degrees. Default: 75. */
   fov?: number;
@@ -106,6 +118,18 @@ export type DungeonRendererOptions = {
    * Unmatched entities use built-in defaults (0.35×0.55×0.35 tileSize fractions, red).
    */
   entityAppearances?: Record<string, EntityAppearanceSpec>;
+  /**
+   * Called when the user clicks on a floor cell in the dungeon.
+   * The click is resolved by casting a ray from the camera through the
+   * mouse position and intersecting it with the floor plane (y = 0).
+   */
+  onCellClick?: (info: CellInfo) => void;
+  /**
+   * Called whenever the hovered cell changes (including when the cursor
+   * leaves the dungeon surface, in which case `info` is `null`).
+   * Throttled: only fires when the cell actually changes.
+   */
+  onCellHover?: (info: CellInfo | null) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -222,6 +246,31 @@ export type DungeonRenderer = {
    * Returns `null` when no atlas was passed to `createDungeonRenderer`.
    */
   createAtlasMaterial(): THREE.ShaderMaterial | null;
+  /**
+   * Overlay coloured floor highlights on a subset of cells.
+   *
+   * The `filter` is called for every non-solid floor cell and should return a
+   * CSS colour string to highlight that cell, or a falsy value to skip it.
+   * The `regionId` argument lets callers colour-code cells by room/corridor
+   * without extra bookkeeping.
+   *
+   * Returns a `LayerHandle` whose `remove()` tears the overlay down.
+   * May be called before or after `game.generate()`.
+   *
+   * Example — highlight all cells in room 3 red, corridor cells yellow:
+   * ```ts
+   * const handle = renderer.highlightCells((cx, cz, regionId) => {
+   *   if (regionId === 3) return 'red';
+   *   if (regionId > 100) return 'rgba(255,255,0,0.3)';
+   *   return null;
+   * });
+   * // later:
+   * handle.remove();
+   * ```
+   */
+  highlightCells(
+    filter: (cx: number, cz: number, regionId: number) => string | null | false | undefined,
+  ): LayerHandle;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -1137,6 +1186,85 @@ export function createDungeonRenderer(
 
   rafId = requestAnimationFrame(tick);
 
+  // ── Mouse / cell picking ──────────────────────────────────────────────────
+  const raycaster = new THREE.Raycaster();
+  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const _mouseNdc = new THREE.Vector2();
+  const _hitPt = new THREE.Vector3();
+
+  function getCellAtPointer(clientX: number, clientY: number): CellInfo | null {
+    const outputs = game.dungeon.outputs;
+    if (!outputs) return null;
+    const rect = canvas.getBoundingClientRect();
+    _mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(_mouseNdc, camera);
+    if (!raycaster.ray.intersectPlane(floorPlane, _hitPt)) return null;
+    const cx = Math.floor(_hitPt.x / tileSize);
+    const cz = Math.floor(_hitPt.z / tileSize);
+    const { width, height } = outputs;
+    if (cx < 0 || cz < 0 || cx >= width || cz >= height) return null;
+    const idx = cz * width + cx;
+    const solid = outputs.textures.solid.image.data as Uint8Array;
+    if ((solid[idx] ?? 1) > 0) return null;
+    const regionData = outputs.textures.regionId?.image.data as Uint8Array | undefined;
+    const regionId = regionData ? (regionData[idx] ?? 0) : 0;
+    return { cx, cz, regionId };
+  }
+
+  let _lastHoverKey: string | null = null;
+
+  function onCanvasClick(e: MouseEvent) {
+    if (!options.onCellClick) return;
+    const info = getCellAtPointer(e.clientX, e.clientY);
+    if (info) options.onCellClick(info);
+  }
+
+  function onCanvasPointerMove(e: PointerEvent) {
+    if (!options.onCellHover) return;
+    const info = getCellAtPointer(e.clientX, e.clientY);
+    const key = info ? `${info.cx},${info.cz}` : null;
+    if (key === _lastHoverKey) return;
+    _lastHoverKey = key;
+    options.onCellHover(info);
+  }
+
+  function onCanvasPointerLeave() {
+    if (!options.onCellHover) return;
+    if (_lastHoverKey !== null) {
+      _lastHoverKey = null;
+      options.onCellHover(null);
+    }
+  }
+
+  if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);
+  if (options.onCellHover) {
+    canvas.addEventListener("pointermove", onCanvasPointerMove);
+    canvas.addEventListener("pointerleave", onCanvasPointerLeave);
+  }
+
+  // ── Internal addLayer ─────────────────────────────────────────────────────
+  function internalAddLayer(spec: LayerSpec): LayerHandle {
+    const holder: { mesh: THREE.InstancedMesh | null } = { mesh: null };
+    if (dungeonBuilt) {
+      holder.mesh = buildLayerMesh(spec);
+      if (holder.mesh) scene.add(holder.mesh);
+    }
+    const entry: LayerEntry = { spec, holder };
+    layerEntries.push(entry);
+    return {
+      remove() {
+        if (holder.mesh) {
+          scene.remove(holder.mesh);
+          holder.mesh.geometry.dispose();
+          holder.mesh = null;
+        }
+        const i = layerEntries.indexOf(entry);
+        if (i !== -1) layerEntries.splice(i, 1);
+      },
+    };
+  }
+
   // ── Public handle ─────────────────────────────────────────────────────────
   return {
     setEntities(entities) {
@@ -1160,22 +1288,58 @@ export function createDungeonRenderer(
       return packedAtlas ? makeAtlasMaterial() : null;
     },
     addLayer(spec: LayerSpec): LayerHandle {
-      const holder: { mesh: THREE.InstancedMesh | null } = { mesh: null };
-      if (dungeonBuilt) {
-        holder.mesh = buildLayerMesh(spec);
-        if (holder.mesh) scene.add(holder.mesh);
+      return internalAddLayer(spec);
+    },
+    highlightCells(filter) {
+      const outputs = game.dungeon.outputs;
+      const regionData = outputs?.textures.regionId?.image.data as Uint8Array | undefined;
+      const solid = outputs?.textures.solid?.image.data as Uint8Array | undefined;
+      const width = outputs?.width ?? 0;
+      const height = outputs?.height ?? 0;
+
+      // Group cells by color string.
+      const colorGroups = new Map<string, Set<number>>();
+      for (let cz = 0; cz < height; cz++) {
+        for (let cx = 0; cx < width; cx++) {
+          const idx = cz * width + cx;
+          if (solid && (solid[idx] ?? 1) > 0) continue;
+          const regionId = regionData ? (regionData[idx] ?? 0) : 0;
+          const color = filter(cx, cz, regionId);
+          if (!color) continue;
+          let group = colorGroups.get(color);
+          if (!group) { group = new Set(); colorGroups.set(color, group); }
+          group.add(idx);
+        }
       }
-      const entry: LayerEntry = { spec, holder };
-      layerEntries.push(entry);
+
+      const subHandles: LayerHandle[] = [];
+      const subMaterials: THREE.MeshBasicMaterial[] = [];
+
+      for (const [color, cellIdxSet] of colorGroups) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color),
+          transparent: true,
+          opacity: 0.4,
+          depthWrite: false,
+        });
+        subMaterials.push(mat);
+        const handle = internalAddLayer({
+          target: "floor",
+          material: mat,
+          useAtlas: false,
+          polygonOffset: true,
+          filter(cx, cz) {
+            const i = cz * width + cx;
+            return cellIdxSet.has(i) ? {} : false;
+          },
+        });
+        subHandles.push(handle);
+      }
+
       return {
         remove() {
-          if (holder.mesh) {
-            scene.remove(holder.mesh);
-            holder.mesh.geometry.dispose();
-            holder.mesh = null;
-          }
-          const i = layerEntries.indexOf(entry);
-          if (i !== -1) layerEntries.splice(i, 1);
+          for (const h of subHandles) h.remove();
+          for (const m of subMaterials) m.dispose();
         },
       };
     },
@@ -1209,6 +1373,9 @@ export function createDungeonRenderer(
       cancelAnimationFrame(rafId);
       ro.disconnect();
       game.events.off("turn", onTurn);
+      canvas.removeEventListener("click", onCanvasClick);
+      canvas.removeEventListener("pointermove", onCanvasPointerMove);
+      canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
       for (const geo of entityGeoCache.values()) geo.dispose();
       for (const mat of entityMatCache.values()) mat.dispose();
       for (const handle of billboardMap.values()) handle.dispose();

@@ -29,6 +29,17 @@ import { PackedAtlas } from './textureLoader';
 import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
 export type { SpriteMap } from './billboardSprites';
+/**
+ * Information about a dungeon cell returned by mouse interaction callbacks.
+ */
+export type CellInfo = {
+    /** Grid column (0-based). */
+    cx: number;
+    /** Grid row (0-based). */
+    cz: number;
+    /** Region/room ID from the dungeon's regionId texture (0 = unassigned). */
+    regionId: number;
+};
 export type DungeonRendererOptions = {
     /** Camera field of view in degrees. Default: 75. */
     fov?: number;
@@ -91,6 +102,18 @@ export type DungeonRendererOptions = {
      * Unmatched entities use built-in defaults (0.35×0.55×0.35 tileSize fractions, red).
      */
     entityAppearances?: Record<string, EntityAppearanceSpec>;
+    /**
+     * Called when the user clicks on a floor cell in the dungeon.
+     * The click is resolved by casting a ray from the camera through the
+     * mouse position and intersecting it with the floor plane (y = 0).
+     */
+    onCellClick?: (info: CellInfo) => void;
+    /**
+     * Called whenever the hovered cell changes (including when the cursor
+     * leaves the dungeon surface, in which case `info` is `null`).
+     * Throttled: only fires when the cell actually changes.
+     */
+    onCellHover?: (info: CellInfo | null) => void;
 };
 /** Which class of dungeon geometry a layer targets. */
 export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
@@ -188,6 +211,29 @@ export type DungeonRenderer = {
      * Returns `null` when no atlas was passed to `createDungeonRenderer`.
      */
     createAtlasMaterial(): THREE.ShaderMaterial | null;
+    /**
+     * Overlay coloured floor highlights on a subset of cells.
+     *
+     * The `filter` is called for every non-solid floor cell and should return a
+     * CSS colour string to highlight that cell, or a falsy value to skip it.
+     * The `regionId` argument lets callers colour-code cells by room/corridor
+     * without extra bookkeeping.
+     *
+     * Returns a `LayerHandle` whose `remove()` tears the overlay down.
+     * May be called before or after `game.generate()`.
+     *
+     * Example — highlight all cells in room 3 red, corridor cells yellow:
+     * ```ts
+     * const handle = renderer.highlightCells((cx, cz, regionId) => {
+     *   if (regionId === 3) return 'red';
+     *   if (regionId > 100) return 'rgba(255,255,0,0.3)';
+     *   return null;
+     * });
+     * // later:
+     * handle.remove();
+     * ```
+     */
+    highlightCells(filter: (cx: number, cz: number, regionId: number) => string | null | false | undefined): LayerHandle;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };
