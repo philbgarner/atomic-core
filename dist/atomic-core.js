@@ -3574,6 +3574,12 @@ function createDungeonRenderer(element, game, options = {}) {
 	let floorEdgeMesh = null;
 	let ceilEdgeMesh = null;
 	let dungeonBuilt = false;
+	let floorCellMap = [];
+	let ceilCellMap = [];
+	let wallCellMap = [];
+	let floorEdgeCellMap = [];
+	let ceilEdgeCellMap = [];
+	const meshToCellMap = /* @__PURE__ */ new Map();
 	const layerEntries = [];
 	/** Build an instanced mesh for a single LayerSpec by scanning the dungeon map. */
 	function buildLayerMesh(spec) {
@@ -3696,6 +3702,11 @@ function createDungeonRenderer(element, game, options = {}) {
 				rotation: 0
 			};
 		}
+		floorCellMap = [];
+		ceilCellMap = [];
+		wallCellMap = [];
+		floorEdgeCellMap = [];
+		ceilEdgeCellMap = [];
 		const floors = [];
 		const ceils = [];
 		const walls = [];
@@ -3739,34 +3750,58 @@ function createDungeonRenderer(element, game, options = {}) {
 				floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
 				floorRects.push(getUvRect(floorId));
 				floorOffsets.push((floorVal - 128) * offsetStep);
+				floorCellMap.push({
+					cx,
+					cz
+				});
 			}
 			const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
 			ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
 			ceilRects.push(getUvRect(ceilId));
 			ceilOffsets.push(-(ceilVal - 128) * offsetStep);
+			ceilCellMap.push({
+				cx,
+				cz
+			});
 			if (isSolid(cx, cz - 1)) {
 				const s = spec(wallTiles, "north", wallId);
 				walls.push(makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
 				wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 				wallRots.push(s.rotation ?? 0);
+				wallCellMap.push({
+					cx,
+					cz
+				});
 			}
 			if (isSolid(cx, cz + 1)) {
 				const s = spec(wallTiles, "south", wallId);
 				walls.push(makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH));
 				wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 				wallRots.push(s.rotation ?? 0);
+				wallCellMap.push({
+					cx,
+					cz
+				});
 			}
 			if (isSolid(cx - 1, cz)) {
 				const s = spec(wallTiles, "west", wallId);
 				walls.push(makeFaceMatrix(cx * tileSize, wallMidY, wz, 0, HALF_PI, 0, tileSize, ceilingH));
 				wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 				wallRots.push(s.rotation ?? 0);
+				wallCellMap.push({
+					cx,
+					cz
+				});
 			}
 			if (isSolid(cx + 1, cz)) {
 				const s = spec(wallTiles, "east", wallId);
 				walls.push(makeFaceMatrix((cx + 1) * tileSize, wallMidY, wz, 0, -HALF_PI, 0, tileSize, ceilingH));
 				wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 				wallRots.push(s.rotation ?? 0);
+				wallCellMap.push({
+					cx,
+					cz
+				});
 			}
 			if (floorVal !== 0) {
 				const currentFloorY = (floorVal - 128) * offsetStep;
@@ -3782,6 +3817,10 @@ function createDungeonRenderer(element, game, options = {}) {
 						floorEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 						floorEdgeRots.push(s.rotation ?? 0);
 						floorEdgeHeightScales.push(1);
+						floorEdgeCellMap.push({
+							cx,
+							cz
+						});
 					}
 					if (rem > .001) {
 						const midY = neighborFloorY + fullPanels * tileSize + rem / 2;
@@ -3789,6 +3828,10 @@ function createDungeonRenderer(element, game, options = {}) {
 						floorEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 						floorEdgeRots.push(s.rotation ?? 0);
 						floorEdgeHeightScales.push(rem / tileSize);
+						floorEdgeCellMap.push({
+							cx,
+							cz
+						});
 					}
 				}
 				const nfN = openFloorVal(cx, cz - 1);
@@ -3812,6 +3855,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					ceilEdgeRots.push(s.rotation ?? 0);
 					ceilEdgeHeightScales.push(1);
+					ceilEdgeCellMap.push({
+						cx,
+						cz
+					});
 				}
 				if (rem > .001) {
 					const midY = yCurrent - fullPanels * tileSize - rem / 2;
@@ -3819,6 +3866,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					ceilEdgeRots.push(s.rotation ?? 0);
 					ceilEdgeHeightScales.push(rem / tileSize);
+					ceilEdgeCellMap.push({
+						cx,
+						cz
+					});
 				}
 			}
 			const ncN = openCeilVal(cx, cz - 1);
@@ -3830,16 +3881,22 @@ function createDungeonRenderer(element, game, options = {}) {
 			const ncE = openCeilVal(cx + 1, cz);
 			if (ncE !== null && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
 		}
+		meshToCellMap.clear();
 		floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets));
 		scene.add(floorMesh);
+		meshToCellMap.set(floorMesh, floorCellMap);
 		ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets));
 		scene.add(ceilMesh);
+		meshToCellMap.set(ceilMesh, ceilCellMap);
 		wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots);
 		scene.add(wallMesh);
+		meshToCellMap.set(wallMesh, wallCellMap);
 		floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales);
 		scene.add(floorEdgeMesh);
+		meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
 		ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas, void 0, ceilEdgeRots, ceilEdgeHeightScales);
 		scene.add(ceilEdgeMesh);
+		meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 		for (const entry of layerEntries) if (!entry.holder.mesh) {
 			entry.holder.mesh = buildLayerMesh(entry.spec);
 			if (entry.holder.mesh) scene.add(entry.holder.mesh);
@@ -3954,9 +4011,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	resize();
 	rafId = requestAnimationFrame(tick);
 	const raycaster = new THREE.Raycaster();
-	const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 	const _mouseNdc = new THREE.Vector2();
-	const _hitPt = new THREE.Vector3();
 	function getCellAtPointer(clientX, clientY) {
 		const outputs = game.dungeon.outputs;
 		if (!outputs) return null;
@@ -3964,18 +4019,27 @@ function createDungeonRenderer(element, game, options = {}) {
 		_mouseNdc.x = (clientX - rect.left) / rect.width * 2 - 1;
 		_mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 		raycaster.setFromCamera(_mouseNdc, camera);
-		if (!raycaster.ray.intersectPlane(floorPlane, _hitPt)) return null;
-		const cx = Math.floor(_hitPt.x / tileSize);
-		const cz = Math.floor(_hitPt.z / tileSize);
-		const { width, height } = outputs;
-		if (cx < 0 || cz < 0 || cx >= width || cz >= height) return null;
-		const idx = cz * width + cx;
-		if ((outputs.textures.solid.image.data[idx] ?? 1) > 0) return null;
+		const pickable = [
+			floorMesh,
+			ceilMesh,
+			wallMesh,
+			floorEdgeMesh,
+			ceilEdgeMesh
+		].filter((m) => m !== null);
+		if (pickable.length === 0) return null;
+		const hit = raycaster.intersectObjects(pickable, false)[0];
+		if (!hit) return null;
+		const cellArray = meshToCellMap.get(hit.object);
+		if (!cellArray || hit.instanceId == null) return null;
+		const cell = cellArray[hit.instanceId];
+		if (!cell) return null;
+		const { cx, cz } = cell;
+		const { width } = outputs;
 		const regionData = outputs.textures.regionId?.image.data;
 		return {
 			cx,
 			cz,
-			regionId: regionData ? regionData[idx] ?? 0 : 0
+			regionId: regionData ? regionData[cz * width + cx] ?? 0 : 0
 		};
 	}
 	let _lastHoverKey = null;
@@ -4079,20 +4143,22 @@ function createDungeonRenderer(element, game, options = {}) {
 					color: new THREE.Color(color),
 					transparent: true,
 					opacity: .4,
-					depthWrite: false
+					depthWrite: false,
+					side: THREE.DoubleSide
 				});
 				subMaterials.push(mat);
-				const handle = internalAddLayer({
-					target: "floor",
+				const cellFilter = (cx, cz) => cellIdxSet.has(cz * width + cx) ? {} : false;
+				for (const target of [
+					"floor",
+					"ceil",
+					"wall"
+				]) subHandles.push(internalAddLayer({
+					target,
 					material: mat,
 					useAtlas: false,
 					polygonOffset: true,
-					filter(cx, cz) {
-						const i = cz * width + cx;
-						return cellIdxSet.has(i) ? {} : false;
-					}
-				});
-				subHandles.push(handle);
+					filter: cellFilter
+				}));
 			}
 			return { remove() {
 				for (const h of subHandles) h.remove();
@@ -4111,6 +4177,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				mesh.geometry.dispose();
 			}
 			floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+			meshToCellMap.clear();
 			for (const entry of layerEntries) if (entry.holder.mesh) {
 				scene.remove(entry.holder.mesh);
 				entry.holder.mesh.geometry.dispose();

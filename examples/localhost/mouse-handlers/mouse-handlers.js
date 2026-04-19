@@ -1,6 +1,7 @@
 // mouse-handlers.js — atomic-core mouse interaction example
-// Demonstrates onCellClick / onCellHover via floor-plane raycasting and
-// highlightCells for selection and debug region-colour overlays.
+// Demonstrates onCellClick / onCellHover via geometry raycasting against all
+// dungeon surfaces (floors, walls, ceilings) and highlightCells for selection
+// and debug region-colour overlays.
 
 const {
   createGame,
@@ -23,6 +24,18 @@ const posEl       = document.getElementById("pos");
 const hoverInfoEl = document.getElementById("hover-info");
 const clickInfoEl = document.getElementById("click-info");
 const btnRegion   = document.getElementById("btn-region-colors");
+const tooltipEl   = document.getElementById("cell-tooltip");
+
+// Track raw pointer position inside the canvas-wrap so the tooltip follows.
+const canvasWrap = document.getElementById("canvas-wrap");
+canvasWrap.addEventListener("pointermove", (e) => {
+  const rect = canvasWrap.getBoundingClientRect();
+  tooltipEl.style.left = `${e.clientX - rect.left}px`;
+  tooltipEl.style.top  = `${e.clientY - rect.top}px`;
+});
+canvasWrap.addEventListener("pointerleave", () => {
+  tooltipEl.classList.add("hidden");
+});
 
 // ---------------------------------------------------------------------------
 // Create game
@@ -69,6 +82,18 @@ function regionColor(regionId) {
 
 let renderer;
 
+// Tile names used by the renderer — referenced in the click handler.
+const FLOOR_TILE        = "flagstone_floor_stone.png";
+const CEIL_TILE         = "plaster_ceiling.png";
+const WALL_TILE         = "brick_wall_stone.png";
+const FLOOR_SKIRT_TILES = null; // none configured
+const CEIL_SKIRT_TILES  = null; // none configured
+
+function shortTile(v) {
+  if (!v) return "—";
+  return typeof v === "string" ? v.replace(/\.png$/i, "") : `#${v}`;
+}
+
 async function init() {
   const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
   const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
@@ -79,29 +104,34 @@ async function init() {
   renderer = createDungeonRenderer(viewportEl, game, {
     packedAtlas: packed,
     tileNameResolver: resolver,
-    floorTile: "flagstone_floor_stone.png",
-    ceilTile:  "plaster_ceiling.png",
-    wallTile:  "brick_wall_stone.png",
+    floorTile: FLOOR_TILE,
+    ceilTile:  CEIL_TILE,
+    wallTile:  WALL_TILE,
 
-    // ── Hover: tint the hovered cell light-blue ──────────────────────────
+    // ── Hover: blue tint on the hovered cell + cursor tooltip ────────────
     onCellHover(info) {
       if (hoverHandle) { hoverHandle.remove(); hoverHandle = null; }
 
       if (!info) {
         hoverInfoEl.textContent = "none";
         hoverInfoEl.classList.add("muted");
+        tooltipEl.classList.add("hidden");
         return;
       }
 
-      hoverInfoEl.textContent = `(${info.cx}, ${info.cz})  region ${info.regionId}`;
+      const label = `(${info.cx}, ${info.cz})  region ${info.regionId}`;
+      hoverInfoEl.textContent = label;
       hoverInfoEl.classList.remove("muted");
 
+      tooltipEl.textContent = label;
+      tooltipEl.classList.remove("hidden");
+
       hoverHandle = renderer.highlightCells((cx, cz) =>
-        cx === info.cx && cz === info.cz ? "rgba(100, 200, 255, 0.55)" : null,
+        cx === info.cx && cz === info.cz ? "rgba(20, 80, 255, 0.55)" : null,
       );
     },
 
-    // ── Click: highlight every cell in the same region gold ──────────────
+    // ── Click: yellow region highlight + texture mapping panel ───────────
     onCellClick(info) {
       if (selectHandle) { selectHandle.remove(); selectHandle = null; }
 
@@ -110,11 +140,21 @@ async function init() {
         ? `${room.type} #${room.id}  ${room.w}×${room.h}`
         : `region ${info.regionId}`;
 
-      clickInfoEl.textContent = `(${info.cx}, ${info.cz})  ${roomLabel}`;
-      clickInfoEl.classList.remove("muted");
+      let html =
+        `<div class="ci-coord">(${info.cx}, ${info.cz}) · ${roomLabel}</div>` +
+        `<div class="ci-tex"><span class="ci-k">floor</span>${shortTile(FLOOR_TILE)}</div>` +
+        `<div class="ci-tex"><span class="ci-k">wall </span>${shortTile(WALL_TILE)}</div>` +
+        `<div class="ci-tex"><span class="ci-k">ceil </span>${shortTile(CEIL_TILE)}</div>`;
+      if (FLOOR_SKIRT_TILES)
+        html += `<div class="ci-tex"><span class="ci-k">f.skirt</span>${shortTile(FLOOR_SKIRT_TILES)}</div>`;
+      if (CEIL_SKIRT_TILES)
+        html += `<div class="ci-tex"><span class="ci-k">c.skirt</span>${shortTile(CEIL_SKIRT_TILES)}</div>`;
 
-      selectHandle = renderer.highlightCells((_cx, _cz, regionId) =>
-        regionId === info.regionId ? "rgba(240, 180, 30, 0.45)" : null,
+      clickInfoEl.classList.remove("muted");
+      clickInfoEl.innerHTML = html;
+
+      selectHandle = renderer.highlightCells((cx, cz) =>
+        cx === info.cx && cz === info.cz ? "rgba(255, 230, 20, 0.5)" : null,
       );
     },
   });

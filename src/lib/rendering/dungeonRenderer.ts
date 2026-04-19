@@ -480,6 +480,17 @@ export function createDungeonRenderer(
   let ceilEdgeMesh: THREE.InstancedMesh | null = null;
   let dungeonBuilt = false;
 
+  // Parallel cell-index arrays: entry i gives the grid cell for instance i.
+  // Rebuilt whenever buildDungeon runs.
+  type CellRef = { cx: number; cz: number };
+  let floorCellMap: CellRef[] = [];
+  let ceilCellMap: CellRef[] = [];
+  let wallCellMap: CellRef[] = [];
+  let floorEdgeCellMap: CellRef[] = [];
+  let ceilEdgeCellMap: CellRef[] = [];
+  // Fast lookup: InstancedMesh → its cell array.
+  const meshToCellMap = new Map<THREE.InstancedMesh, CellRef[]>();
+
   // ── Layer state ───────────────────────────────────────────────────────────
   type LayerEntry = {
     spec: LayerSpec;
@@ -744,6 +755,12 @@ export function createDungeonRenderer(
       return map?.[dir] ?? { tile: fallbackId, rotation: 0 };
     }
 
+    floorCellMap = [];
+    ceilCellMap = [];
+    wallCellMap = [];
+    floorEdgeCellMap = [];
+    ceilEdgeCellMap = [];
+
     const floors: THREE.Matrix4[] = [];
     const ceils: THREE.Matrix4[] = [];
     const walls: THREE.Matrix4[] = [];
@@ -797,6 +814,7 @@ export function createDungeonRenderer(
           );
           floorRects.push(getUvRect(floorId));
           floorOffsets.push((floorVal - 128) * offsetStep); // vertex shader applies this
+          floorCellMap.push({ cx, cz });
         }
 
         // Ceiling — inverted: value < 128 raises ceiling, > 128 lowers it.
@@ -806,6 +824,7 @@ export function createDungeonRenderer(
         );
         ceilRects.push(getUvRect(ceilId));
         ceilOffsets.push(-(ceilVal - 128) * offsetStep); // vertex shader applies this (inverted)
+        ceilCellMap.push({ cx, cz });
 
         // Walls — north/south/west/east with per-direction tile + rotation.
         if (isSolid(cx, cz - 1)) {
@@ -824,6 +843,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallCellMap.push({ cx, cz });
         }
         if (isSolid(cx, cz + 1)) {
           const s = spec(wallTiles, "south", wallId);
@@ -841,6 +861,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallCellMap.push({ cx, cz });
         }
         if (isSolid(cx - 1, cz)) {
           const s = spec(wallTiles, "west", wallId);
@@ -858,6 +879,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallCellMap.push({ cx, cz });
         }
         if (isSolid(cx + 1, cz)) {
           const s = spec(wallTiles, "east", wallId);
@@ -875,6 +897,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallCellMap.push({ cx, cz });
         }
 
         // Voxel-style floor edge skirts: tiled panels covering the full step height.
@@ -899,6 +922,7 @@ export function createDungeonRenderer(
               floorEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
               floorEdgeRots.push(s.rotation ?? 0);
               floorEdgeHeightScales.push(1.0);
+              floorEdgeCellMap.push({ cx, cz });
             }
             if (rem > 0.001) {
               const midY = neighborFloorY + fullPanels * tileSize + rem / 2;
@@ -906,6 +930,7 @@ export function createDungeonRenderer(
               floorEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
               floorEdgeRots.push(s.rotation ?? 0);
               floorEdgeHeightScales.push(rem / tileSize);
+              floorEdgeCellMap.push({ cx, cz });
             }
           }
           const nfN = openFloorVal(cx, cz - 1);
@@ -938,6 +963,7 @@ export function createDungeonRenderer(
             ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
             ceilEdgeRots.push(s.rotation ?? 0);
             ceilEdgeHeightScales.push(1.0);
+            ceilEdgeCellMap.push({ cx, cz });
           }
           if (rem > 0.001) {
             const midY = yCurrent - fullPanels * tileSize - rem / 2;
@@ -945,6 +971,7 @@ export function createDungeonRenderer(
             ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
             ceilEdgeRots.push(s.rotation ?? 0);
             ceilEdgeHeightScales.push(rem / tileSize);
+            ceilEdgeCellMap.push({ cx, cz });
           }
         }
         const ncN = openCeilVal(cx, cz - 1);
@@ -962,6 +989,8 @@ export function createDungeonRenderer(
       }
     }
 
+    meshToCellMap.clear();
+
     floorMesh = buildInstancedMesh(
       floors,
       floorRects,
@@ -970,6 +999,7 @@ export function createDungeonRenderer(
       new Float32Array(floorOffsets),
     );
     scene.add(floorMesh);
+    meshToCellMap.set(floorMesh, floorCellMap);
 
     ceilMesh = buildInstancedMesh(
       ceils,
@@ -979,6 +1009,7 @@ export function createDungeonRenderer(
       new Float32Array(ceilOffsets),
     );
     scene.add(ceilMesh);
+    meshToCellMap.set(ceilMesh, ceilCellMap);
 
     wallMesh = buildInstancedMesh(
       walls,
@@ -989,6 +1020,7 @@ export function createDungeonRenderer(
       wallRots,
     );
     scene.add(wallMesh);
+    meshToCellMap.set(wallMesh, wallCellMap);
 
     floorEdgeMesh = buildInstancedMesh(
       floorEdges,
@@ -1000,6 +1032,7 @@ export function createDungeonRenderer(
       floorEdgeHeightScales,
     );
     scene.add(floorEdgeMesh);
+    meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
 
     ceilEdgeMesh = buildInstancedMesh(
       ceilEdges,
@@ -1011,6 +1044,7 @@ export function createDungeonRenderer(
       ceilEdgeHeightScales,
     );
     scene.add(ceilEdgeMesh);
+    meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 
     // Apply any layers registered before the dungeon was generated.
     for (const entry of layerEntries) {
@@ -1188,27 +1222,35 @@ export function createDungeonRenderer(
 
   // ── Mouse / cell picking ──────────────────────────────────────────────────
   const raycaster = new THREE.Raycaster();
-  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const _mouseNdc = new THREE.Vector2();
-  const _hitPt = new THREE.Vector3();
 
   function getCellAtPointer(clientX: number, clientY: number): CellInfo | null {
     const outputs = game.dungeon.outputs;
     if (!outputs) return null;
+
     const rect = canvas.getBoundingClientRect();
     _mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(_mouseNdc, camera);
-    if (!raycaster.ray.intersectPlane(floorPlane, _hitPt)) return null;
-    const cx = Math.floor(_hitPt.x / tileSize);
-    const cz = Math.floor(_hitPt.z / tileSize);
-    const { width, height } = outputs;
-    if (cx < 0 || cz < 0 || cx >= width || cz >= height) return null;
-    const idx = cz * width + cx;
-    const solid = outputs.textures.solid.image.data as Uint8Array;
-    if ((solid[idx] ?? 1) > 0) return null;
+
+    const pickable = [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh].filter(
+      (m): m is THREE.InstancedMesh => m !== null,
+    );
+    if (pickable.length === 0) return null;
+
+    const hits = raycaster.intersectObjects(pickable, false);
+    const hit = hits[0];
+    if (!hit) return null;
+
+    const cellArray = meshToCellMap.get(hit.object as THREE.InstancedMesh);
+    if (!cellArray || hit.instanceId == null) return null;
+
+    const cell = cellArray[hit.instanceId];
+    if (!cell) return null;
+    const { cx, cz } = cell;
+    const { width } = outputs;
     const regionData = outputs.textures.regionId?.image.data as Uint8Array | undefined;
-    const regionId = regionData ? (regionData[idx] ?? 0) : 0;
+    const regionId = regionData ? (regionData[cz * width + cx] ?? 0) : 0;
     return { cx, cz, regionId };
   }
 
@@ -1321,19 +1363,20 @@ export function createDungeonRenderer(
           transparent: true,
           opacity: 0.4,
           depthWrite: false,
+          side: THREE.DoubleSide,
         });
         subMaterials.push(mat);
-        const handle = internalAddLayer({
-          target: "floor",
-          material: mat,
-          useAtlas: false,
-          polygonOffset: true,
-          filter(cx, cz) {
-            const i = cz * width + cx;
-            return cellIdxSet.has(i) ? {} : false;
-          },
-        });
-        subHandles.push(handle);
+        const cellFilter = (cx: number, cz: number) =>
+          cellIdxSet.has(cz * width + cx) ? {} : false;
+        for (const target of ["floor", "ceil", "wall"] as LayerTarget[]) {
+          subHandles.push(internalAddLayer({
+            target,
+            material: mat,
+            useAtlas: false,
+            polygonOffset: true,
+            filter: cellFilter,
+          }));
+        }
       }
 
       return {
@@ -1358,6 +1401,7 @@ export function createDungeonRenderer(
         }
       }
       floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+      meshToCellMap.clear();
       // Remove and dispose layer meshes — they will be rebuilt by buildDungeon.
       for (const entry of layerEntries) {
         if (entry.holder.mesh) {
