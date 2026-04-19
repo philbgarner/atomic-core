@@ -39,6 +39,9 @@ import { makeRng } from "../utils/rng"
 import type { ActionTransport } from "../transport/types";
 import { createMissionSystem } from "../missions/missionSystem";
 import type { MissionsHandle } from "../missions/types";
+import { createAnimationRegistry } from "../animations/animationRegistry";
+import type { AnimationRegistry } from "../animations/animationRegistry";
+import type { AnimationQueueEntry, AnimationsHandle } from "../animations/types";
 
 // ---------------------------------------------------------------------------
 // Public room shape (player-facing subset of RoomInfo)
@@ -105,8 +108,13 @@ export type DungeonHandle = {
 export type TurnsHandle = {
   /** Current turn counter. */
   readonly turn: number;
-  /** Commit a player action and run all other actors until the player's next turn. */
-  commit(action: TurnAction): void;
+  /**
+   * Commit a player action and run all other actors until the player's next turn.
+   * Resolves after all registered animation handlers have completed.
+   * In multiplayer mode resolves immediately after the action is forwarded to
+   * the server; animation handlers fire from the onStateUpdate reconciliation path.
+   */
+  commit(action: TurnAction): Promise<void>;
   addActor(entity: EntityBase): void;
   removeActor(id: string): void;
 };
@@ -226,6 +234,12 @@ export type GameHandle = {
   combat: CombatHandle;
   /** Mission/quest system. Add evaluator-driven missions that auto-complete each turn. */
   missions: MissionsHandle;
+  /**
+   * Register async animation handlers that fire after each turn, before entity
+   * positions are synced to the render layer. Works in both single-player and
+   * multiplayer (multiplayer events are reconstructed from state diffs).
+   */
+  animations: AnimationsHandle;
   /** Generate the dungeon and start the game. Call after attaching all callbacks. */
   generate(): void;
   /**
@@ -311,6 +325,9 @@ type GameInternal = {
   // Missions
   missions: MissionsHandle;
 
+  // Animation registry
+  animationRegistry: AnimationRegistry;
+
   // Cleanup
   destroyed: boolean;
 };
@@ -384,6 +401,7 @@ function entityToMonsterActor(e: EntityBase): MonsterActor {
 function makeApplyAction(
   internal: GameInternal,
   combatOpts: CombatOptions | undefined,
+  onAnimEvent?: (entry: AnimationQueueEntry) => void,
 ) {
   return function customApplyAction(
     state: TurnSystemState,
@@ -459,12 +477,17 @@ function makeApplyAction(
           defenderEntity.hp = Math.max(0, defenderEntity.hp - result.damage);
           if (result.defenderDied) defenderEntity.alive = false;
 
+          onAnimEvent?.({ kind: 'attack', entity: attackerEntity });
+          onAnimEvent?.({ kind: 'damage', entity: defenderEntity, actor: attackerEntity, amount: result.damage });
+
           combatOpts?.onDamage?.({ attacker: attackerEntity, defender: defenderEntity, amount: result.damage });
           if (result.defenderDied) {
+            onAnimEvent?.({ kind: 'death', entity: defenderEntity, actor: attackerEntity });
             combatOpts?.onDeath?.({ entity: defenderEntity, killer: attackerEntity });
             if (actorId === internal.playerActorId) {
               const xp = (defenderEntity as Record<string, unknown>).xp as number ?? 0;
               if (xp > 0) {
+                onAnimEvent?.({ kind: 'xp-gain', entity: attackerEntity, amount: xp });
                 internal.events.emit("xp-gain", { amount: xp, x: defenderEntity.x, z: defenderEntity.z });
               }
               internal.events.emit("audio", { name: "xp-pickup", position: [defenderEntity.x, defenderEntity.z] });
@@ -481,6 +504,7 @@ function makeApplyAction(
             actors: { ...state.actors, [targetActor.id]: updatedDefender as typeof targetActor },
           };
         } else if (result.outcome === "miss") {
+          onAnimEvent?.({ kind: 'miss', entity: defenderEntity, actor: attackerEntity });
           combatOpts?.onMiss?.({ attacker: attackerEntity, defender: defenderEntity });
         }
       }
@@ -501,6 +525,11 @@ function makeApplyAction(
 
     if (actorId === internal.playerActorId) {
       internal.events.emit("audio", { name: "footstep", position: [nx, ny] });
+    }
+
+    const movingEntity = internal.entityById.get(actorId);
+    if (movingEntity) {
+      onAnimEvent?.({ kind: 'move', entity: movingEntity, from: { x: actor.x, z: actor.y }, to: { x: nx, z: ny } });
     }
 
     return {
@@ -654,11 +683,12 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
   return {
     get turn() { return internal.turnCounter; },
 
-    commit(action: TurnAction) {
+    async commit(action: TurnAction): Promise<void> {
       // When a transport is configured, forward the action to the server.
       // The server validates it, updates canonical state, and broadcasts a
       // ServerStateUpdate. createGame() wires onStateUpdate() to reconcile
       // that update back into internal state and re-emit the "turn" event.
+      // Animation handlers fire from the onStateUpdate diff path in that case.
       if (internal.options.transport) {
         internal.options.transport.send(action);
         return;
@@ -669,6 +699,8 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
       const solid = internal.solidData!;
       const { width, height } = internal.dungeonOutputs;
       const dungOut = internal.dungeonOutputs;
+
+      const onAnimEvent = (e: AnimationQueueEntry) => internal.animationRegistry._enqueue(e);
 
       const deps: TurnSystemDeps = {
         isWalkable: (x, y) => !isSolid(x, y, solid, width, height),
@@ -682,7 +714,7 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
           ),
         computeCost: (actorId, a) =>
           defaultComputeCost(actorId, a, internal.turnState!.actors),
-        applyAction: makeApplyAction(internal, internal.options.combat),
+        applyAction: makeApplyAction(internal, internal.options.combat, onAnimEvent),
         onTimeAdvanced: ({ nextTime, prevTime, state }) => {
           if (nextTime > prevTime) {
             internal.turnCounter += 1;
@@ -700,6 +732,8 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
       };
 
       internal.turnState = commitPlayerAction(internal.turnState, deps, action);
+      // Flush animations while entities are still at pre-commit positions.
+      await internal.animationRegistry._flush();
       syncAllEntitiesFromTurnState(internal);
       updateFovAndMinimap(internal);
     },
@@ -1129,6 +1163,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   };
 
   const missionsHandle = createMissionSystem(events, options.transport);
+  const animationRegistry = createAnimationRegistry();
 
   const internal: GameInternal = {
     options,
@@ -1153,6 +1188,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     surfacePainterCb: null,
     keybindingsHandles: [],
     missions: missionsHandle,
+    animationRegistry,
     destroyed: false,
   };
 
@@ -1181,11 +1217,58 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   // patches canonical positions/hp into the local turn state, then re-emits
   // the "turn" event so the UI and renderer stay in sync.
   if (options.transport) {
-    options.transport.onStateUpdate((update) => {
+    options.transport.onStateUpdate(async (update) => {
       if (internal.destroyed) return;
 
       if (internal.turnState) {
-        let actors = { ...internal.turnState.actors };
+        const oldActors = internal.turnState.actors;
+
+        // Diff player states to synthesize animation events before patching.
+        for (const [pid, ps] of Object.entries(update.players)) {
+          const old = oldActors[pid];
+          if (!old) continue;
+          const entity = internal.entityById.get(pid);
+          if (!entity) continue;
+          if (old.x !== ps.x || old.y !== ps.y) {
+            internal.animationRegistry._enqueue({
+              kind: 'move', entity,
+              from: { x: old.x, z: old.y },
+              to:   { x: ps.x, z: ps.y },
+            });
+          }
+          if (ps.hp < old.hp) {
+            internal.animationRegistry._enqueue({ kind: 'damage', entity, amount: old.hp - ps.hp });
+          }
+          if (old.alive && !ps.alive) {
+            internal.animationRegistry._enqueue({ kind: 'death', entity });
+          }
+        }
+
+        // Diff monster states (if the server includes them).
+        if (update.monsters) {
+          for (const mn of update.monsters) {
+            const old = oldActors[mn.id];
+            if (!old) continue;
+            const entity = internal.entityById.get(mn.id);
+            if (!entity) continue;
+            if (old.x !== mn.x || old.y !== mn.z) {
+              internal.animationRegistry._enqueue({
+                kind: 'move', entity,
+                from: { x: old.x, z: old.y },
+                to:   { x: mn.x, z: mn.z },
+              });
+            }
+            if (mn.hp < old.hp) {
+              internal.animationRegistry._enqueue({ kind: 'damage', entity, amount: old.hp - mn.hp });
+            }
+            if (old.alive && !mn.alive) {
+              internal.animationRegistry._enqueue({ kind: 'death', entity });
+            }
+          }
+        }
+
+        // Patch actor state.
+        let actors = { ...oldActors };
         for (const [pid, ps] of Object.entries(update.players)) {
           const actor = actors[pid];
           if (actor) {
@@ -1198,6 +1281,9 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
           awaitingPlayerInput: true,
         };
       }
+
+      // Flush animation queue while entities are still at pre-update positions.
+      await internal.animationRegistry._flush();
 
       // Sync own player's reactive state
       const myState = update.players[internal.playerActorId];
@@ -1240,6 +1326,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
       return { factions: internal.factions };
     },
     get missions() { return internal.missions; },
+    get animations() { return internal.animationRegistry; },
 
     generate() {
       if (generated) return;

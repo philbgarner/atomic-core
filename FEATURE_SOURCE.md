@@ -8,6 +8,9 @@ Maps each feature to the files in `src/lib` that implement it. Use this as a loo
 
 ```
 src/lib/
+  animations/
+    types.ts
+    animationRegistry.ts
   rendering/
     dungeonRenderer.ts
     torchLighting.ts
@@ -348,6 +351,17 @@ RPG-style inventory dialog with a two-column layout: character profile + item gr
 **Files:**
 - `ui/inventoryDialog.ts` — `showInventory(opts)` factory; builds and opens a `<dialog>` with the full default layout or a bare shell for `customLayout: true`; returns an `InventoryHandle`
 - `ui/inventoryDialog.css` — all `.inv-*` styles and CSS custom properties; emitted as `dist/atomic-core.css`; consumers import via `atomic-core/style.css` or link the dist file directly
+
+---
+
+### Turn-animation callback system
+
+Async callback layer that fires between turn resolution and entity-position sync. Developers register handlers on `game.animations` for specific event kinds (`damage`, `death`, `move`, `attack`, `miss`, `heal`, `xp-gain`). After each `game.turns.commit()` the engine awaits all queued handlers in turn order before syncing entity positions to the render layer, so motion tweens, floating text, and hit-flash effects see entities at their pre-move positions. Works in both single-player (events collected during the turn loop) and multiplayer (events reconstructed by diffing the `ServerStateUpdate` against the previous actor state).
+
+**Files:**
+- `animations/types.ts` — `AnimationEventKind`, `AnimationEventMap`, `AnimationQueueEntry`, `AnimationHandler`, `AnimationsHandle` public types
+- `animations/animationRegistry.ts` — `createAnimationRegistry()` factory; internal `_enqueue()` / `_flush()` methods used by `createGame`; `on`, `off`, `clear` on the public handle
+- `api/createGame.ts` — `makeApplyAction` emits animation events via optional `onAnimEvent` callback; `turns.commit()` is now `async`, flushes registry after the turn loop; `onStateUpdate` diffs old vs. new actor state to synthesize animation events in multiplayer; exposes `game.animations`
 
 ---
 

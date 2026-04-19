@@ -38,6 +38,9 @@ export type { Mission, MissionStatus, MissionContext, MissionEvaluator, MissionC
 export { showInventory }                             from './ui/inventoryDialog'
 export type { InventoryOptions, InventoryHandle, InventoryHandleCore, EquipSlotDef, StatDef, IndicatorDef, ActionDef, IconDescriptor, BackgroundDef, DropTarget } from './ui/inventoryDialog'
 
+// Animation system
+export type { AnimationEventKind, AnimationEventMap, AnimationQueueEntry, AnimationHandler, AnimationsHandle } from './animations/types'
+
 // Type exports
 export type { GameEventMap, EventEmitter }           from './events/eventEmitter'
 export type { DungeonOutputs, BspDungeonOutputs }    from './dungeon/bsp'
