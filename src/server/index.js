@@ -40,6 +40,9 @@ import { generateBspDungeon } from '../../dist/server/dungeon.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..', '..')
 const PORT = Number(process.env.PORT ?? 3001)
+// Minimum milliseconds between accepted player actions — rejects moves that
+// arrive faster than this, matching the default client-side repeatDelayMs.
+const MIN_ACTION_INTERVAL_MS = Number(process.env.MIN_ACTION_INTERVAL_MS ?? 150)
 
 // ---------------------------------------------------------------------------
 // Room state
@@ -49,6 +52,7 @@ const PORT = Number(process.env.PORT ?? 3001)
  * @typedef {{
  *   x: number, y: number, hp: number, maxHp: number,
  *   alive: boolean, facing: number, meta: Record<string,unknown>,
+ *   lastActionAt: number,
  *   ws: import('ws').WebSocket
  * }} RoomPlayer
  *
@@ -234,6 +238,7 @@ wss.on('connection', (ws) => {
         alive: true,
         facing: 0,
         meta: (msg.meta && typeof msg.meta === 'object') ? msg.meta : {},
+        lastActionAt: 0,
         ws,
       })
 
@@ -296,6 +301,12 @@ wss.on('connection', (ws) => {
 
     // ── action ─────────────────────────────────────────────────────────────
     if (msg.type === 'action') {
+      const player = room.players.get(playerId)
+      if (player) {
+        const now = Date.now()
+        if (now - player.lastActionAt < MIN_ACTION_INTERVAL_MS) return
+        player.lastActionAt = now
+      }
       const accepted = applyAction(room, playerId, msg.action ?? {})
       if (!accepted) return
 
