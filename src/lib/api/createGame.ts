@@ -477,7 +477,7 @@ function makeApplyAction(
           defenderEntity.hp = Math.max(0, defenderEntity.hp - result.damage);
           if (result.defenderDied) defenderEntity.alive = false;
 
-          onAnimEvent?.({ kind: 'attack', entity: attackerEntity });
+          onAnimEvent?.({ kind: 'attack', entity: attackerEntity, actor: defenderEntity });
           onAnimEvent?.({ kind: 'damage', entity: defenderEntity, actor: attackerEntity, amount: result.damage });
 
           combatOpts?.onDamage?.({ attacker: attackerEntity, defender: defenderEntity, amount: result.damage });
@@ -1198,6 +1198,14 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
 
   dungeonHandle = makeDungeonHandle(internal);
   turnsHandle = makeTurnsHandle(internal, dungeonHandle);
+
+  // Forward heal game events into the animation queue so game.animations.on('heal')
+  // fires regardless of which subsystem or developer code applied the healing.
+  events.on("heal", ({ entity, amount }) => {
+    if (internal.destroyed) return;
+    const fullEntity = internal.entityById.get(entity.id);
+    if (fullEntity) internal.animationRegistry._enqueue({ kind: 'heal', entity: fullEntity, amount });
+  });
 
   // Wire mission tick to the turn event. Runs after every turn (local and
   // networked) so active missions are evaluated against the latest game state.

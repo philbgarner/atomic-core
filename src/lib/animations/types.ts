@@ -27,8 +27,8 @@ export type AnimationEventMap = {
   death: { entity: EntityBase; actor?: EntityBase };
   /** An entity moved from one cell to another. */
   move: { entity: EntityBase; from: { x: number; z: number }; to: { x: number; z: number } };
-  /** An entity initiated an attack (resolved as hit or miss; see damage/miss for outcome). */
-  attack: { entity: EntityBase };
+  /** An entity initiated an attack (resolved as hit or miss; see damage/miss for outcome). `actor` is the target. */
+  attack: { entity: EntityBase; actor?: EntityBase };
   /** An attack missed. `actor` is who attacked. */
   miss: { entity: EntityBase; actor?: EntityBase };
   /** Player gained XP. */
