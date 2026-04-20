@@ -124,9 +124,10 @@ export type BspDungeonOutputs = DungeonOutputs & {
    */
   rooms: Map<number, RoomInfo>;
   /**
-   * Copy of the regionId pixel data with corridor floor cells re-labelled into
-   * unique connected-component IDs (starting at `firstCorridorRegionId`).
-   * textures.regionId is left unchanged (0 = corridor) for systems that rely on it.
+   * Region-id array with unique IDs for every cell: room cells keep their
+   * original IDs (1..maxRoomId), corridor cells have IDs starting at
+   * `firstCorridorRegionId`, wall cells are 0.
+   * Identical in content to `textures.regionId`.
    */
   fullRegionIds: Uint8Array;
   /** Lowest regionId assigned to a corridor segment. */
@@ -938,6 +939,10 @@ export function generateBspDungeon(
   for (const cr of corridorRooms) {
     rooms.set(cr.id, cr);
   }
+
+  // Bake unique corridor IDs into regionId so textures.regionId has non-zero
+  // values for every floor cell (rooms and corridors alike).
+  regionId.set(fullRegionIds);
 
   // Flood-fill floor types from room cells into corridor cells
   {

@@ -3,7 +3,7 @@
 // full rehydration (including the room graph) without re-running from scratch.
 
 import type { BspDungeonOptions, BspDungeonOutputs, RoomInfo } from "./bsp";
-import { generateBspDungeon, buildFullRegionIds } from "./bsp";
+import { generateBspDungeon } from "./bsp";
 import * as THREE from "three";
 
 // --------------------------------
@@ -22,6 +22,7 @@ export type SerializedDungeon = {
   seed: number;
   startRoomId: number;
   endRoomId: number;
+  firstCorridorRegionId: number;
   /** Base64-encoded Uint8Array for each texture channel. */
   solid: string;
   regionId: string;
@@ -102,6 +103,7 @@ export function serializeDungeon(dungeon: BspDungeonOutputs): SerializedDungeon 
     seed: dungeon.seed,
     startRoomId: dungeon.startRoomId,
     endRoomId: dungeon.endRoomId,
+    firstCorridorRegionId: dungeon.firstCorridorRegionId,
     solid: uint8ToBase64(textureData(dungeon.textures.solid)),
     regionId: uint8ToBase64(textureData(dungeon.textures.regionId)),
     distanceToWall: uint8ToBase64(textureData(dungeon.textures.distanceToWall)),
@@ -120,15 +122,9 @@ export function deserializeDungeon(data: SerializedDungeon): BspDungeonOutputs {
   const regionIdData = base64ToUint8(data.regionId);
 
   const rooms = new Map<number, RoomInfo>();
-  const maxRoomId = regionIdData.reduce((m, v) => (v > m ? v : m), 0);
-  const firstCorridorRegionId = maxRoomId + 1;
-  const { fullRegionIds } = buildFullRegionIds(
-    regionIdData,
-    solidData,
-    W,
-    H,
-    firstCorridorRegionId,
-  );
+  const { firstCorridorRegionId } = data;
+  // regionId already contains unique corridor IDs (baked in by generateBspDungeon)
+  const fullRegionIds = regionIdData;
 
   const temperature = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) {
