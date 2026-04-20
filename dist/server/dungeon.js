@@ -550,6 +550,7 @@ function generateBspDungeon(options) {
 	const firstCorridorRegionId = (rooms.size > 0 ? Math.max(...rooms.keys()) : 0) + 1;
 	const { fullRegionIds, corridorRooms } = assignCorridorRegions(regionId, solid, W, H, firstCorridorRegionId);
 	for (const cr of corridorRooms) rooms.set(cr.id, cr);
+	regionId.set(fullRegionIds);
 	{
 		const queue = [];
 		for (let i = 0; i < W * H; i++) if (solid[i] === 0 && floorType[i] > 0) queue.push(i);

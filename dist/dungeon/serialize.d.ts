@@ -11,6 +11,7 @@ export type SerializedDungeon = {
     seed: number;
     startRoomId: number;
     endRoomId: number;
+    firstCorridorRegionId: number;
     /** Base64-encoded Uint8Array for each texture channel. */
     solid: string;
     regionId: string;
