@@ -2208,10 +2208,23 @@ var AtomicCore = (function(exports, three) {
 			paint(x, z, layers) {
 				internal.paintMap.set(`${x},${z}`, layers);
 				writePaintToOverlayTexture(internal, x, z, layers);
+				internal.events.emit("cell-paint", {
+					x,
+					z,
+					layers
+				});
 			},
 			unpaint(x, z) {
 				internal.paintMap.delete(`${x},${z}`);
 				writePaintToOverlayTexture(internal, x, z, []);
+				internal.events.emit("cell-paint", {
+					x,
+					z,
+					layers: []
+				});
+			},
+			get paintMap() {
+				return internal.paintMap;
 			}
 		};
 	}
@@ -2975,10 +2988,17 @@ attribute float aUvRotation;
 // 1.0 = full tile; < 1.0 = show only that fraction of the tile, top-aligned.
 // Used for partial-height skirt panels so bricks keep their aspect ratio.
 attribute float aUvHeightScale;
+// Per-instance grid cell coordinates — used to look up the overlay texture.
+attribute float aCellX;
+attribute float aCellZ;
+
+uniform vec2 uDungeonSize;
 
 varying vec2  vAtlasUv;
 varying vec2  vTileOrigin;
 varying vec2  vTileSize;
+varying vec2  vLocalUv;
+varying vec2  vOverlayUv;
 varying float vFogDist;
 
 void main() {
@@ -2992,6 +3012,9 @@ void main() {
   if (iRot == 1)      localUv = vec2(localUv.y, 1.0 - localUv.x);
   else if (iRot == 2) localUv = vec2(1.0 - localUv.x, 1.0 - localUv.y);
   else if (iRot == 3) localUv = vec2(1.0 - localUv.y, localUv.x);
+
+  vLocalUv    = localUv;
+  vOverlayUv  = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
 
   vTileOrigin = vec2(aUvX, aUvY);
   vTileSize   = vec2(aUvW, aUvH);
@@ -3017,10 +3040,30 @@ uniform vec3  uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
 
+// Surface painter overlay system.
+// uOverlayLookup: W×H Uint8 RGBA texture — each channel holds one overlay tile ID (0 = none).
+// uTileUvLookup:  1D float RGBA texture  — index = tile ID, value = (uvX, uvY, uvW, uvH).
+uniform sampler2D uOverlayLookup;
+uniform sampler2D uTileUvLookup;
+uniform float     uTileUvCount;
+
 varying vec2  vAtlasUv;
 varying vec2  vTileOrigin;
 varying vec2  vTileSize;
+varying vec2  vLocalUv;
+varying vec2  vOverlayUv;
 varying float vFogDist;
+
+vec4 sampleOverlayTile(float id) {
+  vec2 luv = vec2((id + 0.5) / uTileUvCount, 0.5);
+  vec4 tr  = texture2D(uTileUvLookup, luv);
+  vec2 ov  = clamp(
+    tr.xy + vLocalUv * tr.zw,
+    tr.xy + uTexelSize * 0.5,
+    tr.xy + tr.zw    - uTexelSize * 0.5
+  );
+  return texture2D(uAtlas, ov);
+}
 
 void main() {
   vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
@@ -3030,21 +3073,51 @@ void main() {
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
 
+  // Sample the per-cell overlay slot texture (4 slots packed into RGBA).
+  vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
+
+  float id0 = floor(slots.r * 255.0 + 0.5);
+  if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id1 = floor(slots.g * 255.0 + 0.5);
+  if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id2 = floor(slots.b * 255.0 + 0.5);
+  if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id3 = floor(slots.a * 255.0 + 0.5);
+  if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
 }
 `;
 	/**
 	* Build Three.js uniform objects for the basic atlas ShaderMaterial.
+	* Overlay uniforms are optional — when omitted a 1×1 zero-filled default
+	* texture is used, which disables the overlay pass at zero cost.
 	*/
 	function makeBasicAtlasUniforms(params) {
+		const defaultTex = makeSinglePixelTex();
 		return {
 			uAtlas: { value: params.atlas },
 			uTexelSize: { value: params.texelSize },
 			uFogColor: { value: params.fogColor },
 			uFogNear: { value: params.fogNear },
-			uFogFar: { value: params.fogFar }
+			uFogFar: { value: params.fogFar },
+			uTileUvLookup: { value: params.tileUvLookup ?? defaultTex },
+			uTileUvCount: { value: params.tileUvCount ?? 1 },
+			uOverlayLookup: { value: params.overlayLookup ?? defaultTex },
+			uDungeonSize: { value: params.dungeonSize ?? new three.Vector2(1, 1) }
 		};
+	}
+	/** Returns a 1×1 transparent black DataTexture used as a no-op default. */
+	function makeSinglePixelTex() {
+		const tex = new three.DataTexture(new Uint8Array(4), 1, 1, three.RGBAFormat);
+		tex.magFilter = three.NearestFilter;
+		tex.minFilter = three.NearestFilter;
+		tex.needsUpdate = true;
+		return tex;
 	}
 	//#endregion
 	//#region src/lib/rendering/tileAtlas.ts
@@ -3482,7 +3555,7 @@ void main() {
 	* Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 	* and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 	*/
-	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales) {
+	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ) {
 		const geo = new three.PlaneGeometry(1, 1);
 		if (useAtlas) {
 			const n = matrices.length;
@@ -3512,6 +3585,10 @@ void main() {
 				hsArr[i] = s;
 			});
 			geo.setAttribute("aUvHeightScale", new three.InstancedBufferAttribute(hsArr, 1));
+			if (cellX && cellZ) {
+				geo.setAttribute("aCellX", new three.InstancedBufferAttribute(cellX, 1));
+				geo.setAttribute("aCellZ", new three.InstancedBufferAttribute(cellZ, 1));
+			}
 		}
 		const mesh = new three.InstancedMesh(geo, material, matrices.length);
 		matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -3565,6 +3642,80 @@ void main() {
 			sharedAtlasTex.minFilter = three.NearestFilter;
 			sharedAtlasTex.needsUpdate = true;
 		}
+		let tileUvLookupTex = null;
+		let tileUvCount = 1;
+		if (packedAtlas) {
+			let maxId = 0;
+			for (const sp of packedAtlas.sprites.values()) if (sp.id > maxId) maxId = sp.id;
+			tileUvCount = maxId + 1;
+			const uvData = new Float32Array(tileUvCount * 4);
+			for (const sp of packedAtlas.sprites.values()) {
+				const uv = spriteToUvRect(sp);
+				const i = sp.id * 4;
+				uvData[i] = uv.x;
+				uvData[i + 1] = uv.y;
+				uvData[i + 2] = uv.w;
+				uvData[i + 3] = uv.h;
+			}
+			tileUvLookupTex = new three.DataTexture(uvData, tileUvCount, 1, three.RGBAFormat, three.FloatType);
+			tileUvLookupTex.magFilter = three.NearestFilter;
+			tileUvLookupTex.minFilter = three.NearestFilter;
+			tileUvLookupTex.needsUpdate = true;
+		}
+		const _defaultOverlayTex = new three.DataTexture(new Uint8Array(4), 1, 1, three.RGBAFormat);
+		_defaultOverlayTex.magFilter = three.NearestFilter;
+		_defaultOverlayTex.minFilter = three.NearestFilter;
+		_defaultOverlayTex.needsUpdate = true;
+		let overlayLookupTex = _defaultOverlayTex;
+		let overlayLookupData = new Uint8Array(4);
+		/** Rebuild the W×H overlay lookup texture from the current paintMap. */
+		function rebuildOverlayTexture(width, height) {
+			if (!resolver) return;
+			const data = new Uint8Array(width * height * 4);
+			for (const [key, layers] of game.dungeon.paintMap) {
+				const comma = key.indexOf(",");
+				const x = parseInt(key.slice(0, comma), 10);
+				const z = parseInt(key.slice(comma + 1), 10);
+				if (x < 0 || z < 0 || x >= width || z >= height) continue;
+				const idx = (z * width + x) * 4;
+				for (let i = 0; i < Math.min(layers.length, 4); i++) data[idx + i] = resolver(layers[i]) & 255;
+			}
+			if (overlayLookupTex !== _defaultOverlayTex) overlayLookupTex.dispose();
+			overlayLookupData = data;
+			overlayLookupTex = new three.DataTexture(data, width, height, three.RGBAFormat, three.UnsignedByteType);
+			overlayLookupTex.magFilter = three.NearestFilter;
+			overlayLookupTex.minFilter = three.NearestFilter;
+			overlayLookupTex.flipY = false;
+			overlayLookupTex.needsUpdate = true;
+		}
+		/** Update one cell in the overlay lookup texture in-place (for dynamic paint). */
+		function updateOverlayCell(x, z, layers) {
+			if (!resolver) return;
+			const outputs = game.dungeon.outputs;
+			if (!outputs || overlayLookupTex === _defaultOverlayTex) return;
+			const { width, height } = outputs;
+			if (x < 0 || z < 0 || x >= width || z >= height) return;
+			const idx = (z * width + x) * 4;
+			overlayLookupData[idx] = overlayLookupData[idx + 1] = overlayLookupData[idx + 2] = overlayLookupData[idx + 3] = 0;
+			for (let i = 0; i < Math.min(layers.length, 4); i++) overlayLookupData[idx + i] = resolver(layers[i]) & 255;
+			overlayLookupTex.needsUpdate = true;
+		}
+		/** Push current overlay textures into all atlas materials. */
+		function syncOverlayUniforms(width, height) {
+			for (const mat of [
+				floorMat,
+				ceilMat,
+				wallMat,
+				ceilEdgeMat
+			]) {
+				if (!(mat instanceof three.ShaderMaterial)) continue;
+				const u = mat.uniforms;
+				if (u["uOverlayLookup"]) u["uOverlayLookup"].value = overlayLookupTex;
+				if (u["uTileUvLookup"]) u["uTileUvLookup"].value = tileUvLookupTex;
+				if (u["uTileUvCount"]) u["uTileUvCount"].value = tileUvCount;
+				if (u["uDungeonSize"]) u["uDungeonSize"].value = new three.Vector2(width, height);
+			}
+		}
 		function makeAtlasMaterial() {
 			const canvas = packedAtlas.texture;
 			return new three.ShaderMaterial({
@@ -3575,7 +3726,13 @@ void main() {
 					texelSize: new three.Vector2(1 / canvas.width, 1 / canvas.height),
 					fogColor,
 					fogNear,
-					fogFar
+					fogFar,
+					...tileUvLookupTex ? {
+						tileUvLookup: tileUvLookupTex,
+						tileUvCount
+					} : {},
+					overlayLookup: overlayLookupTex,
+					dungeonSize: new three.Vector2(1, 1)
 				}),
 				side: three.FrontSide
 			});
@@ -3906,21 +4063,37 @@ void main() {
 				if (ncE !== null && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
 			}
 			meshToCellMap.clear();
-			floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets));
+			function cellArrays(map) {
+				const xs = new Float32Array(map.length);
+				const zs = new Float32Array(map.length);
+				map.forEach((c, i) => {
+					xs[i] = c.cx;
+					zs[i] = c.cz;
+				});
+				return [xs, zs];
+			}
+			const [floorCX, floorCZ] = cellArrays(floorCellMap);
+			const [ceilCX, ceilCZ] = cellArrays(ceilCellMap);
+			const [wallCX, wallCZ] = cellArrays(wallCellMap);
+			const [fEdgeCX, fEdgeCZ] = cellArrays(floorEdgeCellMap);
+			const [cEdgeCX, cEdgeCZ] = cellArrays(ceilEdgeCellMap);
+			floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets), void 0, void 0, floorCX, floorCZ);
 			scene.add(floorMesh);
 			meshToCellMap.set(floorMesh, floorCellMap);
-			ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets));
+			ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets), void 0, void 0, ceilCX, ceilCZ);
 			scene.add(ceilMesh);
 			meshToCellMap.set(ceilMesh, ceilCellMap);
-			wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots);
+			wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots, void 0, wallCX, wallCZ);
 			scene.add(wallMesh);
 			meshToCellMap.set(wallMesh, wallCellMap);
-			floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales);
+			floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ);
 			scene.add(floorEdgeMesh);
 			meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
-			ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas, void 0, ceilEdgeRots, ceilEdgeHeightScales);
+			ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas, void 0, ceilEdgeRots, ceilEdgeHeightScales, cEdgeCX, cEdgeCZ);
 			scene.add(ceilEdgeMesh);
 			meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
+			rebuildOverlayTexture(width, height);
+			syncOverlayUniforms(width, height);
 			for (const entry of layerEntries) if (!entry.holder.mesh) {
 				entry.holder.mesh = buildLayerMesh(entry.spec);
 				if (entry.holder.mesh) scene.add(entry.holder.mesh);
@@ -4092,6 +4265,10 @@ void main() {
 			canvas.addEventListener("pointermove", onCanvasPointerMove);
 			canvas.addEventListener("pointerleave", onCanvasPointerLeave);
 		}
+		function onCellPaint({ x, z, layers }) {
+			updateOverlayCell(x, z, layers);
+		}
+		game.events.on("cell-paint", onCellPaint);
 		function internalAddLayer(spec) {
 			const holder = { mesh: null };
 			if (dungeonBuilt) {
@@ -4207,6 +4384,10 @@ void main() {
 					entry.holder.mesh.geometry.dispose();
 					entry.holder.mesh = null;
 				}
+				if (overlayLookupTex !== _defaultOverlayTex) {
+					overlayLookupTex.dispose();
+					overlayLookupTex = _defaultOverlayTex;
+				}
 				dungeonBuilt = false;
 				buildDungeon();
 			},
@@ -4214,6 +4395,7 @@ void main() {
 				cancelAnimationFrame(rafId);
 				ro.disconnect();
 				game.events.off("turn", onTurn);
+				game.events.off("cell-paint", onCellPaint);
 				canvas.removeEventListener("click", onCanvasClick);
 				canvas.removeEventListener("pointermove", onCanvasPointerMove);
 				canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
@@ -4221,6 +4403,9 @@ void main() {
 				for (const mat of entityMatCache.values()) mat.dispose();
 				for (const handle of billboardMap.values()) handle.dispose();
 				sharedAtlasTex?.dispose();
+				tileUvLookupTex?.dispose();
+				if (overlayLookupTex !== _defaultOverlayTex) overlayLookupTex.dispose();
+				_defaultOverlayTex.dispose();
 				glRenderer.dispose();
 				canvas.remove();
 			}

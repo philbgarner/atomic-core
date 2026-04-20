@@ -317,6 +317,8 @@ function buildInstancedMesh(
   heightOffsets?: Float32Array,
   uvRotations?: number[],
   uvHeightScales?: number[],
+  cellX?: Float32Array,
+  cellZ?: Float32Array,
 ): THREE.InstancedMesh {
   const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -362,6 +364,11 @@ function buildInstancedMesh(
       "aUvHeightScale",
       new THREE.InstancedBufferAttribute(hsArr, 1),
     );
+
+    if (cellX && cellZ) {
+      geo.setAttribute("aCellX", new THREE.InstancedBufferAttribute(cellX, 1));
+      geo.setAttribute("aCellZ", new THREE.InstancedBufferAttribute(cellZ, 1));
+    }
   }
 
   const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
@@ -432,6 +439,88 @@ export function createDungeonRenderer(
     sharedAtlasTex.needsUpdate = true;
   }
 
+  // ── Overlay / surface-painter textures ───────────────────────────────────
+  // 1-D float texture mapping tile ID → (uvX, uvY, uvW, uvH). Built from atlas once.
+  let tileUvLookupTex: THREE.DataTexture | null = null;
+  let tileUvCount = 1;
+
+  if (packedAtlas) {
+    let maxId = 0;
+    for (const sp of packedAtlas.sprites.values()) if (sp.id > maxId) maxId = sp.id;
+    tileUvCount = maxId + 1;
+    const uvData = new Float32Array(tileUvCount * 4);
+    for (const sp of packedAtlas.sprites.values()) {
+      const uv = spriteToUvRect(sp);
+      const i = sp.id * 4;
+      uvData[i]     = uv.x;
+      uvData[i + 1] = uv.y;
+      uvData[i + 2] = uv.w;
+      uvData[i + 3] = uv.h;
+    }
+    tileUvLookupTex = new THREE.DataTexture(uvData, tileUvCount, 1, THREE.RGBAFormat, THREE.FloatType);
+    tileUvLookupTex.magFilter = THREE.NearestFilter;
+    tileUvLookupTex.minFilter = THREE.NearestFilter;
+    tileUvLookupTex.needsUpdate = true;
+  }
+
+  // W×H Uint8 RGBA texture: each channel = overlay slot ID (0 = none). Rebuilt per generate().
+  const _defaultOverlayTex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+  _defaultOverlayTex.magFilter = THREE.NearestFilter;
+  _defaultOverlayTex.minFilter = THREE.NearestFilter;
+  _defaultOverlayTex.needsUpdate = true;
+  let overlayLookupTex: THREE.DataTexture = _defaultOverlayTex;
+  let overlayLookupData: Uint8Array = new Uint8Array(4);
+
+  /** Rebuild the W×H overlay lookup texture from the current paintMap. */
+  function rebuildOverlayTexture(width: number, height: number): void {
+    if (!resolver) return;
+    const data = new Uint8Array(width * height * 4);
+    for (const [key, layers] of game.dungeon.paintMap) {
+      const comma = key.indexOf(',');
+      const x = parseInt(key.slice(0, comma), 10);
+      const z = parseInt(key.slice(comma + 1), 10);
+      if (x < 0 || z < 0 || x >= width || z >= height) continue;
+      const idx = (z * width + x) * 4;
+      for (let i = 0; i < Math.min(layers.length, 4); i++) {
+        data[idx + i] = resolver(layers[i]!) & 0xFF;
+      }
+    }
+    if (overlayLookupTex !== _defaultOverlayTex) overlayLookupTex.dispose();
+    overlayLookupData = data;
+    overlayLookupTex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
+    overlayLookupTex.magFilter = THREE.NearestFilter;
+    overlayLookupTex.minFilter = THREE.NearestFilter;
+    overlayLookupTex.flipY = false;
+    overlayLookupTex.needsUpdate = true;
+  }
+
+  /** Update one cell in the overlay lookup texture in-place (for dynamic paint). */
+  function updateOverlayCell(x: number, z: number, layers: string[]): void {
+    if (!resolver) return;
+    const outputs = game.dungeon.outputs;
+    if (!outputs || overlayLookupTex === _defaultOverlayTex) return;
+    const { width, height } = outputs;
+    if (x < 0 || z < 0 || x >= width || z >= height) return;
+    const idx = (z * width + x) * 4;
+    overlayLookupData[idx] = overlayLookupData[idx + 1] = overlayLookupData[idx + 2] = overlayLookupData[idx + 3] = 0;
+    for (let i = 0; i < Math.min(layers.length, 4); i++) {
+      overlayLookupData[idx + i] = resolver(layers[i]!) & 0xFF;
+    }
+    overlayLookupTex.needsUpdate = true;
+  }
+
+  /** Push current overlay textures into all atlas materials. */
+  function syncOverlayUniforms(width: number, height: number): void {
+    for (const mat of [floorMat, ceilMat, wallMat, ceilEdgeMat]) {
+      if (!(mat instanceof THREE.ShaderMaterial)) continue;
+      const u = mat.uniforms;
+      if (u['uOverlayLookup']) u['uOverlayLookup'].value = overlayLookupTex;
+      if (u['uTileUvLookup'])  u['uTileUvLookup'].value  = tileUvLookupTex;
+      if (u['uTileUvCount'])   u['uTileUvCount'].value   = tileUvCount;
+      if (u['uDungeonSize'])   u['uDungeonSize'].value   = new THREE.Vector2(width, height);
+    }
+  }
+
   function makeAtlasMaterial(): THREE.ShaderMaterial {
     const canvas = packedAtlas!.texture as HTMLCanvasElement;
     const mat = new THREE.ShaderMaterial({
@@ -443,6 +532,9 @@ export function createDungeonRenderer(
         fogColor,
         fogNear,
         fogFar,
+        ...(tileUvLookupTex ? { tileUvLookup: tileUvLookupTex, tileUvCount } : {}),
+        overlayLookup: overlayLookupTex,
+        dungeonSize: new THREE.Vector2(1, 1),
       }),
       side: THREE.FrontSide,
     });
@@ -991,60 +1083,58 @@ export function createDungeonRenderer(
 
     meshToCellMap.clear();
 
+    // Helper: extract parallel Float32Arrays of cell coords from a CellRef[].
+    function cellArrays(map: CellRef[]): [Float32Array, Float32Array] {
+      const xs = new Float32Array(map.length);
+      const zs = new Float32Array(map.length);
+      map.forEach((c, i) => { xs[i] = c.cx; zs[i] = c.cz; });
+      return [xs, zs];
+    }
+
+    const [floorCX, floorCZ]     = cellArrays(floorCellMap);
+    const [ceilCX, ceilCZ]       = cellArrays(ceilCellMap);
+    const [wallCX, wallCZ]       = cellArrays(wallCellMap);
+    const [fEdgeCX, fEdgeCZ]     = cellArrays(floorEdgeCellMap);
+    const [cEdgeCX, cEdgeCZ]     = cellArrays(ceilEdgeCellMap);
+
     floorMesh = buildInstancedMesh(
-      floors,
-      floorRects,
-      floorMat,
-      !!packedAtlas,
-      new Float32Array(floorOffsets),
+      floors, floorRects, floorMat, !!packedAtlas,
+      new Float32Array(floorOffsets), undefined, undefined, floorCX, floorCZ,
     );
     scene.add(floorMesh);
     meshToCellMap.set(floorMesh, floorCellMap);
 
     ceilMesh = buildInstancedMesh(
-      ceils,
-      ceilRects,
-      ceilMat,
-      !!packedAtlas,
-      new Float32Array(ceilOffsets),
+      ceils, ceilRects, ceilMat, !!packedAtlas,
+      new Float32Array(ceilOffsets), undefined, undefined, ceilCX, ceilCZ,
     );
     scene.add(ceilMesh);
     meshToCellMap.set(ceilMesh, ceilCellMap);
 
     wallMesh = buildInstancedMesh(
-      walls,
-      wallRects,
-      wallMat,
-      !!packedAtlas,
-      undefined,
-      wallRots,
+      walls, wallRects, wallMat, !!packedAtlas,
+      undefined, wallRots, undefined, wallCX, wallCZ,
     );
     scene.add(wallMesh);
     meshToCellMap.set(wallMesh, wallCellMap);
 
     floorEdgeMesh = buildInstancedMesh(
-      floorEdges,
-      floorEdgeRects,
-      floorMat,
-      !!packedAtlas,
-      undefined,
-      floorEdgeRots,
-      floorEdgeHeightScales,
+      floorEdges, floorEdgeRects, floorMat, !!packedAtlas,
+      undefined, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ,
     );
     scene.add(floorEdgeMesh);
     meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
 
     ceilEdgeMesh = buildInstancedMesh(
-      ceilEdges,
-      ceilEdgeRects,
-      ceilEdgeMat,
-      !!packedAtlas,
-      undefined,
-      ceilEdgeRots,
-      ceilEdgeHeightScales,
+      ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas,
+      undefined, ceilEdgeRots, ceilEdgeHeightScales, cEdgeCX, cEdgeCZ,
     );
     scene.add(ceilEdgeMesh);
     meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
+
+    // Build / sync the surface-painter overlay texture now that the dungeon is ready.
+    rebuildOverlayTexture(width, height);
+    syncOverlayUniforms(width, height);
 
     // Apply any layers registered before the dungeon was generated.
     for (const entry of layerEntries) {
@@ -1285,6 +1375,12 @@ export function createDungeonRenderer(
     canvas.addEventListener("pointerleave", onCanvasPointerLeave);
   }
 
+  // ── Surface painter — dynamic cell-paint events ───────────────────────────
+  function onCellPaint({ x, z, layers }: { x: number; z: number; layers: string[] }) {
+    updateOverlayCell(x, z, layers);
+  }
+  game.events.on("cell-paint", onCellPaint);
+
   // ── Internal addLayer ─────────────────────────────────────────────────────
   function internalAddLayer(spec: LayerSpec): LayerHandle {
     const holder: { mesh: THREE.InstancedMesh | null } = { mesh: null };
@@ -1410,6 +1506,11 @@ export function createDungeonRenderer(
           entry.holder.mesh = null;
         }
       }
+      // Reset overlay texture so it is rebuilt for the new dungeon dimensions.
+      if (overlayLookupTex !== _defaultOverlayTex) {
+        overlayLookupTex.dispose();
+        overlayLookupTex = _defaultOverlayTex;
+      }
       dungeonBuilt = false;
       buildDungeon();
     },
@@ -1417,6 +1518,7 @@ export function createDungeonRenderer(
       cancelAnimationFrame(rafId);
       ro.disconnect();
       game.events.off("turn", onTurn);
+      game.events.off("cell-paint", onCellPaint);
       canvas.removeEventListener("click", onCanvasClick);
       canvas.removeEventListener("pointermove", onCanvasPointerMove);
       canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
@@ -1424,6 +1526,9 @@ export function createDungeonRenderer(
       for (const mat of entityMatCache.values()) mat.dispose();
       for (const handle of billboardMap.values()) handle.dispose();
       sharedAtlasTex?.dispose();
+      tileUvLookupTex?.dispose();
+      if (overlayLookupTex !== _defaultOverlayTex) overlayLookupTex.dispose();
+      _defaultOverlayTex.dispose();
       glRenderer.dispose();
       canvas.remove();
     },

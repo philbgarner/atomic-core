@@ -21,10 +21,17 @@ attribute float aUvRotation;
 // 1.0 = full tile; < 1.0 = show only that fraction of the tile, top-aligned.
 // Used for partial-height skirt panels so bricks keep their aspect ratio.
 attribute float aUvHeightScale;
+// Per-instance grid cell coordinates — used to look up the overlay texture.
+attribute float aCellX;
+attribute float aCellZ;
+
+uniform vec2 uDungeonSize;
 
 varying vec2  vAtlasUv;
 varying vec2  vTileOrigin;
 varying vec2  vTileSize;
+varying vec2  vLocalUv;
+varying vec2  vOverlayUv;
 varying float vFogDist;
 
 void main() {
@@ -38,6 +45,9 @@ void main() {
   if (iRot == 1)      localUv = vec2(localUv.y, 1.0 - localUv.x);
   else if (iRot == 2) localUv = vec2(1.0 - localUv.x, 1.0 - localUv.y);
   else if (iRot == 3) localUv = vec2(1.0 - localUv.y, localUv.x);
+
+  vLocalUv    = localUv;
+  vOverlayUv  = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
 
   vTileOrigin = vec2(aUvX, aUvY);
   vTileSize   = vec2(aUvW, aUvH);
@@ -64,10 +74,30 @@ uniform vec3  uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
 
+// Surface painter overlay system.
+// uOverlayLookup: W×H Uint8 RGBA texture — each channel holds one overlay tile ID (0 = none).
+// uTileUvLookup:  1D float RGBA texture  — index = tile ID, value = (uvX, uvY, uvW, uvH).
+uniform sampler2D uOverlayLookup;
+uniform sampler2D uTileUvLookup;
+uniform float     uTileUvCount;
+
 varying vec2  vAtlasUv;
 varying vec2  vTileOrigin;
 varying vec2  vTileSize;
+varying vec2  vLocalUv;
+varying vec2  vOverlayUv;
 varying float vFogDist;
+
+vec4 sampleOverlayTile(float id) {
+  vec2 luv = vec2((id + 0.5) / uTileUvCount, 0.5);
+  vec4 tr  = texture2D(uTileUvLookup, luv);
+  vec2 ov  = clamp(
+    tr.xy + vLocalUv * tr.zw,
+    tr.xy + uTexelSize * 0.5,
+    tr.xy + tr.zw    - uTexelSize * 0.5
+  );
+  return texture2D(uAtlas, ov);
+}
 
 void main() {
   vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
@@ -76,6 +106,21 @@ void main() {
 
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
+
+  // Sample the per-cell overlay slot texture (4 slots packed into RGBA).
+  vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
+
+  float id0 = floor(slots.r * 255.0 + 0.5);
+  if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id1 = floor(slots.g * 255.0 + 0.5);
+  if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id2 = floor(slots.b * 255.0 + 0.5);
+  if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  float id3 = floor(slots.a * 255.0 + 0.5);
+  if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
@@ -123,6 +168,8 @@ void main() {
 
 /**
  * Build Three.js uniform objects for the basic atlas ShaderMaterial.
+ * Overlay uniforms are optional — when omitted a 1×1 zero-filled default
+ * texture is used, which disables the overlay pass at zero cost.
  */
 export function makeBasicAtlasUniforms(params: {
   atlas: THREE.Texture;
@@ -130,12 +177,34 @@ export function makeBasicAtlasUniforms(params: {
   fogColor: THREE.Color;
   fogNear: number;
   fogFar: number;
+  /** 1D float DataTexture mapping tile ID → (uvX, uvY, uvW, uvH). */
+  tileUvLookup?: THREE.Texture;
+  /** Number of tiles in tileUvLookup (width of the 1D texture). */
+  tileUvCount?: number;
+  /** W×H Uint8 RGBA DataTexture: each channel = overlay slot tile ID (0 = none). */
+  overlayLookup?: THREE.Texture;
+  /** Dungeon grid dimensions (width, height). Used by vertex shader. */
+  dungeonSize?: THREE.Vector2;
 }): Record<string, { value: unknown }> {
+  const defaultTex = makeSinglePixelTex();
   return {
-    uAtlas:    { value: params.atlas },
-    uTexelSize:{ value: params.texelSize },
-    uFogColor: { value: params.fogColor },
-    uFogNear:  { value: params.fogNear },
-    uFogFar:   { value: params.fogFar },
+    uAtlas:          { value: params.atlas },
+    uTexelSize:      { value: params.texelSize },
+    uFogColor:       { value: params.fogColor },
+    uFogNear:        { value: params.fogNear },
+    uFogFar:         { value: params.fogFar },
+    uTileUvLookup:   { value: params.tileUvLookup ?? defaultTex },
+    uTileUvCount:    { value: params.tileUvCount ?? 1 },
+    uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },
+    uDungeonSize:    { value: params.dungeonSize ?? new THREE.Vector2(1, 1) },
   };
+}
+
+/** Returns a 1×1 transparent black DataTexture used as a no-op default. */
+function makeSinglePixelTex(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
 }

@@ -81,6 +81,16 @@ export interface GameEventMap {
         /** Server-assigned player ID of the peer who completed the mission. */
         playerId: string;
     };
+    /**
+     * A cell's surface paint changed. `layers` is the new layer name array;
+     * an empty array means the cell was unpainted.
+     * Emitted by `dungeon.paint()` and `dungeon.unpaint()`.
+     */
+    'cell-paint': {
+        x: number;
+        z: number;
+        layers: string[];
+    };
 }
 type Handler<T> = T extends void ? () => void : (payload: T) => void;
 export interface EventEmitter {

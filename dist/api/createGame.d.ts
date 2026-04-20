@@ -42,6 +42,8 @@ export type DungeonHandle = {
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
     paint(x: number, z: number, layers: string[]): void;
     unpaint(x: number, z: number): void;
+    /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
+    readonly paintMap: ReadonlyMap<string, string[]>;
 };
 export type TurnsHandle = {
     /** Current turn counter. */

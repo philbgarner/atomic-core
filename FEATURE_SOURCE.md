@@ -112,7 +112,7 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 **Files:**
 - `rendering/dungeonRenderer.ts` — main Three.js scene, render loop, shader uniforms; `floorTile`/`ceilTile`/`wallTile` options accept `string | number` resolved via `tileNameResolver`; `LayerFaceResult.tile` is `string | number`; per-direction tile specs via `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles` options; public `addLayer(spec)` API for stacking additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering and deferred application; public `worldToScreen(gridX, gridZ, worldY?)` projects a grid cell to pixel coords relative to the container element (returns `null` when behind the camera or out of bounds); uses `basicLighting.ts` shaders; routes entities with `spriteMap` to `billboardSprites.ts` (passing resolver); exports `LayerTarget`, `LayerFaceResult`, `LayerSpec`, `LayerHandle`, `SpriteMap`
 - `rendering/billboardSprites.ts` — see "Billboarded sprite rendering" feature entry above
-- `rendering/basicLighting.ts` — minimal atlas and object shaders: texture sampling + linear fog; `aUvRotation` rotates UVs in 90° steps (0–3); `aUvHeightScale` clips UVs to the top fraction of a tile (top-aligned) so partial-height skirt panels keep brick aspect ratio; no torch flicker or tint bands; used by `dungeonRenderer.ts`
+- `rendering/basicLighting.ts` — minimal atlas and object shaders: texture sampling + linear fog; `aUvRotation` rotates UVs in 90° steps (0–3); `aUvHeightScale` clips UVs to the top fraction of a tile (top-aligned) so partial-height skirt panels keep brick aspect ratio; `aCellX`/`aCellZ` per-instance attributes drive the overlay UV; 4-slot surface-painter overlay composited in fragment shader; no torch flicker or tint bands; used by `dungeonRenderer.ts`
 - `rendering/torchLighting.ts` — torch color, intensity, banding constants, and flickering GLSL chunks; available for custom renderers that want animated torch lighting
 - `rendering/camera.ts` — camera state, `tryMove` wall-collision logic, lerp movement, EotB-style movement as secondary export
 - `rendering/tileAtlas.ts` — UV coordinate helpers; exports `FaceRotation`, `FaceTileSpec` (`tile: string | number`), `DirectionFaceMap` types for per-face tile and rotation overrides; `resolveTile()` helper resolves string names via an optional resolver function
@@ -235,12 +235,16 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 
 ### Atlas surface painting (walls, floors, ceilings per-tile)
 
+Per-cell shader overlay system. Up to 4 overlay tile names can be assigned per cell; the renderer composites them on top of the base tile in the fragment shader with no extra geometry or draw calls.
+
 **Files:**
+- `api/createGame.ts` — `attachSurfacePainter(game, { onPaint })` registers a per-cell callback called during `generate()`; `game.dungeon.paint(x, z, layers)` / `unpaint(x, z)` update the paintMap and emit a `'cell-paint'` event; `game.dungeon.paintMap` exposes the full map read-only
+- `events/eventEmitter.ts` — `'cell-paint': { x, z, layers }` event in `GameEventMap`; emitted by `paint()`/`unpaint()` for dynamic updates
+- `rendering/dungeonRenderer.ts` — builds `uTileUvLookup` (1D float DataTexture: tile ID → atlas UV rect) once from the packed atlas; builds `uOverlayLookup` (W×H Uint8 RGBA DataTexture: 4 overlay slot IDs per cell) after each `generate()`; listens to `'cell-paint'` events to update single texels in-place; passes both textures as uniforms to all atlas materials; adds `aCellX`/`aCellZ` per-instance attributes to all base geometry meshes
+- `rendering/basicLighting.ts` — `BASIC_ATLAS_VERT` forwards `aCellX`/`aCellZ` as `vOverlayUv` (cell-normalised UV into `uOverlayLookup`) and exposes `vLocalUv` (rotated face UV used for overlay tile sampling); `BASIC_ATLAS_FRAG` samples all 4 overlay slots and alpha-composites them over the base colour; new uniforms: `uOverlayLookup`, `uTileUvLookup`, `uTileUvCount`, `uDungeonSize`; `makeBasicAtlasUniforms()` accepts optional overlay params with safe 1×1 zero-texture defaults
 - `atlas/atlas.ts` — `buildAtlasIndex(atlasJson)` resolves all atlas tile IDs at runtime from the developer's own atlas file
-- `dungeon/bsp.ts` — `floorType`, `wallType`, `ceilingType`, `overlays`, `wallOverlays` channels in `DungeonOutputs`; `onPaint` callback result written into these channels
-- `rendering/tileAtlas.ts` — tile UV lookup at render time
+- `dungeon/bsp.ts` — `floorType`, `wallType`, `ceilingType`, `overlays`, `wallOverlays` channels in `DungeonOutputs`
 - `dungeon/themes.ts` — theme resolution writes initial floor/wall/ceiling type IDs into `DungeonOutputs` textures
-- `api/createGame.ts` — `CrawlLib.attachSurfacePainter(game, { onPaint })`; `game.dungeon.paint(x, z, layers)` / `unpaint(x, z)`
 
 ---
 

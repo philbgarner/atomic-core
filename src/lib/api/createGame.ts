@@ -99,6 +99,8 @@ export type DungeonHandle = {
   passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
   paint(x: number, z: number, layers: string[]): void;
   unpaint(x: number, z: number): void;
+  /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
+  readonly paintMap: ReadonlyMap<string, string[]>;
 };
 
 // ---------------------------------------------------------------------------
@@ -644,11 +646,17 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
     paint(x: number, z: number, layers: string[]) {
       internal.paintMap.set(`${x},${z}`, layers);
       writePaintToOverlayTexture(internal, x, z, layers);
+      internal.events.emit('cell-paint', { x, z, layers });
     },
 
     unpaint(x: number, z: number) {
       internal.paintMap.delete(`${x},${z}`);
       writePaintToOverlayTexture(internal, x, z, []);
+      internal.events.emit('cell-paint', { x, z, layers: [] });
+    },
+
+    get paintMap(): ReadonlyMap<string, string[]> {
+      return internal.paintMap;
     },
   };
 }
