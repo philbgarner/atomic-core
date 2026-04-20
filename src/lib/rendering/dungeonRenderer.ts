@@ -608,6 +608,7 @@ export function createDungeonRenderer(
   let wallMesh: THREE.InstancedMesh | null = null;
   let floorEdgeMesh: THREE.InstancedMesh | null = null;
   let ceilEdgeMesh: THREE.InstancedMesh | null = null;
+  let wallSkirtMesh: THREE.InstancedMesh | null = null;
   let dungeonBuilt = false;
 
   // Parallel cell-index arrays: entry i gives the grid cell for instance i.
@@ -618,6 +619,7 @@ export function createDungeonRenderer(
   let wallCellMap: CellRef[] = [];
   let floorEdgeCellMap: CellRef[] = [];
   let ceilEdgeCellMap: CellRef[] = [];
+  let wallSkirtCellMap: CellRef[] = [];
   // Fast lookup: InstancedMesh → its cell array.
   const meshToCellMap = new Map<THREE.InstancedMesh, CellRef[]>();
 
@@ -890,6 +892,7 @@ export function createDungeonRenderer(
     wallCellMap = [];
     floorEdgeCellMap = [];
     ceilEdgeCellMap = [];
+    wallSkirtCellMap = [];
 
     const floors: THREE.Matrix4[] = [];
     const ceils: THREE.Matrix4[] = [];
@@ -908,6 +911,10 @@ export function createDungeonRenderer(
     const ceilEdgeRots: number[] = [];
     const floorEdgeHeightScales: number[] = [];
     const ceilEdgeHeightScales: number[] = [];
+    const wallSkirtEdges: THREE.Matrix4[] = [];
+    const wallSkirtRects: UvRect[] = [];
+    const wallSkirtRots: number[] = [];
+    const wallSkirtHeightScales: number[] = [];
 
     function isSolid(cx: number, cz: number) {
       if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
@@ -1116,6 +1123,43 @@ export function createDungeonRenderer(
         const ncE = openCeilVal(cx + 1, cz);
         if (ncE !== null && ncE > ceilVal)
           addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
+
+        // Wall-adjacent ceiling skirts: when ceiling is raised above ceilingH and the
+        // neighbour is solid, fill the gap between the wall top and the raised ceiling
+        // using the wall tile repeated upward.
+        if (ceilVal < 128) {
+          const gapH = (128 - ceilVal) * offsetStep;
+          function addWallCeilSkirt(
+            mx: number,
+            mz: number,
+            ry: number,
+            dir: "north" | "south" | "east" | "west",
+          ) {
+            const s = spec(wallTiles, dir, wallId);
+            const fullPanels = Math.floor(gapH / tileSize);
+            const rem = gapH - fullPanels * tileSize;
+            for (let i = 0; i < fullPanels; i++) {
+              const midY = ceilingH + i * tileSize + tileSize / 2;
+              wallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
+              wallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
+              wallSkirtRots.push(s.rotation ?? 0);
+              wallSkirtHeightScales.push(1.0);
+              wallSkirtCellMap.push({ cx, cz });
+            }
+            if (rem > 0.001) {
+              const midY = ceilingH + fullPanels * tileSize + rem / 2;
+              wallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
+              wallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
+              wallSkirtRots.push(s.rotation ?? 0);
+              wallSkirtHeightScales.push(rem / tileSize);
+              wallSkirtCellMap.push({ cx, cz });
+            }
+          }
+          if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
+          if (isSolid(cx, cz + 1)) addWallCeilSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
+          if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
+          if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
+        }
       }
     }
 
@@ -1134,6 +1178,7 @@ export function createDungeonRenderer(
     const [wallCX, wallCZ]       = cellArrays(wallCellMap);
     const [fEdgeCX, fEdgeCZ]     = cellArrays(floorEdgeCellMap);
     const [cEdgeCX, cEdgeCZ]     = cellArrays(ceilEdgeCellMap);
+    const [wSkirtCX, wSkirtCZ]   = cellArrays(wallSkirtCellMap);
 
     floorMesh = buildInstancedMesh(
       floors, floorRects, floorMat, !!packedAtlas,
@@ -1169,6 +1214,15 @@ export function createDungeonRenderer(
     );
     scene.add(ceilEdgeMesh);
     meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
+
+    if (wallSkirtEdges.length > 0) {
+      wallSkirtMesh = buildInstancedMesh(
+        wallSkirtEdges, wallSkirtRects, wallMat, !!packedAtlas,
+        undefined, wallSkirtRots, wallSkirtHeightScales, wSkirtCX, wSkirtCZ,
+      );
+      scene.add(wallSkirtMesh);
+      meshToCellMap.set(wallSkirtMesh, wallSkirtCellMap);
+    }
 
     // Build / sync the surface-painter overlay texture now that the dungeon is ready.
     rebuildOverlayTexture(width, height);
@@ -1361,7 +1415,7 @@ export function createDungeonRenderer(
     _mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(_mouseNdc, camera);
 
-    const pickable = [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh].filter(
+    const pickable = [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh, wallSkirtMesh].filter(
       (m): m is THREE.InstancedMesh => m !== null,
     );
     if (pickable.length === 0) return null;
@@ -1528,13 +1582,14 @@ export function createDungeonRenderer(
         wallMesh,
         floorEdgeMesh,
         ceilEdgeMesh,
+        wallSkirtMesh,
       ]) {
         if (mesh) {
           scene.remove(mesh);
           mesh.geometry.dispose();
         }
       }
-      floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+      floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = wallSkirtMesh = null;
       meshToCellMap.clear();
       // Remove and dispose layer meshes — they will be rebuilt by buildDungeon.
       for (const entry of layerEntries) {

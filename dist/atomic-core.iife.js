@@ -3796,12 +3796,14 @@ void main() {
 		let wallMesh = null;
 		let floorEdgeMesh = null;
 		let ceilEdgeMesh = null;
+		let wallSkirtMesh = null;
 		let dungeonBuilt = false;
 		let floorCellMap = [];
 		let ceilCellMap = [];
 		let wallCellMap = [];
 		let floorEdgeCellMap = [];
 		let ceilEdgeCellMap = [];
+		let wallSkirtCellMap = [];
 		const meshToCellMap = /* @__PURE__ */ new Map();
 		const layerEntries = [];
 		/** Build an instanced mesh for a single LayerSpec by scanning the dungeon map. */
@@ -3930,6 +3932,7 @@ void main() {
 			wallCellMap = [];
 			floorEdgeCellMap = [];
 			ceilEdgeCellMap = [];
+			wallSkirtCellMap = [];
 			const floors = [];
 			const ceils = [];
 			const walls = [];
@@ -3947,6 +3950,10 @@ void main() {
 			const ceilEdgeRots = [];
 			const floorEdgeHeightScales = [];
 			const ceilEdgeHeightScales = [];
+			const wallSkirtEdges = [];
+			const wallSkirtRects = [];
+			const wallSkirtRots = [];
+			const wallSkirtHeightScales = [];
 			function isSolid(cx, cz) {
 				if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
 				return (solid[cz * width + cx] ?? 0) > 0;
@@ -4103,6 +4110,40 @@ void main() {
 				if (ncW !== null && ncW > ceilVal) addCeilSkirt(ncW, cx * tileSize, wz, -HALF_PI, "west");
 				const ncE = openCeilVal(cx + 1, cz);
 				if (ncE !== null && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
+				if (ceilVal < 128) {
+					const gapH = (128 - ceilVal) * offsetStep;
+					function addWallCeilSkirt(mx, mz, ry, dir) {
+						const s = spec(wallTiles, dir, wallId);
+						const fullPanels = Math.floor(gapH / tileSize);
+						const rem = gapH - fullPanels * tileSize;
+						for (let i = 0; i < fullPanels; i++) {
+							const midY = ceilingH + i * tileSize + tileSize / 2;
+							wallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
+							wallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
+							wallSkirtRots.push(s.rotation ?? 0);
+							wallSkirtHeightScales.push(1);
+							wallSkirtCellMap.push({
+								cx,
+								cz
+							});
+						}
+						if (rem > .001) {
+							const midY = ceilingH + fullPanels * tileSize + rem / 2;
+							wallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
+							wallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
+							wallSkirtRots.push(s.rotation ?? 0);
+							wallSkirtHeightScales.push(rem / tileSize);
+							wallSkirtCellMap.push({
+								cx,
+								cz
+							});
+						}
+					}
+					if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
+					if (isSolid(cx, cz + 1)) addWallCeilSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
+					if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
+					if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
+				}
 			}
 			meshToCellMap.clear();
 			function cellArrays(map) {
@@ -4119,6 +4160,7 @@ void main() {
 			const [wallCX, wallCZ] = cellArrays(wallCellMap);
 			const [fEdgeCX, fEdgeCZ] = cellArrays(floorEdgeCellMap);
 			const [cEdgeCX, cEdgeCZ] = cellArrays(ceilEdgeCellMap);
+			const [wSkirtCX, wSkirtCZ] = cellArrays(wallSkirtCellMap);
 			floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets), void 0, void 0, floorCX, floorCZ);
 			scene.add(floorMesh);
 			meshToCellMap.set(floorMesh, floorCellMap);
@@ -4134,6 +4176,11 @@ void main() {
 			ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas, void 0, ceilEdgeRots, ceilEdgeHeightScales, cEdgeCX, cEdgeCZ);
 			scene.add(ceilEdgeMesh);
 			meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
+			if (wallSkirtEdges.length > 0) {
+				wallSkirtMesh = buildInstancedMesh(wallSkirtEdges, wallSkirtRects, wallMat, !!packedAtlas, void 0, wallSkirtRots, wallSkirtHeightScales, wSkirtCX, wSkirtCZ);
+				scene.add(wallSkirtMesh);
+				meshToCellMap.set(wallSkirtMesh, wallSkirtCellMap);
+			}
 			rebuildOverlayTexture(width, height);
 			syncOverlayUniforms(width, height);
 			for (const entry of layerEntries) if (!entry.holder.mesh) {
@@ -4263,7 +4310,8 @@ void main() {
 				ceilMesh,
 				wallMesh,
 				floorEdgeMesh,
-				ceilEdgeMesh
+				ceilEdgeMesh,
+				wallSkirtMesh
 			].filter((m) => m !== null);
 			if (pickable.length === 0) return null;
 			const hit = raycaster.intersectObjects(pickable, false)[0];
@@ -4414,12 +4462,13 @@ void main() {
 					ceilMesh,
 					wallMesh,
 					floorEdgeMesh,
-					ceilEdgeMesh
+					ceilEdgeMesh,
+					wallSkirtMesh
 				]) if (mesh) {
 					scene.remove(mesh);
 					mesh.geometry.dispose();
 				}
-				floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = null;
+				floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = wallSkirtMesh = null;
 				meshToCellMap.clear();
 				for (const entry of layerEntries) if (entry.holder.mesh) {
 					scene.remove(entry.holder.mesh);
