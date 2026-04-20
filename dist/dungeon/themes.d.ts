@@ -5,6 +5,10 @@ export type ThemeDef = {
     wallType: string;
     /** Name matching an entry in atlas.json `ceilingTypes`. */
     ceilingType: string;
+    /** Optional tile name for floor skirt faces. Omit to fall back to the floor tile. */
+    floorSkirtType?: string;
+    /** Optional tile name for ceiling skirt faces. Omit to fall back to the ceiling tile. */
+    ceilSkirtType?: string;
 };
 /**
  * Theme selector for a dungeon config:

@@ -535,6 +535,8 @@ function generateBspDungeon(options) {
 	const wallOverlays = new Uint8Array(4 * W * H);
 	const ceilingType = new Uint8Array(W * H);
 	const ceilingOverlays = new Uint8Array(4 * W * H);
+	const floorSkirtType = new Uint8Array(4 * W * H);
+	const ceilSkirtType = new Uint8Array(4 * W * H);
 	const floorHeightOffset = new Uint8Array(W * H);
 	floorHeightOffset.fill(128);
 	const ceilingHeightOffset = new Uint8Array(W * H);
@@ -639,6 +641,8 @@ function generateBspDungeon(options) {
 			wallOverlays: maskToDataTextureRGBA(wallOverlays, W, H, "bsp_dungeon_wall_overlays"),
 			ceilingType: maskToDataTextureR8(ceilingType, W, H, "bsp_dungeon_ceiling_type"),
 			ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays"),
+			floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "bsp_dungeon_floor_skirt_type"),
+			ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "bsp_dungeon_ceil_skirt_type"),
 			floorHeightOffset: maskToDataTextureR8(floorHeightOffset, W, H, "bsp_dungeon_floor_height_offset"),
 			ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffset, W, H, "bsp_dungeon_ceiling_height_offset"),
 			colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "bsp_dungeon_collider_flags")

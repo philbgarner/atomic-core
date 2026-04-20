@@ -75,6 +75,18 @@ export type DungeonOutputs = {
      * Default values are derived from the `solid` texture.
      */
     colliderFlags: THREE.DataTexture;
+    /**
+     * Per-cell floor skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
+     * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
+     * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+     */
+    floorSkirtType: THREE.DataTexture;
+    /**
+     * Per-cell ceiling skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
+     * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
+     * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+     */
+    ceilSkirtType: THREE.DataTexture;
   };
 };
 
@@ -885,6 +897,8 @@ export function generateBspDungeon(
   const wallOverlays = new Uint8Array(4 * W * H);
   const ceilingType = new Uint8Array(W * H);
   const ceilingOverlays = new Uint8Array(4 * W * H);
+  const floorSkirtType = new Uint8Array(4 * W * H);
+  const ceilSkirtType = new Uint8Array(4 * W * H);
   const floorHeightOffset = new Uint8Array(W * H);
   floorHeightOffset.fill(128);
   const ceilingHeightOffset = new Uint8Array(W * H);
@@ -1041,9 +1055,57 @@ export function generateBspDungeon(
       wallOverlays: maskToDataTextureRGBA(wallOverlays, W, H, "bsp_dungeon_wall_overlays"),
       ceilingType: maskToDataTextureR8(ceilingType, W, H, "bsp_dungeon_ceiling_type"),
       ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays"),
+      floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "bsp_dungeon_floor_skirt_type"),
+      ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "bsp_dungeon_ceil_skirt_type"),
       floorHeightOffset: maskToDataTextureR8(floorHeightOffset, W, H, "bsp_dungeon_floor_height_offset"),
       ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffset, W, H, "bsp_dungeon_ceiling_height_offset"),
       colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "bsp_dungeon_collider_flags"),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-cell skirt tile helpers
+// ---------------------------------------------------------------------------
+
+/** Direction-to-RGBA-channel mapping used by floorSkirtType / ceilSkirtType textures. */
+const SKIRT_CHANNEL = { north: 0, south: 1, east: 2, west: 3 } as const;
+
+/**
+ * Write per-cell floor skirt tile IDs for one or more directions.
+ * Only directions present in `map` are written; absent directions are unchanged.
+ * Call after modifying to trigger a renderer refresh (texture.needsUpdate is set automatically).
+ */
+export function setFloorSkirtTiles(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  map: { north?: number; south?: number; east?: number; west?: number },
+): void {
+  const data = outputs.textures.floorSkirtType.image.data as Uint8Array;
+  const base = (cz * outputs.width + cx) * 4;
+  if (map.north !== undefined) data[base + SKIRT_CHANNEL.north] = map.north;
+  if (map.south !== undefined) data[base + SKIRT_CHANNEL.south] = map.south;
+  if (map.east  !== undefined) data[base + SKIRT_CHANNEL.east]  = map.east;
+  if (map.west  !== undefined) data[base + SKIRT_CHANNEL.west]  = map.west;
+  outputs.textures.floorSkirtType.needsUpdate = true;
+}
+
+/**
+ * Write per-cell ceiling skirt tile IDs for one or more directions.
+ * Only directions present in `map` are written; absent directions are unchanged.
+ */
+export function setCeilSkirtTiles(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  map: { north?: number; south?: number; east?: number; west?: number },
+): void {
+  const data = outputs.textures.ceilSkirtType.image.data as Uint8Array;
+  const base = (cz * outputs.width + cx) * 4;
+  if (map.north !== undefined) data[base + SKIRT_CHANNEL.north] = map.north;
+  if (map.south !== undefined) data[base + SKIRT_CHANNEL.south] = map.south;
+  if (map.east  !== undefined) data[base + SKIRT_CHANNEL.east]  = map.east;
+  if (map.west  !== undefined) data[base + SKIRT_CHANNEL.west]  = map.west;
+  outputs.textures.ceilSkirtType.needsUpdate = true;
 }

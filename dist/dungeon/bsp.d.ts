@@ -76,6 +76,18 @@ export type DungeonOutputs = {
          * Default values are derived from the `solid` texture.
          */
         colliderFlags: THREE.DataTexture;
+        /**
+         * Per-cell floor skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
+         * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
+         * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+         */
+        floorSkirtType: THREE.DataTexture;
+        /**
+         * Per-cell ceiling skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
+         * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
+         * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+         */
+        ceilSkirtType: THREE.DataTexture;
     };
 };
 export type RoomRect = {
@@ -146,4 +158,25 @@ export declare function buildFullRegionIds(regionIdData: Uint8Array, solidData: 
     corridorRegionIds: number[];
 };
 export declare function generateBspDungeon(options: BspDungeonOptions): BspDungeonOutputs;
+/**
+ * Write per-cell floor skirt tile IDs for one or more directions.
+ * Only directions present in `map` are written; absent directions are unchanged.
+ * Call after modifying to trigger a renderer refresh (texture.needsUpdate is set automatically).
+ */
+export declare function setFloorSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, map: {
+    north?: number;
+    south?: number;
+    east?: number;
+    west?: number;
+}): void;
+/**
+ * Write per-cell ceiling skirt tile IDs for one or more directions.
+ * Only directions present in `map` are written; absent directions are unchanged.
+ */
+export declare function setCeilSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, map: {
+    north?: number;
+    south?: number;
+    east?: number;
+    west?: number;
+}): void;
 //# sourceMappingURL=bsp.d.ts.map

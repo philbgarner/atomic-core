@@ -18,6 +18,9 @@ export type SerializedDungeon = {
     distanceToWall: string;
     hazards: string;
     colliderFlags: string;
+    /** Base64-encoded RGBA Uint8Array for skirt tile overrides. Optional for backwards compatibility. */
+    floorSkirtType?: string;
+    ceilSkirtType?: string;
 };
 /**
  * Snapshot all mutable texture data into a JSON-safe object.

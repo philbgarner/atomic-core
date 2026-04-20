@@ -111,9 +111,9 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 ### First-person 3D dungeon rendering with lighting and fog
 
 **Files:**
-- `rendering/dungeonRenderer.ts` — main Three.js scene, render loop, shader uniforms; `floorTile`/`ceilTile`/`wallTile` options accept `string | number` resolved via `tileNameResolver`; `LayerFaceResult.tile` is `string | number`; per-direction tile specs via `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles` options; public `addLayer(spec)` API for stacking additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering and deferred application; public `worldToScreen(gridX, gridZ, worldY?)` projects a grid cell to pixel coords relative to the container element (returns `null` when behind the camera or out of bounds); uses `basicLighting.ts` shaders; routes entities with `spriteMap` to `billboardSprites.ts` (passing resolver); exports `LayerTarget`, `LayerFaceResult`, `LayerSpec`, `LayerHandle`, `SpriteMap`
+- `rendering/dungeonRenderer.ts` — main Three.js scene, render loop, shader uniforms; `floorTile`/`ceilTile`/`wallTile` options accept `string | number` resolved via `tileNameResolver`; `LayerFaceResult.tile` is `string | number`; per-direction tile specs via `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles` options; per-cell skirt type lookup: edge skirts resolve `floorSkirtType`/`ceilSkirtType` at build time (overrides base tile), wall-adjacent skirts composite the override in fragment shader via `uSkirtLookup` + `aSkirtDirChannel`; wall-adjacent floor and ceiling skirts use separate instanced meshes (`floorWallSkirtMesh`, `ceilWallSkirtMesh`) with their own materials so each can carry a distinct skirt lookup texture; public `addLayer(spec)` API for stacking additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering and deferred application; public `worldToScreen(gridX, gridZ, worldY?)` projects a grid cell to pixel coords relative to the container element (returns `null` when behind the camera or out of bounds); uses `basicLighting.ts` shaders; routes entities with `spriteMap` to `billboardSprites.ts` (passing resolver); exports `LayerTarget`, `LayerFaceResult`, `LayerSpec`, `LayerHandle`, `SpriteMap`
 - `rendering/billboardSprites.ts` — see "Billboarded sprite rendering" feature entry above
-- `rendering/basicLighting.ts` — minimal atlas and object shaders: texture sampling + linear fog; `aUvRotation` rotates UVs in 90° steps (0–3); `aUvHeightScale` clips UVs to the top fraction of a tile (top-aligned) so partial-height skirt panels keep brick aspect ratio; `aCellX`/`aCellZ` per-instance attributes drive the overlay UV; 4-slot surface-painter overlay composited in fragment shader; no torch flicker or tint bands; used by `dungeonRenderer.ts`
+- `rendering/basicLighting.ts` — minimal atlas and object shaders: texture sampling + linear fog; `aUvRotation` rotates UVs in 90° steps (0–3); `aUvHeightScale` clips UVs to the top fraction of a tile (top-aligned) so partial-height skirt panels keep brick aspect ratio; `aCellX`/`aCellZ` per-instance attributes drive the overlay UV; 4-slot surface-painter overlay composited in fragment shader; `aSkirtDirChannel` per-instance attribute (0=N/R, 1=S/G, 2=E/B, 3=W/A) selects the RGBA channel of `uSkirtLookup` to composite as a skirt overlay; `uSkirtLookup` defaults to 1×1 zero texture (no-op); no torch flicker or tint bands; used by `dungeonRenderer.ts`
 - `rendering/torchLighting.ts` — torch color, intensity, banding constants, and flickering GLSL chunks; available for custom renderers that want animated torch lighting
 - `rendering/camera.ts` — camera state, `tryMove` wall-collision logic, lerp movement, EotB-style movement as secondary export
 - `rendering/tileAtlas.ts` — UV coordinate helpers; exports `FaceRotation`, `FaceTileSpec` (`tile: string | number`), `DirectionFaceMap` types for per-face tile and rotation overrides; `resolveTile()` helper resolves string names via an optional resolver function
@@ -132,11 +132,11 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 ### BSP dungeon generator
 
 **Files:**
-- `dungeon/bsp.ts` — BSP tree split, room placement, corridor carving, `setupDungeon()`, `DungeonOutputs` shape; produces `floorHeightOffset`, `ceilingHeightOffset`, and `colliderFlags` textures
-- `dungeon/cellular.ts` — cellular automata generator producing the same `DungeonOutputs` shape including `colliderFlags`
+- `dungeon/bsp.ts` — BSP tree split, room placement, corridor carving, `setupDungeon()`, `DungeonOutputs` shape; produces `floorHeightOffset`, `ceilingHeightOffset`, `colliderFlags`, `floorSkirtType`, and `ceilSkirtType` textures; `setFloorSkirtTiles()` / `setCeilSkirtTiles()` per-cell skirt tile helpers
+- `dungeon/cellular.ts` — cellular automata generator producing the same `DungeonOutputs` shape including `colliderFlags`, `floorSkirtType`, and `ceilSkirtType`
 - `dungeon/colliderFlags.ts` — `IS_WALKABLE`, `IS_BLOCKED`, `IS_LIGHT_PASSABLE` constants; `buildColliderFlags()` deriver; `isWalkableCell()`, `isBlockedCell()`, `isLightPassableCell()` predicates
-- `dungeon/serialize.ts` — serialize/deserialize a `DungeonOutputs` to JSON (includes `colliderFlags`)
-- `dungeon/themes.ts` — `ThemeDef` type; `ThemeSelector` union (string | string[] | weighted array | callback); built-in themes (dungeon, crypt, catacomb, industrial, ruins); public exports `THEMES`, `THEME_KEYS`, `resolveTheme()`, `registerTheme()`, `getTheme()`
+- `dungeon/serialize.ts` — serialize/deserialize a `DungeonOutputs` to JSON (includes `colliderFlags`, `floorSkirtType`, `ceilSkirtType`; skirt fields optional for backwards compat)
+- `dungeon/themes.ts` — `ThemeDef` type with optional `floorSkirtType?` / `ceilSkirtType?` tile name fields; `ThemeSelector` union (string | string[] | weighted array | callback); built-in themes (dungeon, crypt, catacomb, industrial, ruins); public exports `THEMES`, `THEME_KEYS`, `resolveTheme()`, `registerTheme()`, `getTheme()`
 - `utils/geometry.ts` — `MinHeap<T>`, `octile()` used internally by BSP helpers
 
 ---
@@ -253,6 +253,22 @@ Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture)
 - `entities/types.ts` — `Decoration` interface (`id`, `kind: 'decoration'`, `type`, `x`, `z`, `sprite`, `blocksMove`, `blocksView`, `interactive`, `onInteract`)
 - `entities/factory.ts` — `createDecoration()` factory with auto-generated `id`
 - `api/createGame.ts` — `CrawlLib.attachDecorator(game, { onDecorate })`; `game.dungeon.decorations.add()`, `.remove()`, `.list`
+
+---
+
+### Per-cell skirt tile customization
+
+Two RGBA DataTextures (`floorSkirtType`, `ceilSkirtType`) on `DungeonOutputs` allow arbitrary per-cell tile overrides for all four skirt face directions (R=north, G=south, B=east, A=west). Value 0 = use renderer fallback; 1–255 = explicit tile ID. For edge skirts (height differences between open cells), the override replaces the base tile at geometry build time. For wall-adjacent skirts (sunken floor or raised ceiling abutting a wall), the override is composited as an additional layer on top of the wall tile in the fragment shader, using the existing `sampleOverlayTile` infrastructure. `ThemeDef` accepts optional `floorSkirtType?` / `ceilSkirtType?` tile name fields.
+
+**Files:**
+- `dungeon/bsp.ts` — `floorSkirtType` and `ceilSkirtType` RGBA DataTextures in `DungeonOutputs`; `setFloorSkirtTiles()` / `setCeilSkirtTiles()` per-cell per-direction write helpers
+- `dungeon/cellular.ts` — same channels in `CellularDungeonOutputs`
+- `dungeon/tiled.ts` — zero-filled channels to satisfy `DungeonOutputs` shape
+- `dungeon/themes.ts` — optional `floorSkirtType?` / `ceilSkirtType?` string fields on `ThemeDef`
+- `dungeon/serialize.ts` — optional `floorSkirtType` / `ceilSkirtType` fields in `SerializedDungeon`; graceful fallback (zero-filled) when deserializing older snapshots
+- `rendering/basicLighting.ts` — `uSkirtLookup` uniform + `aSkirtDirChannel` attribute; fragment shader composites the direction-keyed channel over the base tile
+- `rendering/dungeonRenderer.ts` — reads skirt data at build time for edge skirts; splits wall-adjacent skirts into `floorWallSkirtMesh` / `ceilWallSkirtMesh` each with its own material and `uSkirtLookup` uniform; `setSkirtLookupUniform()` internal helper
+- `index.ts` — exports `setFloorSkirtTiles`, `setCeilSkirtTiles`
 
 ---
 

@@ -102,6 +102,8 @@
 - [registerTheme](functions/registerTheme.md)
 - [resolveSprite](functions/resolveSprite.md)
 - [resolveTheme](functions/resolveTheme.md)
+- [setCeilSkirtTiles](functions/setCeilSkirtTiles.md)
+- [setFloorSkirtTiles](functions/setFloorSkirtTiles.md)
 - [showInventory](functions/showInventory.md)
 - [spriteToUvRect](functions/spriteToUvRect.md)
 - [toFaceRotation](functions/toFaceRotation.md)

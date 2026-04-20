@@ -44,6 +44,8 @@ export type CellularDungeonOutputs = DungeonOutputs & {
         ceilingType: THREE.DataTexture;
         ceilingOverlays: THREE.DataTexture;
         colliderFlags: THREE.DataTexture;
+        floorSkirtType: THREE.DataTexture;
+        ceilSkirtType: THREE.DataTexture;
     };
     /** Floor cell closest to the centroid of the largest region - good spawn point. */
     startPos: GridPos;

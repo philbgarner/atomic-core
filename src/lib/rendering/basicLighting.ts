@@ -24,6 +24,8 @@ attribute float aUvHeightScale;
 // Per-instance grid cell coordinates — used to look up the overlay texture.
 attribute float aCellX;
 attribute float aCellZ;
+// Which RGBA channel of uSkirtLookup to read for this instance (0=R/N, 1=G/S, 2=B/E, 3=A/W).
+attribute float aSkirtDirChannel;
 
 uniform vec2 uDungeonSize;
 
@@ -32,6 +34,7 @@ varying vec2  vTileOrigin;
 varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
+varying float vSkirtDirChannel;
 varying float vFogDist;
 
 void main() {
@@ -46,8 +49,9 @@ void main() {
   else if (iRot == 2) localUv = vec2(1.0 - localUv.x, 1.0 - localUv.y);
   else if (iRot == 3) localUv = vec2(1.0 - localUv.y, localUv.x);
 
-  vLocalUv    = localUv;
-  vOverlayUv  = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
+  vLocalUv         = localUv;
+  vOverlayUv       = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
+  vSkirtDirChannel = aSkirtDirChannel;
 
   vTileOrigin = vec2(aUvX, aUvY);
   vTileSize   = vec2(aUvW, aUvH);
@@ -80,12 +84,15 @@ uniform float uFogFar;
 uniform sampler2D uOverlayLookup;
 uniform sampler2D uTileUvLookup;
 uniform float     uTileUvCount;
+// Per-cell skirt type lookup (RGBA: R=N, G=S, B=E, A=W). 1×1 zero by default (no-op).
+uniform sampler2D uSkirtLookup;
 
 varying vec2  vAtlasUv;
 varying vec2  vTileOrigin;
 varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
+varying float vSkirtDirChannel;
 varying float vFogDist;
 
 vec4 sampleOverlayTile(float id) {
@@ -121,6 +128,18 @@ void main() {
 
   float id3 = floor(slots.a * 255.0 + 0.5);
   if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  // Per-cell skirt type overlay: sample the direction-keyed lookup and composite if non-zero.
+  {
+    vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
+    int iDir = int(floor(vSkirtDirChannel + 0.5));
+    float skirtId;
+    if      (iDir == 0) skirtId = floor(skirtSlots.r * 255.0 + 0.5);
+    else if (iDir == 1) skirtId = floor(skirtSlots.g * 255.0 + 0.5);
+    else if (iDir == 2) skirtId = floor(skirtSlots.b * 255.0 + 0.5);
+    else                skirtId = floor(skirtSlots.a * 255.0 + 0.5);
+    if (skirtId > 0.5) { vec4 oc = sampleOverlayTile(skirtId); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  }
 
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
@@ -183,6 +202,8 @@ export function makeBasicAtlasUniforms(params: {
   tileUvCount?: number;
   /** W×H Uint8 RGBA DataTexture: each channel = overlay slot tile ID (0 = none). */
   overlayLookup?: THREE.Texture;
+  /** W×H Uint8 RGBA DataTexture for per-cell skirt tile overrides (R=N,G=S,B=E,A=W). */
+  skirtLookup?: THREE.Texture;
   /** Dungeon grid dimensions (width, height). Used by vertex shader. */
   dungeonSize?: THREE.Vector2;
 }): Record<string, { value: unknown }> {
@@ -196,6 +217,7 @@ export function makeBasicAtlasUniforms(params: {
     uTileUvLookup:   { value: params.tileUvLookup ?? defaultTex },
     uTileUvCount:    { value: params.tileUvCount ?? 1 },
     uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },
+    uSkirtLookup:    { value: params.skirtLookup ?? defaultTex },
     uDungeonSize:    { value: params.dungeonSize ?? new THREE.Vector2(1, 1) },
   };
 }

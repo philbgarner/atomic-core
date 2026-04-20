@@ -4,7 +4,7 @@
 
 > **loadMultiAtlas**(`sources`, `options?`): `Promise`\<[`PackedAtlas`](../type-aliases/PackedAtlas.md)\>
 
-Defined in: [rendering/textureLoader.ts:269](https://github.com/philbgarner/atomic-core/blob/54550262747609ee8b273468044fb8a6ec349eb1/src/lib/rendering/textureLoader.ts#L269)
+Defined in: [rendering/textureLoader.ts:269](https://github.com/philbgarner/atomic-core/blob/7b7463b8325930f15251c0be70e7a1d4211f3108/src/lib/rendering/textureLoader.ts#L269)
 
 Load multiple TexturePacker-format sprite atlases, repack all sprites from
 every source into a single power-of-two OffscreenCanvas, and return a

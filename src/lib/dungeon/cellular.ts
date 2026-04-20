@@ -57,6 +57,8 @@ export type CellularDungeonOutputs = DungeonOutputs & {
     ceilingType: THREE.DataTexture;
     ceilingOverlays: THREE.DataTexture;
     colliderFlags: THREE.DataTexture;
+    floorSkirtType: THREE.DataTexture;
+    ceilSkirtType: THREE.DataTexture;
   };
   /** Floor cell closest to the centroid of the largest region - good spawn point. */
   startPos: GridPos;
@@ -333,6 +335,8 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
   const wallOverlays = new Uint8Array(4 * W * H);
   const ceilingType = new Uint8Array(W * H);
   const ceilingOverlays = new Uint8Array(4 * W * H);
+  const floorSkirtType = new Uint8Array(4 * W * H);
+  const ceilSkirtType = new Uint8Array(4 * W * H);
 
   for (let i = 0; i < W * H; i++) {
     if (solid[i] === 0) ceilingType[i] = 1; // default ceiling type id 1
@@ -356,6 +360,8 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
       ceilingType:     maskToDataTextureR8(ceilingType,     W, H, "cellular_ceiling_type"),
       ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "cellular_ceiling_overlays"),
       colliderFlags:   maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
+      floorSkirtType:  maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
+      ceilSkirtType:   maskToDataTextureRGBA(ceilSkirtType,  W, H, "cellular_ceil_skirt_type"),
     },
   };
 }

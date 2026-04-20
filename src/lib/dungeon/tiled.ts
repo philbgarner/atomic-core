@@ -212,6 +212,8 @@ export function loadTiledMap(tiledJson: unknown, options: TiledMapOptions): Tile
     ceilingType:     r8Texture(buildR8(layerMap.ceilingType),    W, H, "ceilingType"),
     ceilingOverlays: rgbaTexture(buildRGBA(layerMap.ceilingOverlays), W, H, "ceilingOverlays"),
     colliderFlags:   r8Texture(colliderFlagsArr,                 W, H, "colliderFlags"),
+    floorSkirtType:  rgbaTexture(new Uint8Array(W * H * 4),          W, H, "floorSkirtType"),
+    ceilSkirtType:   rgbaTexture(new Uint8Array(W * H * 4),          W, H, "ceilSkirtType"),
   };
 
   // ----------------------------------------------------------------

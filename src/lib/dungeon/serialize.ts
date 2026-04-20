@@ -30,6 +30,9 @@ export type SerializedDungeon = {
   distanceToWall: string;
   hazards: string;
   colliderFlags: string;
+  /** Base64-encoded RGBA Uint8Array for skirt tile overrides. Optional for backwards compatibility. */
+  floorSkirtType?: string;
+  ceilSkirtType?: string;
 };
 
 // --------------------------------
@@ -111,6 +114,8 @@ export function serializeDungeon(dungeon: BspDungeonOutputs): SerializedDungeon 
     distanceToWall: uint8ToBase64(textureData(dungeon.textures.distanceToWall)),
     hazards: uint8ToBase64(textureData(dungeon.textures.hazards)),
     colliderFlags: uint8ToBase64(textureData(dungeon.textures.colliderFlags)),
+    floorSkirtType: uint8ToBase64(textureData(dungeon.textures.floorSkirtType)),
+    ceilSkirtType: uint8ToBase64(textureData(dungeon.textures.ceilSkirtType)),
   };
 }
 
@@ -156,6 +161,14 @@ export function deserializeDungeon(data: SerializedDungeon): BspDungeonOutputs {
       ceilingType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_ceiling_type"),
       ceilingOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceiling_overlays"),
       colliderFlags: makeDataTexture(base64ToUint8(data.colliderFlags), W, H, "bsp_dungeon_collider_flags"),
+      floorSkirtType: makeDataTextureRGBA(
+        data.floorSkirtType ? base64ToUint8(data.floorSkirtType) : new Uint8Array(4 * W * H),
+        W, H, "bsp_dungeon_floor_skirt_type",
+      ),
+      ceilSkirtType: makeDataTextureRGBA(
+        data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H),
+        W, H, "bsp_dungeon_ceil_skirt_type",
+      ),
     },
   };
 }
@@ -188,6 +201,15 @@ export function rehydrateDungeon(
   fresh.textures.distanceToWall.needsUpdate = true;
   fresh.textures.hazards.needsUpdate = true;
   fresh.textures.colliderFlags.needsUpdate = true;
+
+  if (data.floorSkirtType) {
+    (fresh.textures.floorSkirtType.image.data as Uint8Array).set(base64ToUint8(data.floorSkirtType));
+    fresh.textures.floorSkirtType.needsUpdate = true;
+  }
+  if (data.ceilSkirtType) {
+    (fresh.textures.ceilSkirtType.image.data as Uint8Array).set(base64ToUint8(data.ceilSkirtType));
+    fresh.textures.ceilSkirtType.needsUpdate = true;
+  }
 
   return fresh;
 }
