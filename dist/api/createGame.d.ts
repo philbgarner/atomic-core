@@ -40,10 +40,11 @@ export type DungeonHandle = {
     decorations: DecorationList;
     passages: PassageList;
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
-    paint(x: number, z: number, layers: string[]): void;
+    /** Apply per-surface overlay tile names to a cell. */
+    paint(x: number, z: number, layers: SurfacePaintTarget): void;
     unpaint(x: number, z: number): void;
     /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
-    readonly paintMap: ReadonlyMap<string, string[]>;
+    readonly paintMap: ReadonlyMap<string, SurfacePaintTarget>;
 };
 export type TurnsHandle = {
     /** Current turn counter. */
@@ -88,7 +89,7 @@ export type PlaceAPI = {
     npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     enemy(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
-    surface(x: number, z: number, layers: string[]): void;
+    surface(x: number, z: number, layers: SurfacePaintTarget): void;
 };
 export type DungeonOptions = (BspDungeonOptions & {
     tiled?: never;
@@ -202,12 +203,21 @@ type DecoratorCallback = (ctx: {
     x: number;
     y: number;
 }) => DecorationEntity | DecorationEntity[] | null | undefined;
+/** Per-surface overlay tile names for a single cell. Each key is optional. */
+export type SurfacePaintTarget = {
+    /** Tile names to overlay on the floor face of this cell. Up to 4. */
+    floor?: string[];
+    /** Tile names to overlay on wall faces of this cell. Up to 4. */
+    wall?: string[];
+    /** Tile names to overlay on the ceiling face of this cell. Up to 4. */
+    ceil?: string[];
+};
 type SurfacePainterCallback = (ctx: {
     dungeon: DungeonHandle;
     roomId: number;
     x: number;
     y: number;
-}) => string[] | null | undefined;
+}) => SurfacePaintTarget | null | undefined;
 export type MinimapOptions = {
     /** Canvas size in pixels. Default: 196. */
     size?: number;
