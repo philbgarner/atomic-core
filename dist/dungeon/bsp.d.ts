@@ -77,15 +77,15 @@ export type DungeonOutputs = {
          */
         colliderFlags: THREE.DataTexture;
         /**
-         * Per-cell floor skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
-         * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
-         * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+         * Per-cell floor skirt overlay slots (RGBA). Same encoding as `overlays`:
+         * R = slot 1, G = slot 2, B = slot 3, A = slot 4. Value 0 = empty slot.
+         * All non-zero slots are composited on top of the skirt base tile in the fragment shader.
          */
         floorSkirtType: THREE.DataTexture;
         /**
-         * Per-cell ceiling skirt tile overrides (RGBA). R=north, G=south, B=east, A=west.
-         * Value 0 = use renderer fallback. 1–255 = explicit tile ID.
-         * For edge skirts, replaces the base tile. For wall-adjacent skirts, composited on top.
+         * Per-cell ceiling skirt overlay slots (RGBA). Same encoding as `ceilingOverlays`:
+         * R = slot 1, G = slot 2, B = slot 3, A = slot 4. Value 0 = empty slot.
+         * All non-zero slots are composited on top of the skirt base tile in the fragment shader.
          */
         ceilSkirtType: THREE.DataTexture;
     };
@@ -159,24 +159,15 @@ export declare function buildFullRegionIds(regionIdData: Uint8Array, solidData: 
 };
 export declare function generateBspDungeon(options: BspDungeonOptions): BspDungeonOutputs;
 /**
- * Write per-cell floor skirt tile IDs for one or more directions.
- * Only directions present in `map` are written; absent directions are unchanged.
- * Call after modifying to trigger a renderer refresh (texture.needsUpdate is set automatically).
+ * Write floor skirt overlay tile IDs for a single cell.
+ * `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.
+ * Missing entries are left unchanged; pass 0 to clear a slot.
  */
-export declare function setFloorSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, map: {
-    north?: number;
-    south?: number;
-    east?: number;
-    west?: number;
-}): void;
+export declare function setFloorSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, tiles: number[]): void;
 /**
- * Write per-cell ceiling skirt tile IDs for one or more directions.
- * Only directions present in `map` are written; absent directions are unchanged.
+ * Write ceiling skirt overlay tile IDs for a single cell.
+ * `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.
+ * Missing entries are left unchanged; pass 0 to clear a slot.
  */
-export declare function setCeilSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, map: {
-    north?: number;
-    south?: number;
-    east?: number;
-    west?: number;
-}): void;
+export declare function setCeilSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, tiles: number[]): void;
 //# sourceMappingURL=bsp.d.ts.map

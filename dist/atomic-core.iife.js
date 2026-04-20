@@ -673,38 +673,26 @@ var AtomicCore = (function(exports, three) {
 			}
 		};
 	}
-	/** Direction-to-RGBA-channel mapping used by floorSkirtType / ceilSkirtType textures. */
-	var SKIRT_CHANNEL = {
-		north: 0,
-		south: 1,
-		east: 2,
-		west: 3
-	};
 	/**
-	* Write per-cell floor skirt tile IDs for one or more directions.
-	* Only directions present in `map` are written; absent directions are unchanged.
-	* Call after modifying to trigger a renderer refresh (texture.needsUpdate is set automatically).
+	* Write floor skirt overlay tile IDs for a single cell.
+	* `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.
+	* Missing entries are left unchanged; pass 0 to clear a slot.
 	*/
-	function setFloorSkirtTiles(outputs, cx, cz, map) {
+	function setFloorSkirtTiles(outputs, cx, cz, tiles) {
 		const data = outputs.textures.floorSkirtType.image.data;
 		const base = (cz * outputs.width + cx) * 4;
-		if (map.north !== void 0) data[base + SKIRT_CHANNEL.north] = map.north;
-		if (map.south !== void 0) data[base + SKIRT_CHANNEL.south] = map.south;
-		if (map.east !== void 0) data[base + SKIRT_CHANNEL.east] = map.east;
-		if (map.west !== void 0) data[base + SKIRT_CHANNEL.west] = map.west;
+		for (let i = 0; i < 4 && i < tiles.length; i++) if (tiles[i] !== void 0) data[base + i] = tiles[i];
 		outputs.textures.floorSkirtType.needsUpdate = true;
 	}
 	/**
-	* Write per-cell ceiling skirt tile IDs for one or more directions.
-	* Only directions present in `map` are written; absent directions are unchanged.
+	* Write ceiling skirt overlay tile IDs for a single cell.
+	* `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.
+	* Missing entries are left unchanged; pass 0 to clear a slot.
 	*/
-	function setCeilSkirtTiles(outputs, cx, cz, map) {
+	function setCeilSkirtTiles(outputs, cx, cz, tiles) {
 		const data = outputs.textures.ceilSkirtType.image.data;
 		const base = (cz * outputs.width + cx) * 4;
-		if (map.north !== void 0) data[base + SKIRT_CHANNEL.north] = map.north;
-		if (map.south !== void 0) data[base + SKIRT_CHANNEL.south] = map.south;
-		if (map.east !== void 0) data[base + SKIRT_CHANNEL.east] = map.east;
-		if (map.west !== void 0) data[base + SKIRT_CHANNEL.west] = map.west;
+		for (let i = 0; i < 4 && i < tiles.length; i++) if (tiles[i] !== void 0) data[base + i] = tiles[i];
 		outputs.textures.ceilSkirtType.needsUpdate = true;
 	}
 	//#endregion
@@ -3085,8 +3073,6 @@ attribute float aUvHeightScale;
 // Per-instance grid cell coordinates — used to look up the overlay texture.
 attribute float aCellX;
 attribute float aCellZ;
-// Which RGBA channel of uSkirtLookup to read for this instance (0=R/N, 1=G/S, 2=B/E, 3=A/W).
-attribute float aSkirtDirChannel;
 
 uniform vec2 uDungeonSize;
 
@@ -3095,7 +3081,6 @@ varying vec2  vTileOrigin;
 varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
-varying float vSkirtDirChannel;
 varying float vFogDist;
 
 void main() {
@@ -3110,9 +3095,8 @@ void main() {
   else if (iRot == 2) localUv = vec2(1.0 - localUv.x, 1.0 - localUv.y);
   else if (iRot == 3) localUv = vec2(1.0 - localUv.y, localUv.x);
 
-  vLocalUv         = localUv;
-  vOverlayUv       = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
-  vSkirtDirChannel = aSkirtDirChannel;
+  vLocalUv   = localUv;
+  vOverlayUv = (vec2(aCellX, aCellZ) + 0.5) / uDungeonSize;
 
   vTileOrigin = vec2(aUvX, aUvY);
   vTileSize   = vec2(aUvW, aUvH);
@@ -3144,7 +3128,7 @@ uniform float uFogFar;
 uniform sampler2D uOverlayLookup;
 uniform sampler2D uTileUvLookup;
 uniform float     uTileUvCount;
-// Per-cell skirt type lookup (RGBA: R=N, G=S, B=E, A=W). 1×1 zero by default (no-op).
+// Per-cell skirt overlay slots (RGBA: 4 tile IDs, same encoding as uOverlayLookup). 1×1 zero by default (no-op).
 uniform sampler2D uSkirtLookup;
 
 varying vec2  vAtlasUv;
@@ -3152,7 +3136,6 @@ varying vec2  vTileOrigin;
 varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
-varying float vSkirtDirChannel;
 varying float vFogDist;
 
 vec4 sampleOverlayTile(float id) {
@@ -3189,17 +3172,16 @@ void main() {
   float id3 = floor(slots.a * 255.0 + 0.5);
   if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  // Per-cell skirt type overlay: sample the direction-keyed lookup and composite if non-zero.
-  {
-    vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
-    int iDir = int(floor(vSkirtDirChannel + 0.5));
-    float skirtId;
-    if      (iDir == 0) skirtId = floor(skirtSlots.r * 255.0 + 0.5);
-    else if (iDir == 1) skirtId = floor(skirtSlots.g * 255.0 + 0.5);
-    else if (iDir == 2) skirtId = floor(skirtSlots.b * 255.0 + 0.5);
-    else                skirtId = floor(skirtSlots.a * 255.0 + 0.5);
-    if (skirtId > 0.5) { vec4 oc = sampleOverlayTile(skirtId); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  }
+  // Per-cell skirt overlay slots (4 slots, same encoding as surface painter overlays).
+  vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
+  float sk0 = floor(skirtSlots.r * 255.0 + 0.5);
+  if (sk0 > 0.5) { vec4 oc = sampleOverlayTile(sk0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  float sk1 = floor(skirtSlots.g * 255.0 + 0.5);
+  if (sk1 > 0.5) { vec4 oc = sampleOverlayTile(sk1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  float sk2 = floor(skirtSlots.b * 255.0 + 0.5);
+  if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  float sk3 = floor(skirtSlots.a * 255.0 + 0.5);
+  if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
@@ -3669,7 +3651,7 @@ void main() {
 	* Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 	* and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 	*/
-	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, skirtDirChannels) {
+	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ) {
 		const geo = new three.PlaneGeometry(1, 1);
 		if (useAtlas) {
 			const n = matrices.length;
@@ -3703,11 +3685,6 @@ void main() {
 				geo.setAttribute("aCellX", new three.InstancedBufferAttribute(cellX, 1));
 				geo.setAttribute("aCellZ", new three.InstancedBufferAttribute(cellZ, 1));
 			}
-			const sdcArr = new Float32Array(matrices.length);
-			if (skirtDirChannels) skirtDirChannels.forEach((v, i) => {
-				sdcArr[i] = v;
-			});
-			geo.setAttribute("aSkirtDirChannel", new three.InstancedBufferAttribute(sdcArr, 1));
 		}
 		const mesh = new three.InstancedMesh(geo, material, matrices.length);
 		matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -3860,6 +3837,14 @@ void main() {
 			const u = mat.uniforms;
 			if (u["uSkirtLookup"]) u["uSkirtLookup"].value = tex;
 		}
+		function syncSkirtLookupUniforms() {
+			const outputs = game.dungeon.outputs;
+			if (!outputs) return;
+			setSkirtLookupUniform(floorEdgeMat, outputs.textures.floorSkirtType);
+			setSkirtLookupUniform(ceilEdgeMat, outputs.textures.ceilSkirtType);
+			setSkirtLookupUniform(floorWallSkirtMat, outputs.textures.floorSkirtType);
+			setSkirtLookupUniform(ceilWallSkirtMat, outputs.textures.ceilSkirtType);
+		}
 		/** Push per-surface overlay textures into their respective atlas materials. */
 		function syncOverlayUniforms(width, height) {
 			const size = new three.Vector2(width, height);
@@ -3872,6 +3857,7 @@ void main() {
 				if (u["uDungeonSize"]) u["uDungeonSize"].value = size;
 			};
 			set(floorMat, overlayFloor.tex);
+			set(floorEdgeMat, overlayFloor.tex);
 			set(wallMat, overlayWall.tex);
 			set(ceilMat, overlayCeil.tex);
 			set(ceilEdgeMat, overlayCeil.tex);
@@ -3907,6 +3893,7 @@ void main() {
 		const floorMat = packedAtlas ? makeAtlasMaterial() : new three.MeshStandardMaterial({ color: 5592422 });
 		const ceilMat = packedAtlas ? makeAtlasMaterial() : new three.MeshStandardMaterial({ color: 2236979 });
 		const wallMat = packedAtlas ? makeAtlasMaterial() : new three.MeshStandardMaterial({ color: 7037040 });
+		const floorEdgeMat = packedAtlas ? makeAtlasMaterial() : new three.MeshStandardMaterial({ color: 5592422 });
 		const ceilEdgeMat = packedAtlas ? makeAtlasMaterialDoubleSide() : new three.MeshStandardMaterial({
 			color: 2236979,
 			side: three.DoubleSide
@@ -4045,14 +4032,6 @@ void main() {
 			const offsetStep = tileSize * (options.offsetFactor ?? .5);
 			const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 			const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
-			const floorSkirtData = outputs.textures.floorSkirtType.image.data;
-			const ceilSkirtData = outputs.textures.ceilSkirtType.image.data;
-			const dirChannel = {
-				north: 0,
-				south: 1,
-				east: 2,
-				west: 3
-			};
 			function spec(map, dir, fallbackId) {
 				return map?.[dir] ?? {
 					tile: fallbackId,
@@ -4087,12 +4066,10 @@ void main() {
 			const floorWallSkirtRects = [];
 			const floorWallSkirtRots = [];
 			const floorWallSkirtHeightScales = [];
-			const floorWallSkirtDirCh = [];
 			const ceilWallSkirtEdges = [];
 			const ceilWallSkirtRects = [];
 			const ceilWallSkirtRots = [];
 			const ceilWallSkirtHeightScales = [];
-			const ceilWallSkirtDirCh = [];
 			function isSolid(cx, cz) {
 				if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
 				return (solid[cz * width + cx] ?? 0) > 0;
@@ -4175,12 +4152,7 @@ void main() {
 				if (floorVal !== 0) {
 					const currentFloorY = (floorVal - 128) * offsetStep;
 					function addFloorSkirt(nfVal, mx, mz, ry, dir) {
-						const ch = dirChannel[dir];
-						const override = floorSkirtData[(cz * width + cx) * 4 + ch] ?? 0;
-						const s = override > 0 ? {
-							tile: override,
-							rotation: 0
-						} : spec(floorSkirtTiles, dir, floorId);
+						const s = spec(floorSkirtTiles, dir, floorId);
 						const neighborFloorY = (nfVal - 128) * offsetStep;
 						const stepH = currentFloorY - neighborFloorY;
 						const fullPanels = Math.floor(stepH / tileSize);
@@ -4221,7 +4193,6 @@ void main() {
 					const gapH = (128 - floorVal) * offsetStep;
 					function addWallFloorSkirt(mx, mz, ry, dir) {
 						const s = spec(wallTiles, dir, wallId);
-						const ch = dirChannel[dir];
 						const fullPanels = Math.floor(gapH / tileSize);
 						const rem = gapH - fullPanels * tileSize;
 						for (let i = 0; i < fullPanels; i++) {
@@ -4234,7 +4205,6 @@ void main() {
 								cx,
 								cz
 							});
-							floorWallSkirtDirCh.push(ch);
 						}
 						if (rem > .001) {
 							const midY = -(fullPanels * tileSize + rem / 2);
@@ -4246,7 +4216,6 @@ void main() {
 								cx,
 								cz
 							});
-							floorWallSkirtDirCh.push(ch);
 						}
 					}
 					if (isSolid(cx, cz - 1)) addWallFloorSkirt(wx, cz * tileSize, 0, "north");
@@ -4256,12 +4225,7 @@ void main() {
 				}
 				const yCurrent = ceilingH - (ceilVal - 128) * offsetStep;
 				function addCeilSkirt(ncVal, mx, mz, ry, dir) {
-					const ch = dirChannel[dir];
-					const override = ceilSkirtData[(cz * width + cx) * 4 + ch] ?? 0;
-					const s = override > 0 ? {
-						tile: override,
-						rotation: 0
-					} : spec(ceilSkirtTiles, dir, ceilId);
+					const s = spec(ceilSkirtTiles, dir, ceilId);
 					const h = (ncVal - ceilVal) * offsetStep;
 					const fullPanels = Math.floor(h / tileSize);
 					const rem = h - fullPanels * tileSize;
@@ -4300,7 +4264,6 @@ void main() {
 					const gapH = (128 - ceilVal) * offsetStep;
 					function addWallCeilSkirt(mx, mz, ry, dir) {
 						const s = spec(wallTiles, dir, wallId);
-						const ch = dirChannel[dir];
 						const fullPanels = Math.floor(gapH / tileSize);
 						const rem = gapH - fullPanels * tileSize;
 						for (let i = 0; i < fullPanels; i++) {
@@ -4313,7 +4276,6 @@ void main() {
 								cx,
 								cz
 							});
-							ceilWallSkirtDirCh.push(ch);
 						}
 						if (rem > .001) {
 							const midY = ceilingH + fullPanels * tileSize + rem / 2;
@@ -4325,7 +4287,6 @@ void main() {
 								cx,
 								cz
 							});
-							ceilWallSkirtDirCh.push(ch);
 						}
 					}
 					if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
@@ -4358,7 +4319,7 @@ void main() {
 			wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots, void 0, wallCX, wallCZ);
 			scene.add(wallMesh);
 			meshToCellMap.set(wallMesh, wallCellMap);
-			floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ);
+			floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorEdgeMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ);
 			scene.add(floorEdgeMesh);
 			meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
 			ceilEdgeMesh = buildInstancedMesh(ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas, void 0, ceilEdgeRots, ceilEdgeHeightScales, cEdgeCX, cEdgeCZ);
@@ -4366,20 +4327,19 @@ void main() {
 			meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 			if (floorWallSkirtEdges.length > 0) {
 				const [fwsCX, fwsCZ] = cellArrays(floorWallSkirtCellMap);
-				floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, floorWallSkirtDirCh);
+				floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ);
 				scene.add(floorWallSkirtMesh);
 				meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
-				setSkirtLookupUniform(floorWallSkirtMat, outputs.textures.floorSkirtType);
 			}
 			if (ceilWallSkirtEdges.length > 0) {
 				const [cwsCX, cwsCZ] = cellArrays(ceilWallSkirtCellMap);
-				ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ, ceilWallSkirtDirCh);
+				ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ);
 				scene.add(ceilWallSkirtMesh);
 				meshToCellMap.set(ceilWallSkirtMesh, ceilWallSkirtCellMap);
-				setSkirtLookupUniform(ceilWallSkirtMat, outputs.textures.ceilSkirtType);
 			}
 			rebuildOverlayTexture(width, height);
 			syncOverlayUniforms(width, height);
+			syncSkirtLookupUniforms();
 			for (const entry of layerEntries) if (!entry.holder.mesh) {
 				entry.holder.mesh = buildLayerMesh(entry.spec);
 				if (entry.holder.mesh) scene.add(entry.holder.mesh);
