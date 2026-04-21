@@ -242,7 +242,7 @@ export function createBillboard(
           ? (performance.now() / 1000) * (bob.speed ?? 2) + (bob.phase ?? 0)
           : 0;
         const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
-        const bobY = bob ? (bob.amplitudeY ?? 0) * Math.sin(bobTheta) : 0;
+        const bobY = bob ? (bob.amplitudeY ?? 0) * (1+Math.sin(bobTheta)) : 0;
 
         entry.mesh.position.set(
           (entry.baseLayer.offsetX ?? 0) + bobX,
