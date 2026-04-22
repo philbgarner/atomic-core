@@ -18,6 +18,8 @@ export type { InventoryOptions, InventoryHandle, InventoryHandleCore, EquipSlotD
 export type { AnimationEventKind, AnimationEventMap, AnimationQueueEntry, AnimationHandler, AnimationsHandle } from './animations/types';
 export type { GameEventMap, EventEmitter } from './events/eventEmitter';
 export type { DungeonOutputs, BspDungeonOutputs } from './dungeon/bsp';
+export { exportDungeonMap, dungeonMapToJson, importDungeonMap, dungeonMapFromJson } from './dungeon/mapFile';
+export type { DungeonMapFile, DungeonMapMeta, SerializedRendererOptions, ExportOptions, ImportResult } from './dungeon/mapFile';
 export { setFloorSkirtTiles, setCeilSkirtTiles } from './dungeon/bsp';
 export { IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE, buildColliderFlags, colliderFlagsFromSolid, isWalkableCell, isBlockedCell, isLightPassableCell } from './dungeon/colliderFlags';
 export type { EntityBase, HiddenPassage } from './entities/types';

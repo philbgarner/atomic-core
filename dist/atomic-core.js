@@ -3578,7 +3578,7 @@ function createBillboard(entity, packedAtlas, scene, resolver) {
 				const bob = entry.baseLayer.bob;
 				const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
-				const bobY = bob ? (bob.amplitudeY ?? 0) * Math.sin(bobTheta) : 0;
+				const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
 				entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .001);
 			}
 		},
@@ -5504,6 +5504,163 @@ function showInventory(opts = {}) {
 	return handle;
 }
 //#endregion
-export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, getTheme, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setFloorSkirtTiles, showInventory, spriteToUvRect, toFaceRotation };
+//#region src/lib/dungeon/serialize.ts
+function uint8ToBase64(data) {
+	let binary = "";
+	for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i]);
+	return btoa(binary);
+}
+function base64ToUint8(str) {
+	const binary = atob(str);
+	const out = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+	return out;
+}
+function textureData(tex) {
+	return tex.image.data;
+}
+function makeDataTexture(data, W, H, name) {
+	const tex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
+	tex.name = name;
+	tex.needsUpdate = true;
+	tex.magFilter = THREE.NearestFilter;
+	tex.minFilter = THREE.NearestFilter;
+	tex.generateMipmaps = false;
+	tex.wrapS = THREE.ClampToEdgeWrapping;
+	tex.wrapT = THREE.ClampToEdgeWrapping;
+	tex.colorSpace = THREE.NoColorSpace;
+	tex.flipY = false;
+	return tex;
+}
+function makeDataTextureRGBA(data, W, H, name) {
+	const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+	tex.name = name;
+	tex.needsUpdate = true;
+	tex.magFilter = THREE.NearestFilter;
+	tex.minFilter = THREE.NearestFilter;
+	tex.generateMipmaps = false;
+	tex.wrapS = THREE.ClampToEdgeWrapping;
+	tex.wrapT = THREE.ClampToEdgeWrapping;
+	tex.colorSpace = THREE.NoColorSpace;
+	tex.flipY = false;
+	return tex;
+}
+/**
+* Snapshot all mutable texture data into a JSON-safe object.
+* Call after generateContent() to capture placed content (doors, hazards, etc.).
+*/
+function serializeDungeon(dungeon) {
+	return {
+		version: 1,
+		width: dungeon.width,
+		height: dungeon.height,
+		seed: dungeon.seed,
+		startRoomId: dungeon.startRoomId,
+		endRoomId: dungeon.endRoomId,
+		firstCorridorRegionId: dungeon.firstCorridorRegionId,
+		solid: uint8ToBase64(textureData(dungeon.textures.solid)),
+		regionId: uint8ToBase64(textureData(dungeon.textures.regionId)),
+		distanceToWall: uint8ToBase64(textureData(dungeon.textures.distanceToWall)),
+		hazards: uint8ToBase64(textureData(dungeon.textures.hazards)),
+		colliderFlags: uint8ToBase64(textureData(dungeon.textures.colliderFlags)),
+		floorSkirtType: uint8ToBase64(textureData(dungeon.textures.floorSkirtType)),
+		ceilSkirtType: uint8ToBase64(textureData(dungeon.textures.ceilSkirtType))
+	};
+}
+/**
+* Reconstruct a BspDungeonOutputs from a snapshot.
+* The returned object is fully usable with generateContent, aStar8, computeFov, etc.
+* The `rooms` map is empty - call rehydrateDungeon() if room graph data is needed.
+*/
+function deserializeDungeon(data) {
+	const { width: W, height: H } = data;
+	const solidData = base64ToUint8(data.solid);
+	const regionIdData = base64ToUint8(data.regionId);
+	const rooms = /* @__PURE__ */ new Map();
+	const { firstCorridorRegionId } = data;
+	const fullRegionIds = regionIdData;
+	const temperature = new Uint8Array(W * H);
+	for (let i = 0; i < W * H; i++) if (solidData[i] === 0) temperature[i] = 127;
+	return {
+		width: W,
+		height: H,
+		seed: data.seed,
+		startRoomId: data.startRoomId,
+		endRoomId: data.endRoomId,
+		rooms,
+		fullRegionIds,
+		firstCorridorRegionId,
+		textures: {
+			solid: makeDataTexture(solidData, W, H, "bsp_dungeon_solid"),
+			regionId: makeDataTexture(regionIdData, W, H, "bsp_dungeon_region_id"),
+			distanceToWall: makeDataTexture(base64ToUint8(data.distanceToWall), W, H, "bsp_dungeon_distance_to_wall"),
+			hazards: makeDataTexture(base64ToUint8(data.hazards), W, H, "bsp_dungeon_hazards"),
+			temperature: makeDataTexture(temperature, W, H, "bsp_dungeon_temperature"),
+			floorType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_floor_type"),
+			overlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_overlays"),
+			wallType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_wall_type"),
+			wallOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_wall_overlays"),
+			ceilingType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_ceiling_type"),
+			ceilingOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceiling_overlays"),
+			colliderFlags: makeDataTexture(base64ToUint8(data.colliderFlags), W, H, "bsp_dungeon_collider_flags"),
+			floorSkirtType: makeDataTextureRGBA(data.floorSkirtType ? base64ToUint8(data.floorSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_floor_skirt_type"),
+			ceilSkirtType: makeDataTextureRGBA(data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceil_skirt_type")
+		}
+	};
+}
+//#endregion
+//#region src/lib/dungeon/mapFile.ts
+function stripNonSerializable(opts) {
+	const { packedAtlas: _pa, tileNameResolver: _tnr, onCellClick: _occ, onCellHover: _och, ...rest } = opts;
+	return rest;
+}
+/**
+* Snapshot a dungeon and all settings needed to reproduce it into a
+* plain, JSON-safe DungeonMapFile object.
+*
+* Pass `generatorOptions` with the same values used in generateBspDungeon,
+* including the resolved numeric seed so the room graph can be reconstructed.
+*/
+function exportDungeonMap(dungeon, options) {
+	return {
+		version: "0.7.5",
+		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+		...options.meta !== void 0 ? { meta: options.meta } : {},
+		generatorOptions: options.generatorOptions,
+		rendererOptions: options.rendererOptions ? stripNonSerializable(options.rendererOptions) : {},
+		dungeon: serializeDungeon(dungeon)
+	};
+}
+/**
+* Serialize a dungeon and its settings to a JSON string.
+*/
+function dungeonMapToJson(dungeon, options) {
+	return JSON.stringify(exportDungeonMap(dungeon, options));
+}
+/**
+* Reconstruct a dungeon from a DungeonMapFile.
+*
+* The returned `dungeon` is ready to pass to buildDungeon / syncEntities.
+* Note: surface-painter overlays are zeroed on import (not serialized) —
+* call game.dungeon.paint() to reapply them.
+* Re-supply packedAtlas and tileNameResolver when creating the renderer.
+*/
+function importDungeonMap(data) {
+	return {
+		dungeon: deserializeDungeon(data.dungeon),
+		generatorOptions: data.generatorOptions,
+		rendererOptions: data.rendererOptions,
+		meta: data.meta,
+		version: data.version
+	};
+}
+/**
+* Parse a JSON string produced by dungeonMapToJson and reconstruct the dungeon.
+*/
+function dungeonMapFromJson(json) {
+	return importDungeonMap(JSON.parse(json));
+}
+//#endregion
+export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setFloorSkirtTiles, showInventory, spriteToUvRect, toFaceRotation };
 
 //# sourceMappingURL=atomic-core.js.map
