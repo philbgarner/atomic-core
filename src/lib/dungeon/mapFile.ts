@@ -66,6 +66,11 @@ export type ExportOptions = {
    * stripped automatically.
    */
   rendererOptions?: DungeonRendererOptions;
+  /**
+   * Supply game.dungeon.paintMap here to persist surface-painter overlays.
+   * The map is already plain strings so no stripping is needed.
+   */
+  paintMap?: ReadonlyMap<string, { floor?: string[]; wall?: string[]; ceil?: string[] }>;
 };
 
 /** Returned by importDungeonMap / dungeonMapFromJson. */
@@ -76,6 +81,11 @@ export type ImportResult = {
   meta: DungeonMapMeta | undefined;
   /** The atomic-core version that produced this file. */
   version: string;
+  /**
+   * Restored surface-painter overlays, if the file contained them.
+   * Re-apply via game.dungeon.paint(x, z, target) after game.generate().
+   */
+  paintMap?: Record<string, { floor?: string[]; wall?: string[]; ceil?: string[] }>;
 };
 
 // --------------------------------
@@ -111,7 +121,7 @@ export function exportDungeonMap(
     rendererOptions: options.rendererOptions
       ? stripNonSerializable(options.rendererOptions)
       : {},
-    dungeon: serializeDungeon(dungeon),
+    dungeon: serializeDungeon(dungeon, options.paintMap),
   };
 }
 
@@ -140,6 +150,7 @@ export function importDungeonMap(data: DungeonMapFile): ImportResult {
     rendererOptions: data.rendererOptions,
     meta: data.meta,
     version: data.version,
+    ...(data.dungeon.paintMap !== undefined ? { paintMap: data.dungeon.paintMap } : {}),
   };
 }
 
