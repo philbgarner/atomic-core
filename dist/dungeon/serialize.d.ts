@@ -21,12 +21,32 @@ export type SerializedDungeon = {
     /** Base64-encoded RGBA Uint8Array for skirt tile overrides. Optional for backwards compatibility. */
     floorSkirtType?: string;
     ceilSkirtType?: string;
+    /** Base64-encoded R8 Uint8Array matching textures.floorHeightOffset. Optional for backwards compatibility. */
+    floorHeightOffset?: string;
+    /** Base64-encoded R8 Uint8Array matching textures.ceilingHeightOffset. Optional for backwards compatibility. */
+    ceilingHeightOffset?: string;
+    /**
+     * Per-cell surface-painter tile-name overlays, keyed by "x,z".
+     * Values match SurfacePaintTarget: { floor?, wall?, ceil? } each an array of tile name strings.
+     */
+    paintMap?: Record<string, {
+        floor?: string[];
+        wall?: string[];
+        ceil?: string[];
+    }>;
 };
 /**
  * Snapshot all mutable texture data into a JSON-safe object.
  * Call after generateContent() to capture placed content (doors, hazards, etc.).
+ *
+ * Pass paintMap (from game.dungeon.paintMap) to include surface-painter overlays.
+ * Height offset textures are read directly from the dungeon when present.
  */
-export declare function serializeDungeon(dungeon: BspDungeonOutputs): SerializedDungeon;
+export declare function serializeDungeon(dungeon: BspDungeonOutputs, paintMap?: ReadonlyMap<string, {
+    floor?: string[];
+    wall?: string[];
+    ceil?: string[];
+}>): SerializedDungeon;
 /**
  * Reconstruct a BspDungeonOutputs from a snapshot.
  * The returned object is fully usable with generateContent, aStar8, computeFov, etc.

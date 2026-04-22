@@ -5548,9 +5548,12 @@ function makeDataTextureRGBA(data, W, H, name) {
 /**
 * Snapshot all mutable texture data into a JSON-safe object.
 * Call after generateContent() to capture placed content (doors, hazards, etc.).
+*
+* Pass paintMap (from game.dungeon.paintMap) to include surface-painter overlays.
+* Height offset textures are read directly from the dungeon when present.
 */
-function serializeDungeon(dungeon) {
-	return {
+function serializeDungeon(dungeon, paintMap) {
+	const out = {
 		version: 1,
 		width: dungeon.width,
 		height: dungeon.height,
@@ -5566,6 +5569,10 @@ function serializeDungeon(dungeon) {
 		floorSkirtType: uint8ToBase64(textureData(dungeon.textures.floorSkirtType)),
 		ceilSkirtType: uint8ToBase64(textureData(dungeon.textures.ceilSkirtType))
 	};
+	if (dungeon.textures.floorHeightOffset?.image.data) out.floorHeightOffset = uint8ToBase64(dungeon.textures.floorHeightOffset.image.data);
+	if (dungeon.textures.ceilingHeightOffset?.image.data) out.ceilingHeightOffset = uint8ToBase64(dungeon.textures.ceilingHeightOffset.image.data);
+	if (paintMap && paintMap.size > 0) out.paintMap = Object.fromEntries(paintMap);
+	return out;
 }
 /**
 * Reconstruct a BspDungeonOutputs from a snapshot.
@@ -5604,7 +5611,9 @@ function deserializeDungeon(data) {
 			ceilingOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceiling_overlays"),
 			colliderFlags: makeDataTexture(base64ToUint8(data.colliderFlags), W, H, "bsp_dungeon_collider_flags"),
 			floorSkirtType: makeDataTextureRGBA(data.floorSkirtType ? base64ToUint8(data.floorSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_floor_skirt_type"),
-			ceilSkirtType: makeDataTextureRGBA(data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceil_skirt_type")
+			ceilSkirtType: makeDataTextureRGBA(data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceil_skirt_type"),
+			...data.floorHeightOffset !== void 0 ? { floorHeightOffset: makeDataTexture(base64ToUint8(data.floorHeightOffset), W, H, "bsp_dungeon_floor_height_offset") } : {},
+			...data.ceilingHeightOffset !== void 0 ? { ceilingHeightOffset: makeDataTexture(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") } : {}
 		}
 	};
 }
@@ -5623,12 +5632,12 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.7.5",
+		version: "0.7.6",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
 		rendererOptions: options.rendererOptions ? stripNonSerializable(options.rendererOptions) : {},
-		dungeon: serializeDungeon(dungeon)
+		dungeon: serializeDungeon(dungeon, options.paintMap)
 	};
 }
 /**
@@ -5651,7 +5660,8 @@ function importDungeonMap(data) {
 		generatorOptions: data.generatorOptions,
 		rendererOptions: data.rendererOptions,
 		meta: data.meta,
-		version: data.version
+		version: data.version,
+		...data.dungeon.paintMap !== void 0 ? { paintMap: data.dungeon.paintMap } : {}
 	};
 }
 /**
