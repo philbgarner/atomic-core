@@ -42,6 +42,15 @@ export type SerializedDungeon = {
    * Values match SurfacePaintTarget: { floor?, wall?, ceil? } each an array of tile name strings.
    */
   paintMap?: Record<string, { floor?: string[]; wall?: string[]; ceil?: string[] }>;
+  /**
+   * Serialized rooms map: region ID → { type, rect, connections }.
+   * Optional for backwards compatibility with files that predate this field.
+   */
+  rooms?: Record<number, {
+    type: "room" | "corridor";
+    rect: { x: number; y: number; w: number; h: number };
+    connections: number[];
+  }>;
 };
 
 // --------------------------------
@@ -142,6 +151,13 @@ export function serializeDungeon(
   if (paintMap && paintMap.size > 0) {
     out.paintMap = Object.fromEntries(paintMap);
   }
+  if (dungeon.rooms && dungeon.rooms.size > 0) {
+    const roomsObj: SerializedDungeon["rooms"] = {};
+    for (const [id, info] of dungeon.rooms) {
+      roomsObj[id] = { type: info.type, rect: info.rect, connections: info.connections };
+    }
+    out.rooms = roomsObj;
+  }
 
   return out;
 }
@@ -157,6 +173,12 @@ export function deserializeDungeon(data: SerializedDungeon): BspDungeonOutputs {
   const regionIdData = base64ToUint8(data.regionId);
 
   const rooms = new Map<number, RoomInfo>();
+  if (data.rooms) {
+    for (const [idStr, info] of Object.entries(data.rooms)) {
+      const id = Number(idStr);
+      rooms.set(id, { id, type: info.type, rect: info.rect, connections: info.connections });
+    }
+  }
   const { firstCorridorRegionId } = data;
   // regionId already contains unique corridor IDs (baked in by generateBspDungeon)
   const fullRegionIds = regionIdData;
@@ -250,6 +272,14 @@ export function rehydrateDungeon(
   if (data.ceilingHeightOffset && fresh.textures.ceilingHeightOffset) {
     (fresh.textures.ceilingHeightOffset.image.data as Uint8Array).set(base64ToUint8(data.ceilingHeightOffset));
     fresh.textures.ceilingHeightOffset.needsUpdate = true;
+  }
+
+  if (data.rooms) {
+    for (const [idStr, saved] of Object.entries(data.rooms)) {
+      const id = Number(idStr);
+      const room = fresh.rooms.get(id);
+      if (room) room.type = saved.type;
+    }
   }
 
   return fresh;
