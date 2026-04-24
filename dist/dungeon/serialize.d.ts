@@ -34,6 +34,20 @@ export type SerializedDungeon = {
         wall?: string[];
         ceil?: string[];
     }>;
+    /**
+     * Serialized rooms map: region ID → { type, rect, connections }.
+     * Optional for backwards compatibility with files that predate this field.
+     */
+    rooms?: Record<number, {
+        type: "room" | "corridor";
+        rect: {
+            x: number;
+            y: number;
+            w: number;
+            h: number;
+        };
+        connections: number[];
+    }>;
 };
 /**
  * Snapshot all mutable texture data into a JSON-safe object.

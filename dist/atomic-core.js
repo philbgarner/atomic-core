@@ -5630,6 +5630,15 @@ function serializeDungeon(dungeon, paintMap) {
 	if (dungeon.textures.floorHeightOffset?.image.data) out.floorHeightOffset = uint8ToBase64(dungeon.textures.floorHeightOffset.image.data);
 	if (dungeon.textures.ceilingHeightOffset?.image.data) out.ceilingHeightOffset = uint8ToBase64(dungeon.textures.ceilingHeightOffset.image.data);
 	if (paintMap && paintMap.size > 0) out.paintMap = Object.fromEntries(paintMap);
+	if (dungeon.rooms && dungeon.rooms.size > 0) {
+		const roomsObj = {};
+		for (const [id, info] of dungeon.rooms) roomsObj[id] = {
+			type: info.type,
+			rect: info.rect,
+			connections: info.connections
+		};
+		out.rooms = roomsObj;
+	}
 	return out;
 }
 /**
@@ -5642,6 +5651,15 @@ function deserializeDungeon(data) {
 	const solidData = base64ToUint8(data.solid);
 	const regionIdData = base64ToUint8(data.regionId);
 	const rooms = /* @__PURE__ */ new Map();
+	if (data.rooms) for (const [idStr, info] of Object.entries(data.rooms)) {
+		const id = Number(idStr);
+		rooms.set(id, {
+			id,
+			type: info.type,
+			rect: info.rect,
+			connections: info.connections
+		});
+	}
 	const { firstCorridorRegionId } = data;
 	const fullRegionIds = regionIdData;
 	const temperature = new Uint8Array(W * H);
@@ -5690,7 +5708,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.7.6",
+		version: "0.7.7",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
