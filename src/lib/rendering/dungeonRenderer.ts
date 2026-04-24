@@ -25,7 +25,7 @@
 
 import * as THREE from "three";
 import type { GameHandle } from "../api/createGame";
-import type { EntityBase } from "../entities/types";
+import type { EntityBase, ObjectPlacement } from "../entities/types";
 import {
   BASIC_ATLAS_VERT,
   BASIC_ATLAS_FRAG,
@@ -213,6 +213,13 @@ export type DungeonRenderer = {
    * (or whenever entity positions change) to keep the scene in sync.
    */
   setEntities(entities: EntityBase[]): void;
+  /**
+   * Register stationary billboard objects derived from `ObjectPlacement` records.
+   * Call once after `game.generate()` (or pass `game.dungeon.objects` directly).
+   * Objects with a `spriteMap` are rendered as camera-facing billboard sprites;
+   * objects without one are ignored by the renderer.
+   */
+  setObjects(objects: ObjectPlacement[]): void;
   /**
    * Project a dungeon grid cell to 2D pixel coordinates relative to the
    * renderer's container element, using the current camera state.
@@ -1380,6 +1387,41 @@ export function createDungeonRenderer(
 
   const entityMeshMap = new Map<string, THREE.Mesh>();
   const billboardMap = new Map<string, BillboardHandle>();
+  const objectBillboardMap = new Map<string, BillboardHandle>();
+  let currentObjects: ObjectPlacement[] = [];
+
+  function syncObjects(objects: ObjectPlacement[]) {
+    const activeKeys = new Set(
+      objects.filter((o) => o.spriteMap).map((o) => `${o.type}_${o.x}_${o.z}`),
+    );
+    for (const [id, handle] of objectBillboardMap) {
+      if (!activeKeys.has(id)) {
+        handle.dispose();
+        objectBillboardMap.delete(id);
+      }
+    }
+    for (const obj of objects) {
+      if (!obj.spriteMap) continue;
+      const key = `${obj.type}_${obj.x}_${obj.z}`;
+      if (!objectBillboardMap.has(key) && packedAtlas) {
+        const fakeEntity: EntityBase & { spriteMap: SpriteMap } = {
+          id: key,
+          kind: "decoration",
+          type: obj.type,
+          sprite: obj.type,
+          x: obj.x,
+          z: obj.z,
+          hp: 0, maxHp: 0, attack: 0, defense: 0,
+          speed: 0, alive: true,
+          blocksMove: false,
+          faction: "none",
+          tick: 0,
+          spriteMap: obj.spriteMap,
+        };
+        objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver));
+      }
+    }
+  }
 
   function syncEntities(entities: EntityBase[]) {
     const aliveIds = new Set(entities.filter((e) => e.alive).map((e) => e.id));
@@ -1486,6 +1528,12 @@ export function createDungeonRenderer(
         if (!e.alive || !e.spriteMap) continue;
         const handle = billboardMap.get(e.id);
         if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+      }
+      // Update stationary object billboards (position is fixed; only yaw changes).
+      for (const obj of currentObjects) {
+        if (!obj.spriteMap) continue;
+        const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
+        if (handle) handle.update(obj as EntityBase, curYaw, tileSize, ceilingH);
       }
     }
 
@@ -1606,6 +1654,10 @@ export function createDungeonRenderer(
       currentEntities = entities;
       syncEntities(entities);
     },
+    setObjects(objects) {
+      currentObjects = objects;
+      syncObjects(objects);
+    },
     worldToScreen(gridX, gridZ, worldY) {
       const wx = (gridX + 0.5) * tileSize;
       const wy = worldY ?? ceilingH * 0.4;
@@ -1723,6 +1775,7 @@ export function createDungeonRenderer(
       for (const geo of entityGeoCache.values()) geo.dispose();
       for (const mat of entityMatCache.values()) mat.dispose();
       for (const handle of billboardMap.values()) handle.dispose();
+      for (const handle of objectBillboardMap.values()) handle.dispose();
       sharedAtlasTex?.dispose();
       tileUvLookupTex?.dispose();
       if (overlayFloor !== defSurf) overlayFloor.tex.dispose();

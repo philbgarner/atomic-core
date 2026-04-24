@@ -4,7 +4,8 @@ import { TurnAction } from '../turn/types';
 import { EventEmitter } from '../events/eventEmitter';
 import { FactionRegistry } from '../combat/factions';
 import { DamageFormula } from '../combat/combat';
-import { HiddenPassage, EntityBase } from '../entities/types';
+import { HiddenPassage, ObjectPlacement, EntityBase } from '../entities/types';
+import { SpriteMap } from '../rendering/billboardSprites';
 import { DecorationEntity } from '../entities/factory';
 import { PlayerHandle } from './player';
 import { KeybindingsOptions } from './keybindings';
@@ -38,6 +39,8 @@ export type DungeonHandle = {
     readonly rooms: Record<number, PublicRoom>;
     readonly outputs: DungeonOutputs | null;
     decorations: DecorationList;
+    /** Read-only list of all stationary object placements (including billboard sprites). */
+    readonly objects: readonly ObjectPlacement[];
     passages: PassageList;
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
     /** Apply per-surface overlay tile names to a cell. */
@@ -86,6 +89,12 @@ export type OnPlaceContext = {
 };
 export type PlaceAPI = {
     object(x: number, z: number, type: string, meta?: Record<string, unknown>): void;
+    /**
+     * Place a stationary camera-facing billboard sprite at a grid cell.
+     * The placement is stored in `game.dungeon.objects` and rendered when passed
+     * to `renderer.setObjects(game.dungeon.objects)`.
+     */
+    billboard(x: number, z: number, type: string, spriteMap: SpriteMap, opts?: Pick<ObjectPlacement, "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta">): void;
     npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     enemy(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;

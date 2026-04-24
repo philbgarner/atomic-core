@@ -6,6 +6,7 @@ import type { BspDungeonOptions, BspDungeonOutputs } from "./bsp";
 import type { SerializedDungeon } from "./serialize";
 import { serializeDungeon, deserializeDungeon } from "./serialize";
 import type { DungeonRendererOptions } from "../rendering/dungeonRenderer";
+import type { ObjectPlacement } from "../entities/types";
 
 declare const __PACKAGE_VERSION__: string;
 
@@ -52,6 +53,8 @@ export type DungeonMapFile = {
   rendererOptions: SerializedRendererOptions;
   /** Serialized dungeon texture data. */
   dungeon: SerializedDungeon;
+  /** Stationary object placements, including billboard sprites. */
+  objectPlacements?: ObjectPlacement[];
 };
 
 /** Options passed to exportDungeonMap. */
@@ -71,6 +74,11 @@ export type ExportOptions = {
    * The map is already plain strings so no stripping is needed.
    */
   paintMap?: ReadonlyMap<string, { floor?: string[]; wall?: string[]; ceil?: string[] }>;
+  /**
+   * Supply game.dungeon.objects here to persist stationary object placements.
+   * SpriteMap data is plain JSON so no stripping is needed.
+   */
+  objectPlacements?: readonly ObjectPlacement[];
 };
 
 /** Returned by importDungeonMap / dungeonMapFromJson. */
@@ -86,6 +94,11 @@ export type ImportResult = {
    * Re-apply via game.dungeon.paint(x, z, target) after game.generate().
    */
   paintMap?: Record<string, { floor?: string[]; wall?: string[]; ceil?: string[] }>;
+  /**
+   * Restored stationary object placements, if the file contained them.
+   * Pass to place.billboard() inside onPlace, or to renderer.setObjects() directly.
+   */
+  objectPlacements?: ObjectPlacement[];
 };
 
 // --------------------------------
@@ -122,6 +135,9 @@ export function exportDungeonMap(
       ? stripNonSerializable(options.rendererOptions)
       : {},
     dungeon: serializeDungeon(dungeon, options.paintMap),
+    ...(options.objectPlacements && options.objectPlacements.length > 0
+      ? { objectPlacements: options.objectPlacements as ObjectPlacement[] }
+      : {}),
   };
 }
 
@@ -151,6 +167,7 @@ export function importDungeonMap(data: DungeonMapFile): ImportResult {
     meta: data.meta,
     version: data.version,
     ...(data.dungeon.paintMap !== undefined ? { paintMap: data.dungeon.paintMap } : {}),
+    ...(data.objectPlacements !== undefined ? { objectPlacements: data.objectPlacements } : {}),
   };
 }
 

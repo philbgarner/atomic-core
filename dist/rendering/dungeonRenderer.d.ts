@@ -1,5 +1,5 @@
 import { GameHandle } from '../api/createGame';
-import { EntityBase } from '../entities/types';
+import { EntityBase, ObjectPlacement } from '../entities/types';
 import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
 /**
@@ -175,6 +175,13 @@ export type DungeonRenderer = {
      * (or whenever entity positions change) to keep the scene in sync.
      */
     setEntities(entities: EntityBase[]): void;
+    /**
+     * Register stationary billboard objects derived from `ObjectPlacement` records.
+     * Call once after `game.generate()` (or pass `game.dungeon.objects` directly).
+     * Objects with a `spriteMap` are rendered as camera-facing billboard sprites;
+     * objects without one are ignored by the renderer.
+     */
+    setObjects(objects: ObjectPlacement[]): void;
     /**
      * Project a dungeon grid cell to 2D pixel coordinates relative to the
      * renderer's container element, using the current camera state.

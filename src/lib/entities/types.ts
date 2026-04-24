@@ -81,6 +81,11 @@ export interface ObjectPlacement {
   scale?: number;
   /** Arbitrary metadata for game logic. */
   meta?: Record<string, unknown>;
+  /**
+   * When present, renders this placement as a camera-facing billboard sprite
+   * via the dungeon renderer's `setObjects()` method.
+   */
+  spriteMap?: SpriteMap;
 }
 
 /** A mobile (billboard sprite) placed in the world. */

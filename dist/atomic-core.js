@@ -2209,6 +2209,9 @@ function makeDungeonHandle(internal) {
 		get outputs() {
 			return internal.dungeonOutputs;
 		},
+		get objects() {
+			return internal.objectPlacements;
+		},
 		decorations: {
 			get list() {
 				return internal.decorations;
@@ -2441,6 +2444,15 @@ function runGenerate(internal, dungeonHandle, turnsHandle) {
 						...meta ?? {}
 					});
 				},
+				billboard(x, z, type, spriteMap, opts) {
+					internal.objectPlacements.push({
+						x,
+						z,
+						type,
+						spriteMap,
+						...opts ?? {}
+					});
+				},
 				npc(x, z, type, opts) {
 					const entity = {
 						id: `npc_${type}_${x}_${z}`,
@@ -2649,6 +2661,7 @@ function createGame(canvas, options) {
 		playerHandle: createPlayerHandle(playerState),
 		entityById: new Map([[playerActorId, playerEntity]]),
 		decorations: [],
+		objectPlacements: [],
 		paintMap: /* @__PURE__ */ new Map(),
 		passages: [],
 		passageMask: null,
@@ -2873,6 +2886,7 @@ function createGame(canvas, options) {
 			internal.entityById.clear();
 			internal.entityById.set(internal.playerActorId, internal.playerState.entity);
 			internal.decorations.length = 0;
+			internal.objectPlacements.length = 0;
 			internal.paintMap.clear();
 			internal.turnCounter = 0;
 			const playerOpts = internal.options.player ?? {};
@@ -4372,6 +4386,40 @@ function createDungeonRenderer(element, game, options = {}) {
 	}
 	const entityMeshMap = /* @__PURE__ */ new Map();
 	const billboardMap = /* @__PURE__ */ new Map();
+	const objectBillboardMap = /* @__PURE__ */ new Map();
+	let currentObjects = [];
+	function syncObjects(objects) {
+		const activeKeys = new Set(objects.filter((o) => o.spriteMap).map((o) => `${o.type}_${o.x}_${o.z}`));
+		for (const [id, handle] of objectBillboardMap) if (!activeKeys.has(id)) {
+			handle.dispose();
+			objectBillboardMap.delete(id);
+		}
+		for (const obj of objects) {
+			if (!obj.spriteMap) continue;
+			const key = `${obj.type}_${obj.x}_${obj.z}`;
+			if (!objectBillboardMap.has(key) && packedAtlas) {
+				const fakeEntity = {
+					id: key,
+					kind: "decoration",
+					type: obj.type,
+					sprite: obj.type,
+					x: obj.x,
+					z: obj.z,
+					hp: 0,
+					maxHp: 0,
+					attack: 0,
+					defense: 0,
+					speed: 0,
+					alive: true,
+					blocksMove: false,
+					faction: "none",
+					tick: 0,
+					spriteMap: obj.spriteMap
+				};
+				objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver));
+			}
+		}
+	}
 	function syncEntities(entities) {
 		const aliveIds = new Set(entities.filter((e) => e.alive).map((e) => e.id));
 		for (const [id, mesh] of entityMeshMap) if (!aliveIds.has(id)) {
@@ -4438,6 +4486,11 @@ function createDungeonRenderer(element, game, options = {}) {
 				if (!e.alive || !e.spriteMap) continue;
 				const handle = billboardMap.get(e.id);
 				if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+			}
+			for (const obj of currentObjects) {
+				if (!obj.spriteMap) continue;
+				const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
+				if (handle) handle.update(obj, curYaw, tileSize, ceilingH);
 			}
 		}
 		glRenderer.render(scene, camera);
@@ -4542,6 +4595,10 @@ function createDungeonRenderer(element, game, options = {}) {
 		setEntities(entities) {
 			currentEntities = entities;
 			syncEntities(entities);
+		},
+		setObjects(objects) {
+			currentObjects = objects;
+			syncObjects(objects);
 		},
 		worldToScreen(gridX, gridZ, worldY) {
 			const wx = (gridX + .5) * tileSize;
@@ -4660,6 +4717,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			for (const geo of entityGeoCache.values()) geo.dispose();
 			for (const mat of entityMatCache.values()) mat.dispose();
 			for (const handle of billboardMap.values()) handle.dispose();
+			for (const handle of objectBillboardMap.values()) handle.dispose();
 			sharedAtlasTex?.dispose();
 			tileUvLookupTex?.dispose();
 			if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
@@ -5637,7 +5695,8 @@ function exportDungeonMap(dungeon, options) {
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
 		rendererOptions: options.rendererOptions ? stripNonSerializable(options.rendererOptions) : {},
-		dungeon: serializeDungeon(dungeon, options.paintMap)
+		dungeon: serializeDungeon(dungeon, options.paintMap),
+		...options.objectPlacements && options.objectPlacements.length > 0 ? { objectPlacements: options.objectPlacements } : {}
 	};
 }
 /**
@@ -5661,7 +5720,8 @@ function importDungeonMap(data) {
 		rendererOptions: data.rendererOptions,
 		meta: data.meta,
 		version: data.version,
-		...data.dungeon.paintMap !== void 0 ? { paintMap: data.dungeon.paintMap } : {}
+		...data.dungeon.paintMap !== void 0 ? { paintMap: data.dungeon.paintMap } : {},
+		...data.objectPlacements !== void 0 ? { objectPlacements: data.objectPlacements } : {}
 	};
 }
 /**

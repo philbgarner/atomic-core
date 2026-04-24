@@ -100,8 +100,8 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 
 **Files:**
 - `rendering/billboardSprites.ts` — `SpriteMap`, `SpriteLayer` (`tile: string | number`), `AngleOverride` (`tile: string | number`), `AngleKey` public types; `createBillboard()` accepts optional `resolver` param, allocates per-layer `PlaneGeometry` meshes using a custom `ShaderMaterial` (GLSL UV atlas sampling, `uTileId`/`uOpacity` uniforms, alpha discard); `BillboardHandle.update()` rotates the group to face the camera each RAF frame, selects the active angle key, resolves tile names via `resolveTile()`, and pushes uniform updates; `BillboardHandle.dispose()` cleans up geometry and materials
-- `rendering/dungeonRenderer.ts` — holds a `Map<string, BillboardHandle>` alongside `entityMeshMap`; `syncEntities()` routes entities with `spriteMap` to `createBillboard()` and others to the box path; RAF loop calls `handle.update()` with the current `curYaw`; `destroy()` disposes all billboard handles and the shared atlas texture
-- `entities/types.ts` — `spriteMap?: SpriteMap` optional field added to `EntityBase`
+- `rendering/dungeonRenderer.ts` — holds a `Map<string, BillboardHandle>` alongside `entityMeshMap`; `syncEntities()` routes entities with `spriteMap` to `createBillboard()` and others to the box path; `setObjects(objects)` syncs a separate `objectBillboardMap` for stationary `ObjectPlacement` billboards; RAF loop calls `handle.update()` with the current `curYaw` for both entity and object billboards; `destroy()` disposes all billboard handles
+- `entities/types.ts` — `spriteMap?: SpriteMap` optional field on `EntityBase`; `spriteMap?: SpriteMap` optional field on `ObjectPlacement` enabling stationary billboard rendering
 
 **Example:**
 - `examples/standalone/billboard-sprites/index.html`
@@ -251,9 +251,10 @@ Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture)
 ### Stationary decoration entities
 
 **Files:**
-- `entities/types.ts` — `Decoration` interface (`id`, `kind: 'decoration'`, `type`, `x`, `z`, `sprite`, `blocksMove`, `blocksView`, `interactive`, `onInteract`)
+- `entities/types.ts` — `Decoration` interface (`id`, `kind: 'decoration'`, `type`, `x`, `z`, `sprite`, `blocksMove`, `blocksView`, `interactive`, `onInteract`); `ObjectPlacement` interface with optional `spriteMap?` field enabling billboard rendering via `renderer.setObjects()`
 - `entities/factory.ts` — `createDecoration()` factory with auto-generated `id`
-- `api/createGame.ts` — `CrawlLib.attachDecorator(game, { onDecorate })`; `game.dungeon.decorations.add()`, `.remove()`, `.list`
+- `api/createGame.ts` — `CrawlLib.attachDecorator(game, { onDecorate })`; `game.dungeon.decorations.add()`, `.remove()`, `.list`; `place.billboard(x, z, type, spriteMap, opts?)` places a stationary billboard sprite stored in `game.dungeon.objects`; `game.dungeon.objects` read-only `ObjectPlacement[]` list reset on `regenerate()`
+- `rendering/dungeonRenderer.ts` — `renderer.setObjects(objects)` syncs stationary billboard objects; creates `BillboardHandle` for each `ObjectPlacement` with `spriteMap`; RAF loop calls `handle.update()` each frame so sprites always face the camera
 
 ---
 
@@ -414,7 +415,7 @@ Async callback layer that fires between turn resolution and entity-position sync
 Self-contained save/load layer that wraps a `SerializedDungeon` with all settings needed to reproduce the exact dungeon and renderer in a new session. The embedded `version` field matches the atomic-core npm package version at export time (injected via Vite `define`) and is intended for backward-compatibility gating on import. Non-serializable renderer fields (packedAtlas, tileNameResolver, event callbacks) are stripped at export; re-supply them when creating the renderer after load.
 
 **Files:**
-- `dungeon/mapFile.ts` — `DungeonMapFile` wrapper type (`version`, `exportedAt`, `meta?`, `generatorOptions`, `rendererOptions`, `dungeon`); `DungeonMapMeta` optional author metadata type; `SerializedRendererOptions` = `DungeonRendererOptions` minus callbacks/PackedAtlas; `ExportOptions` caller input type (includes optional `paintMap` forwarded to `serializeDungeon`); `ImportResult` return type (includes optional `paintMap` for re-application via `game.dungeon.paint()`); `exportDungeonMap(dungeon, opts)` builds the wrapper; `dungeonMapToJson()` convenience JSON string; `importDungeonMap(data)` reconstructs `BspDungeonOutputs` + all settings including paintMap; `dungeonMapFromJson(json)` convenience parse wrapper
+- `dungeon/mapFile.ts` — `DungeonMapFile` wrapper type (`version`, `exportedAt`, `meta?`, `generatorOptions`, `rendererOptions`, `dungeon`, `objectPlacements?`); `DungeonMapMeta` optional author metadata type; `SerializedRendererOptions` = `DungeonRendererOptions` minus callbacks/PackedAtlas; `ExportOptions` caller input type (includes optional `paintMap` forwarded to `serializeDungeon`, optional `objectPlacements` array); `ImportResult` return type (includes optional `paintMap` for re-application via `game.dungeon.paint()`, optional `objectPlacements` for re-application via `place.billboard()` or `renderer.setObjects()`); `exportDungeonMap(dungeon, opts)` builds the wrapper; `dungeonMapToJson()` convenience JSON string; `importDungeonMap(data)` reconstructs `BspDungeonOutputs` + all settings including paintMap and objectPlacements; `dungeonMapFromJson(json)` convenience parse wrapper
 - `index.ts` — exports `exportDungeonMap`, `dungeonMapToJson`, `importDungeonMap`, `dungeonMapFromJson` and all associated types
 
 ---

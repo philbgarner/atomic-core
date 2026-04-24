@@ -28,8 +28,9 @@ import { computeFov } from "../ai/fov";
 import { createMinimapState, updateExplored } from "../utils/minimap";
 import type { MinimapState } from "../utils/minimap";
 import { buildPassageMask, enablePassageInMask, disablePassageInMask } from "../passages/mask";
-import type { HiddenPassage } from "../entities/types";
+import type { HiddenPassage, ObjectPlacement } from "../entities/types";
 import type { EntityBase } from "../entities/types";
+import type { SpriteMap } from "../rendering/billboardSprites";
 import type { DecorationEntity } from "../entities/factory";
 import { createPlayerHandle } from "./player";
 import type { PlayerHandle, PlayerState } from "./player";
@@ -96,6 +97,8 @@ export type DungeonHandle = {
   readonly rooms: Record<number, PublicRoom>;
   readonly outputs: DungeonOutputs | null;
   decorations: DecorationList;
+  /** Read-only list of all stationary object placements (including billboard sprites). */
+  readonly objects: readonly ObjectPlacement[];
   passages: PassageList;
   passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
   /** Apply per-surface overlay tile names to a cell. */
@@ -158,6 +161,18 @@ export type OnPlaceContext = {
 
 export type PlaceAPI = {
   object(x: number, z: number, type: string, meta?: Record<string, unknown>): void;
+  /**
+   * Place a stationary camera-facing billboard sprite at a grid cell.
+   * The placement is stored in `game.dungeon.objects` and rendered when passed
+   * to `renderer.setObjects(game.dungeon.objects)`.
+   */
+  billboard(
+    x: number,
+    z: number,
+    type: string,
+    spriteMap: SpriteMap,
+    opts?: Pick<ObjectPlacement, "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta">,
+  ): void;
   npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
   enemy(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
   decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
@@ -317,6 +332,9 @@ type GameInternal = {
 
   // Decorations
   decorations: DecorationEntity[];
+
+  // Stationary object placements (including billboard sprites)
+  objectPlacements: ObjectPlacement[];
 
   // Surface paint map: "${x},${z}" -> per-surface overlay tile names
   paintMap: Map<string, SurfacePaintTarget>;
@@ -625,6 +643,8 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
     },
     get outputs() { return internal.dungeonOutputs; },
 
+    get objects(): readonly ObjectPlacement[] { return internal.objectPlacements; },
+
     decorations: {
       get list() { return internal.decorations; },
       add(decoration: DecorationEntity) {
@@ -916,6 +936,9 @@ function runGenerate(
           yaw: 0, scale: 1,
           ...(meta ?? {}),
         } as DecorationEntity);
+      },
+      billboard(x, z, type, spriteMap, opts) {
+        internal.objectPlacements.push({ x, z, type, spriteMap, ...(opts ?? {}) });
       },
       npc(x, z, type, opts) {
         const entity: EntityBase = {
@@ -1213,6 +1236,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     playerHandle: createPlayerHandle(playerState),
     entityById: new Map([[playerActorId, playerEntity]]),
     decorations: [],
+    objectPlacements: [],
     paintMap: new Map(),
     passages: [],
     passageMask: null,
@@ -1416,8 +1440,9 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
       // Clear entities accumulated from the previous run — keep only the player.
       internal.entityById.clear();
       internal.entityById.set(internal.playerActorId, internal.playerState.entity);
-      // Clear decorations and surface paint.
+      // Clear decorations, object placements, and surface paint.
       internal.decorations.length = 0;
+      internal.objectPlacements.length = 0;
       internal.paintMap.clear();
       // Reset turn counter.
       internal.turnCounter = 0;

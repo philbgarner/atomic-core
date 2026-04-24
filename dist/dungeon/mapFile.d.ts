@@ -1,6 +1,7 @@
 import { BspDungeonOptions, BspDungeonOutputs } from './bsp';
 import { SerializedDungeon } from './serialize';
 import { DungeonRendererOptions } from '../rendering/dungeonRenderer';
+import { ObjectPlacement } from '../entities/types';
 /** Optional author-supplied metadata embedded in the map file. */
 export type DungeonMapMeta = {
     title?: string;
@@ -35,6 +36,8 @@ export type DungeonMapFile = {
     rendererOptions: SerializedRendererOptions;
     /** Serialized dungeon texture data. */
     dungeon: SerializedDungeon;
+    /** Stationary object placements, including billboard sprites. */
+    objectPlacements?: ObjectPlacement[];
 };
 /** Options passed to exportDungeonMap. */
 export type ExportOptions = {
@@ -57,6 +60,11 @@ export type ExportOptions = {
         wall?: string[];
         ceil?: string[];
     }>;
+    /**
+     * Supply game.dungeon.objects here to persist stationary object placements.
+     * SpriteMap data is plain JSON so no stripping is needed.
+     */
+    objectPlacements?: readonly ObjectPlacement[];
 };
 /** Returned by importDungeonMap / dungeonMapFromJson. */
 export type ImportResult = {
@@ -75,6 +83,11 @@ export type ImportResult = {
         wall?: string[];
         ceil?: string[];
     }>;
+    /**
+     * Restored stationary object placements, if the file contained them.
+     * Pass to place.billboard() inside onPlace, or to renderer.setObjects() directly.
+     */
+    objectPlacements?: ObjectPlacement[];
 };
 /**
  * Snapshot a dungeon and all settings needed to reproduce it into a

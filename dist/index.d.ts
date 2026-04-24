@@ -1,5 +1,5 @@
 export { createGame, attachMinimap, attachSpawner, attachDecorator, attachSurfacePainter, attachKeybindings, } from './api/createGame';
-export type { SurfacePaintTarget } from './api/createGame';
+export type { SurfacePaintTarget, PlaceAPI } from './api/createGame';
 export { createNpc, createEnemy, createDecoration } from './entities/factory';
 export { createItem } from './entities/inventory';
 export { loadTiledMap } from './dungeon/tiled';
@@ -22,7 +22,7 @@ export { exportDungeonMap, dungeonMapToJson, importDungeonMap, dungeonMapFromJso
 export type { DungeonMapFile, DungeonMapMeta, SerializedRendererOptions, ExportOptions, ImportResult } from './dungeon/mapFile';
 export { setFloorSkirtTiles, setCeilSkirtTiles } from './dungeon/bsp';
 export { IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE, buildColliderFlags, colliderFlagsFromSolid, isWalkableCell, isBlockedCell, isLightPassableCell } from './dungeon/colliderFlags';
-export type { EntityBase, HiddenPassage } from './entities/types';
+export type { EntityBase, HiddenPassage, ObjectPlacement } from './entities/types';
 export type { DecorationEntity } from './entities/factory';
 export type { Item, InventorySlot } from './entities/inventory';
 export type { TurnAction, TurnActionKind } from './turn/types';
