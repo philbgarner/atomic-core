@@ -3136,11 +3136,17 @@ uniform vec2 uCamDir;
 
 // Directional surface lighting mode per material:
 //   >= 0 : fixed brightness multiplier applied to all pixels on this surface
-//           (floor = 0.85, ceiling = 0.95)
-//    < 0 : use the camera-angle formula for walls/skirts:
-//           brightness = 0.9 + abs(dot(aFaceN, uCamDir)) * 0.2
-//           → wall facing camera: ~1.1   side wall: ~0.9
+//           (floor and ceiling use this path; value set via surfaceLighting option)
+//    < 0 : use the camera-angle formula for walls/skirts (see uWallLightMin/Max)
 uniform float uSurfaceLight;
+
+// Wall directional lighting range. Only used when uSurfaceLight < 0.
+//   uWallLightMin : brightness when wall normal is perpendicular to camera (side wall)
+//   uWallLightMax : brightness when wall normal is parallel   to camera (facing wall)
+// Formula: vFacingLight = uWallLightMin + abs(dot(aFaceN, uCamDir)) * (uWallLightMax - uWallLightMin)
+// Defaults: min=0.9, max=1.1  →  range [0.9, 1.1]
+uniform float uWallLightMin;
+uniform float uWallLightMax;
 
 // ── Varyings ──────────────────────────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
@@ -3197,12 +3203,12 @@ void main() {
   // ── 8. Directional surface lighting ───────────────────────────────────────
   // For walls (uSurfaceLight < 0): brightness depends on how directly the wall
   // faces the camera. abs() makes back-facing walls identical to front-facing.
-  //   dot = ±1 → wall is perpendicular to view → 0.9 + 0.2 = 1.1 (bright)
-  //   dot =  0 → wall is parallel to view      → 0.9 + 0.0 = 0.9 (dim)
-  // For flat surfaces: uSurfaceLight is the constant multiplier (floor=0.85,
-  // ceiling=0.95) set at material creation time in dungeonRenderer.ts.
+  //   dot = ±1 → wall perpendicular to view → uWallLightMax (e.g. 1.1, bright)
+  //   dot =  0 → wall parallel to view      → uWallLightMin (e.g. 0.9, dim)
+  // For flat surfaces (uSurfaceLight >= 0): uSurfaceLight is used directly
+  // (floor=0.85, ceiling=0.95 by default; configurable via surfaceLighting option).
   if (uSurfaceLight < 0.0) {
-    vFacingLight = 0.9 + abs(dot(aFaceN, uCamDir)) * 0.2;
+    vFacingLight = uWallLightMin + abs(dot(aFaceN, uCamDir)) * (uWallLightMax - uWallLightMin);
   } else {
     vFacingLight = uSurfaceLight;
   }
@@ -3331,11 +3337,12 @@ void main() {
   color.rgb *= mix(1.0 - uAoIntensity, 1.0, vAo);
 
   // ── 5. Directional surface lighting ───────────────────────────────────────
-  // vFacingLight is computed per-vertex and interpolated:
-  //   Floor:   0.85  (fixed, set by uSurfaceLight in floorMat)
-  //   Ceiling: 0.95  (fixed, set by uSurfaceLight in ceilMat)
-  //   Walls:   0.9 + abs(dot(face_normal, camera_forward)) * 0.2
-  //              → perpendicular to camera: 1.1   side walls: 0.9
+  // vFacingLight is computed per-vertex in the vertex shader and interpolated:
+  //   Floor/ceiling: fixed uSurfaceLight value (configurable via surfaceLighting option;
+  //                  defaults: floor=0.85, ceiling=0.95)
+  //   Walls/skirts:  uWallLightMin + abs(dot(face_normal, cam_forward))
+  //                                * (uWallLightMax - uWallLightMin)
+  //                  defaults: min=0.9 (side walls), max=1.1 (facing walls)
   color.rgb *= vFacingLight;
 
   // ── 6. Fog ────────────────────────────────────────────────────────────────
@@ -3366,6 +3373,8 @@ function makeBasicAtlasUniforms(params) {
 		uAoIntensity: { value: params.aoIntensity ?? 0 },
 		uCamDir: { value: params.camDir ?? new THREE.Vector2(0, -1) },
 		uSurfaceLight: { value: params.surfaceLight ?? 1 },
+		uWallLightMin: { value: params.wallLightMin ?? .9 },
+		uWallLightMax: { value: params.wallLightMax ?? 1.1 },
 		uTileUvLookup: { value: params.tileUvLookup ?? defaultTex },
 		uTileUvCount: { value: params.tileUvCount ?? 1 },
 		uOverlayLookup: { value: params.overlayLookup ?? defaultTex },
@@ -3974,6 +3983,11 @@ function createDungeonRenderer(element, game, options = {}) {
 	const resolver = options.tileNameResolver;
 	let aoIntensity = options.ambientOcclusion === true ? .75 : typeof options.ambientOcclusion === "number" ? Math.max(0, Math.min(1, options.ambientOcclusion)) : 0;
 	const aoEnabled = aoIntensity > 0;
+	const sl = options.surfaceLighting ?? {};
+	const floorLight = sl.floor ?? .85;
+	const ceilLight = sl.ceiling ?? .95;
+	const wallLightMin = sl.wallMin ?? .9;
+	const wallLightMax = sl.wallMax ?? 1.1;
 	const atlasMaterials = [];
 	function getUvRect(id) {
 		const sprite = packedAtlas?.getById(id);
@@ -4154,7 +4168,9 @@ function createDungeonRenderer(element, game, options = {}) {
 				overlayLookup: overlayFloor.tex,
 				dungeonSize: new THREE.Vector2(1, 1),
 				aoIntensity,
-				surfaceLight
+				surfaceLight,
+				wallLightMin,
+				wallLightMax
 			}),
 			side: THREE.FrontSide
 		});
@@ -4166,8 +4182,8 @@ function createDungeonRenderer(element, game, options = {}) {
 		mat.side = THREE.DoubleSide;
 		return mat;
 	}
-	const floorMat = packedAtlas ? makeAtlasMaterial(.85) : new THREE.MeshStandardMaterial({ color: 5592422 });
-	const ceilMat = packedAtlas ? makeAtlasMaterial(.95) : new THREE.MeshStandardMaterial({ color: 2236979 });
+	const floorMat = packedAtlas ? makeAtlasMaterial(floorLight) : new THREE.MeshStandardMaterial({ color: 5592422 });
+	const ceilMat = packedAtlas ? makeAtlasMaterial(ceilLight) : new THREE.MeshStandardMaterial({ color: 2236979 });
 	const wallMat = packedAtlas ? makeAtlasMaterial(-1) : new THREE.MeshStandardMaterial({ color: 7037040 });
 	const floorEdgeMat = packedAtlas ? makeAtlasMaterial(-1) : new THREE.MeshStandardMaterial({ color: 5592422 });
 	const ceilEdgeMat = packedAtlas ? makeAtlasMaterialDoubleSide(-1) : new THREE.MeshStandardMaterial({
@@ -4974,6 +4990,14 @@ function createDungeonRenderer(element, game, options = {}) {
 		setAmbientOcclusion(intensity) {
 			aoIntensity = Math.max(0, Math.min(1, intensity));
 			for (const mat of atlasMaterials) mat.uniforms["uAoIntensity"].value = aoIntensity;
+		},
+		setSurfaceLighting(opts) {
+			if (opts.floor !== void 0 && floorMat instanceof THREE.ShaderMaterial) floorMat.uniforms["uSurfaceLight"].value = opts.floor;
+			if (opts.ceiling !== void 0 && ceilMat instanceof THREE.ShaderMaterial) ceilMat.uniforms["uSurfaceLight"].value = opts.ceiling;
+			if (opts.wallMin !== void 0 || opts.wallMax !== void 0) for (const mat of atlasMaterials) {
+				if (opts.wallMin !== void 0) mat.uniforms["uWallLightMin"].value = opts.wallMin;
+				if (opts.wallMax !== void 0) mat.uniforms["uWallLightMax"].value = opts.wallMax;
+			}
 		},
 		rebuild() {
 			for (const mesh of [

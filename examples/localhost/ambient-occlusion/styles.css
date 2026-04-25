@@ -110,32 +110,69 @@ body::before {
   font-weight: bold;
 }
 
+/* ── Shared slider row layout ─────────────────────────────────────────────── */
+.lighting-row,
 #ao-control {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 8px;
   color: var(--desc);
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
 }
 
+.lighting-row label,
 #ao-control label {
   color: var(--gold);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 68px;
 }
 
-#ao-control #ao-value {
+.lighting-row input[type="range"],
+#ao-slider {
+  flex: 1;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.lighting-row span:last-child,
+#ao-value {
   color: var(--gold);
   flex-shrink: 0;
   width: 28px;
   text-align: right;
 }
 
-#ao-slider {
-  flex: 1;
-  accent-color: var(--gold);
-  cursor: pointer;
+/* ── Lighting controls group ─────────────────────────────────────────────── */
+#lighting-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+/* ── AO control ──────────────────────────────────────────────────────────── */
+#ao-control {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+.tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  background: var(--border);
+  color: var(--gold-dim);
+  font-size: 7px;
+  cursor: help;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 #controls {

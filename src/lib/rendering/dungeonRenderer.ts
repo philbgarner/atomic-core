@@ -138,12 +138,27 @@ export type DungeonRendererOptions = {
    * Pass `true` for the default intensity of 0.75, a number in [0, 1] for a
    * custom value, or omit / `false` to disable (default). Has no effect when
    * no atlas is provided.
-   *
-   * Note: directional surface lighting (floor 0.85 / ceiling 0.95 / wall
-   * camera-angle formula) is a separate always-on pass that runs on top of AO
-   * and requires no option to activate.
    */
   ambientOcclusion?: boolean | number;
+  /**
+   * Tune the directional surface lighting multipliers.
+   * All fields are optional; omit the whole object to use defaults.
+   *
+   * - `floor`   — flat multiplier for floor faces. Default: `0.85`.
+   * - `ceiling` — flat multiplier for ceiling faces. Default: `0.95`.
+   * - `wallMin` — brightness for walls whose normal is perpendicular to the
+   *               camera (side walls, dot product = 0). Default: `0.9`.
+   * - `wallMax` — brightness for walls whose normal is parallel to the camera
+   *               forward vector (facing walls, dot product = ±1). Default: `1.1`.
+   *
+   * Wall brightness at any angle: `wallMin + abs(dot(normal, camFwd)) * (wallMax - wallMin)`.
+   */
+  surfaceLighting?: {
+    floor?:   number;
+    ceiling?: number;
+    wallMin?: number;
+    wallMax?: number;
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -297,6 +312,17 @@ export type DungeonRenderer = {
    * to [0, 1]. Takes effect on the next rendered frame.
    */
   setAmbientOcclusion(intensity: number): void;
+  /**
+   * Update directional surface lighting values at runtime. All fields are
+   * optional — omit any field to leave its current value unchanged.
+   * Takes effect on the next rendered frame; no geometry rebuild required.
+   */
+  setSurfaceLighting(opts: {
+    floor?:   number;
+    ceiling?: number;
+    wallMin?: number;
+    wallMax?: number;
+  }): void;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -535,6 +561,11 @@ export function createDungeonRenderer(
       ? Math.max(0, Math.min(1, options.ambientOcclusion))
       : 0;
   const aoEnabled = aoIntensity > 0;
+  const sl = options.surfaceLighting ?? {};
+  const floorLight   = sl.floor   ?? 0.85;
+  const ceilLight    = sl.ceiling ?? 0.95;
+  const wallLightMin = sl.wallMin ?? 0.9;
+  const wallLightMax = sl.wallMax ?? 1.1;
   const atlasMaterials: THREE.ShaderMaterial[] = [];
 
   function getUvRect(id: number): UvRect {
@@ -732,6 +763,8 @@ export function createDungeonRenderer(
         dungeonSize: new THREE.Vector2(1, 1),
         aoIntensity,
         surfaceLight,
+        wallLightMin,
+        wallLightMax,
       }),
       side: THREE.FrontSide,
     });
@@ -747,13 +780,13 @@ export function createDungeonRenderer(
 
   // ── Plain (fallback) materials ────────────────────────────────────────────
   const floorMat = packedAtlas
-    ? makeAtlasMaterial(0.85)
+    ? makeAtlasMaterial(floorLight)
     : new THREE.MeshStandardMaterial({ color: 0x555566 });
   const ceilMat = packedAtlas
-    ? makeAtlasMaterial(0.95)
+    ? makeAtlasMaterial(ceilLight)
     : new THREE.MeshStandardMaterial({ color: 0x222233 });
   const wallMat = packedAtlas
-    ? makeAtlasMaterial(-1.0)   // directional: 0.9 + abs(dot(normal, camFwd)) * 0.2
+    ? makeAtlasMaterial(-1.0)
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
   const floorEdgeMat = packedAtlas
     ? makeAtlasMaterial(-1.0)
@@ -1874,6 +1907,20 @@ export function createDungeonRenderer(
       aoIntensity = Math.max(0, Math.min(1, intensity));
       for (const mat of atlasMaterials) {
         (mat.uniforms["uAoIntensity"] as { value: number }).value = aoIntensity;
+      }
+    },
+    setSurfaceLighting(opts) {
+      if (opts.floor !== undefined && floorMat instanceof THREE.ShaderMaterial)
+        (floorMat.uniforms["uSurfaceLight"] as { value: number }).value = opts.floor;
+      if (opts.ceiling !== undefined && ceilMat instanceof THREE.ShaderMaterial)
+        (ceilMat.uniforms["uSurfaceLight"] as { value: number }).value = opts.ceiling;
+      if (opts.wallMin !== undefined || opts.wallMax !== undefined) {
+        for (const mat of atlasMaterials) {
+          if (opts.wallMin !== undefined)
+            (mat.uniforms["uWallLightMin"] as { value: number }).value = opts.wallMin;
+          if (opts.wallMax !== undefined)
+            (mat.uniforms["uWallLightMax"] as { value: number }).value = opts.wallMax;
+        }
       }
     },
     rebuild() {

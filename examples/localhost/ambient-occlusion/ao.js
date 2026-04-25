@@ -21,8 +21,16 @@ const logEl = document.getElementById("log");
 const hpEl = document.getElementById("hp");
 const turnEl = document.getElementById("turn");
 const posEl = document.getElementById("pos");
-const aoSliderEl = document.getElementById("ao-slider");
-const aoValueEl = document.getElementById("ao-value");
+const aoSliderEl      = document.getElementById("ao-slider");
+const aoValueEl       = document.getElementById("ao-value");
+const floorSliderEl   = document.getElementById("floor-slider");
+const floorValueEl    = document.getElementById("floor-value");
+const ceilSliderEl    = document.getElementById("ceil-slider");
+const ceilValueEl     = document.getElementById("ceil-value");
+const wallMinSliderEl = document.getElementById("wall-min-slider");
+const wallMinValueEl  = document.getElementById("wall-min-value");
+const wallMaxSliderEl = document.getElementById("wall-max-slider");
+const wallMaxValueEl  = document.getElementById("wall-max-value");
 
 // ---------------------------------------------------------------------------
 // Entity tracking
@@ -88,6 +96,12 @@ async function init() {
     ceilTile: "plaster_ceiling.png",
     wallTile: "brick_wall_stone.png",
     ambientOcclusion: 0.75,
+    surfaceLighting: {
+      floor:   parseFloat(floorSliderEl.value),
+      ceiling: parseFloat(ceilSliderEl.value),
+      wallMin: parseFloat(wallMinSliderEl.value),
+      wallMax: parseFloat(wallMaxSliderEl.value),
+    },
   });
 
   game.generate();
@@ -96,6 +110,30 @@ async function init() {
     const v = parseFloat(aoSliderEl.value);
     aoValueEl.textContent = v.toFixed(2);
     renderer.setAmbientOcclusion(v);
+  });
+
+  floorSliderEl.addEventListener("input", () => {
+    const v = parseFloat(floorSliderEl.value);
+    floorValueEl.textContent = v.toFixed(2);
+    renderer.setSurfaceLighting({ floor: v });
+  });
+
+  ceilSliderEl.addEventListener("input", () => {
+    const v = parseFloat(ceilSliderEl.value);
+    ceilValueEl.textContent = v.toFixed(2);
+    renderer.setSurfaceLighting({ ceiling: v });
+  });
+
+  wallMinSliderEl.addEventListener("input", () => {
+    const v = parseFloat(wallMinSliderEl.value);
+    wallMinValueEl.textContent = v.toFixed(2);
+    renderer.setSurfaceLighting({ wallMin: v });
+  });
+
+  wallMaxSliderEl.addEventListener("input", () => {
+    const v = parseFloat(wallMaxSliderEl.value);
+    wallMaxValueEl.textContent = v.toFixed(2);
+    renderer.setSurfaceLighting({ wallMax: v });
   });
 }
 

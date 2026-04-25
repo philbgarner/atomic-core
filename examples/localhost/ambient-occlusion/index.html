@@ -15,8 +15,30 @@
                 Pos: <span id="pos">—</span>
             </div>
             <div id="log"></div>
+            <div id="lighting-controls">
+                <div class="lighting-row">
+                    <label for="floor-slider">Floor <span class="tip" title="Flat brightness multiplier applied to all floor surfaces. Lower values make floors appear darker and more recessed. Default: 0.85">?</span></label>
+                    <input id="floor-slider" type="range" min="0" max="2" step="0.01" value="0.85" />
+                    <span id="floor-value">0.85</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="ceil-slider">Ceil <span class="tip" title="Flat brightness multiplier applied to all ceiling surfaces. Slightly brighter than floors by default to suggest ambient sky light. Default: 0.95">?</span></label>
+                    <input id="ceil-slider" type="range" min="0" max="2" step="0.01" value="0.95" />
+                    <span id="ceil-value">0.95</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="wall-min-slider">Wall min <span class="tip" title="Brightness for wall faces whose normal is perpendicular to your view direction (side walls). Lower values increase depth contrast at corridor corners. Default: 0.9">?</span></label>
+                    <input id="wall-min-slider" type="range" min="0" max="2" step="0.01" value="0.9" />
+                    <span id="wall-min-value">0.90</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="wall-max-slider">Wall max <span class="tip" title="Brightness for wall faces whose normal points directly toward or away from the camera (facing walls). Higher values make the wall in front of you stand out. Default: 1.1">?</span></label>
+                    <input id="wall-max-slider" type="range" min="0" max="2" step="0.01" value="1.1" />
+                    <span id="wall-max-value">1.10</span>
+                </div>
+            </div>
             <div id="ao-control">
-                <label for="ao-slider">AO</label>
+                <label for="ao-slider">AO <span class="tip" title="Ambient occlusion intensity. Darkens corners where walls, floors, and ceilings meet based on how enclosed each vertex is. 0 = off, 1 = maximum darkening. Default: 0.75">?</span></label>
                 <input id="ao-slider" type="range" min="0" max="1" step="0.01" value="0.75" />
                 <span id="ao-value">0.75</span>
             </div>

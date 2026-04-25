@@ -122,12 +122,27 @@ export type DungeonRendererOptions = {
      * Pass `true` for the default intensity of 0.75, a number in [0, 1] for a
      * custom value, or omit / `false` to disable (default). Has no effect when
      * no atlas is provided.
-     *
-     * Note: directional surface lighting (floor 0.85 / ceiling 0.95 / wall
-     * camera-angle formula) is a separate always-on pass that runs on top of AO
-     * and requires no option to activate.
      */
     ambientOcclusion?: boolean | number;
+    /**
+     * Tune the directional surface lighting multipliers.
+     * All fields are optional; omit the whole object to use defaults.
+     *
+     * - `floor`   — flat multiplier for floor faces. Default: `0.85`.
+     * - `ceiling` — flat multiplier for ceiling faces. Default: `0.95`.
+     * - `wallMin` — brightness for walls whose normal is perpendicular to the
+     *               camera (side walls, dot product = 0). Default: `0.9`.
+     * - `wallMax` — brightness for walls whose normal is parallel to the camera
+     *               forward vector (facing walls, dot product = ±1). Default: `1.1`.
+     *
+     * Wall brightness at any angle: `wallMin + abs(dot(normal, camFwd)) * (wallMax - wallMin)`.
+     */
+    surfaceLighting?: {
+        floor?: number;
+        ceiling?: number;
+        wallMin?: number;
+        wallMax?: number;
+    };
 };
 /** Which class of dungeon geometry a layer targets. */
 export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
@@ -260,6 +275,17 @@ export type DungeonRenderer = {
      * to [0, 1]. Takes effect on the next rendered frame.
      */
     setAmbientOcclusion(intensity: number): void;
+    /**
+     * Update directional surface lighting values at runtime. All fields are
+     * optional — omit any field to leave its current value unchanged.
+     * Takes effect on the next rendered frame; no geometry rebuild required.
+     */
+    setSurfaceLighting(opts: {
+        floor?: number;
+        ceiling?: number;
+        wallMin?: number;
+        wallMax?: number;
+    }): void;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };

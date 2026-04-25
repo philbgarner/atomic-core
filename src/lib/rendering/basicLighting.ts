@@ -97,11 +97,17 @@ uniform vec2 uCamDir;
 
 // Directional surface lighting mode per material:
 //   >= 0 : fixed brightness multiplier applied to all pixels on this surface
-//           (floor = 0.85, ceiling = 0.95)
-//    < 0 : use the camera-angle formula for walls/skirts:
-//           brightness = 0.9 + abs(dot(aFaceN, uCamDir)) * 0.2
-//           → wall facing camera: ~1.1   side wall: ~0.9
+//           (floor and ceiling use this path; value set via surfaceLighting option)
+//    < 0 : use the camera-angle formula for walls/skirts (see uWallLightMin/Max)
 uniform float uSurfaceLight;
+
+// Wall directional lighting range. Only used when uSurfaceLight < 0.
+//   uWallLightMin : brightness when wall normal is perpendicular to camera (side wall)
+//   uWallLightMax : brightness when wall normal is parallel   to camera (facing wall)
+// Formula: vFacingLight = uWallLightMin + abs(dot(aFaceN, uCamDir)) * (uWallLightMax - uWallLightMin)
+// Defaults: min=0.9, max=1.1  →  range [0.9, 1.1]
+uniform float uWallLightMin;
+uniform float uWallLightMax;
 
 // ── Varyings ──────────────────────────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
@@ -158,12 +164,12 @@ void main() {
   // ── 8. Directional surface lighting ───────────────────────────────────────
   // For walls (uSurfaceLight < 0): brightness depends on how directly the wall
   // faces the camera. abs() makes back-facing walls identical to front-facing.
-  //   dot = ±1 → wall is perpendicular to view → 0.9 + 0.2 = 1.1 (bright)
-  //   dot =  0 → wall is parallel to view      → 0.9 + 0.0 = 0.9 (dim)
-  // For flat surfaces: uSurfaceLight is the constant multiplier (floor=0.85,
-  // ceiling=0.95) set at material creation time in dungeonRenderer.ts.
+  //   dot = ±1 → wall perpendicular to view → uWallLightMax (e.g. 1.1, bright)
+  //   dot =  0 → wall parallel to view      → uWallLightMin (e.g. 0.9, dim)
+  // For flat surfaces (uSurfaceLight >= 0): uSurfaceLight is used directly
+  // (floor=0.85, ceiling=0.95 by default; configurable via surfaceLighting option).
   if (uSurfaceLight < 0.0) {
-    vFacingLight = 0.9 + abs(dot(aFaceN, uCamDir)) * 0.2;
+    vFacingLight = uWallLightMin + abs(dot(aFaceN, uCamDir)) * (uWallLightMax - uWallLightMin);
   } else {
     vFacingLight = uSurfaceLight;
   }
@@ -293,11 +299,12 @@ void main() {
   color.rgb *= mix(1.0 - uAoIntensity, 1.0, vAo);
 
   // ── 5. Directional surface lighting ───────────────────────────────────────
-  // vFacingLight is computed per-vertex and interpolated:
-  //   Floor:   0.85  (fixed, set by uSurfaceLight in floorMat)
-  //   Ceiling: 0.95  (fixed, set by uSurfaceLight in ceilMat)
-  //   Walls:   0.9 + abs(dot(face_normal, camera_forward)) * 0.2
-  //              → perpendicular to camera: 1.1   side walls: 0.9
+  // vFacingLight is computed per-vertex in the vertex shader and interpolated:
+  //   Floor/ceiling: fixed uSurfaceLight value (configurable via surfaceLighting option;
+  //                  defaults: floor=0.85, ceiling=0.95)
+  //   Walls/skirts:  uWallLightMin + abs(dot(face_normal, cam_forward))
+  //                                * (uWallLightMax - uWallLightMin)
+  //                  defaults: min=0.9 (side walls), max=1.1 (facing walls)
   color.rgb *= vFacingLight;
 
   // ── 6. Fog ────────────────────────────────────────────────────────────────
@@ -388,6 +395,18 @@ export function makeBasicAtlasUniforms(params: {
    * Default: 1.0 (no effect — useful for layer/custom materials).
    */
   surfaceLight?: number;
+  /**
+   * Minimum wall brightness — applied when the wall normal is perpendicular to
+   * the camera (side walls, dot product = 0). Default: 0.9.
+   * Only consumed by wall/skirt materials (surfaceLight < 0).
+   */
+  wallLightMin?: number;
+  /**
+   * Maximum wall brightness — applied when the wall normal is parallel to the
+   * camera forward vector (facing walls, dot product = ±1). Default: 1.1.
+   * Only consumed by wall/skirt materials (surfaceLight < 0).
+   */
+  wallLightMax?: number;
 }): Record<string, { value: unknown }> {
   const defaultTex = makeSinglePixelTex();
   return {
@@ -399,6 +418,8 @@ export function makeBasicAtlasUniforms(params: {
     uAoIntensity:    { value: params.aoIntensity ?? 0 },
     uCamDir:         { value: params.camDir ?? new THREE.Vector2(0, -1) },
     uSurfaceLight:   { value: params.surfaceLight ?? 1.0 },
+    uWallLightMin:   { value: params.wallLightMin ?? 0.9 },
+    uWallLightMax:   { value: params.wallLightMax ?? 1.1 },
     uTileUvLookup:   { value: params.tileUvLookup ?? defaultTex },
     uTileUvCount:    { value: params.tileUvCount ?? 1 },
     uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },

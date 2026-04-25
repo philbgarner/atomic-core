@@ -1472,12 +1472,16 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   fogColor: '#000000',       // CSS colour string; default '#000000'
 
   // ── Lighting ──────────────────────────────────────────────────────────────
-  // Directional surface lighting is always on (no option needed):
-  //   floor = 0.85 × base colour, ceiling = 0.95, walls = 0.9–1.1 based on
-  //   the angle between the wall's outward normal and the camera forward vector.
-  //
-  // Vertex AO is opt-in — darkens corners where surfaces meet:
+  // Vertex AO — opt-in; darkens corners where surfaces meet:
   ambientOcclusion: 0.75,    // true = default 0.75; number in [0,1]; false/omit = off
+
+  // Directional surface lighting — always on; all fields are optional:
+  surfaceLighting: {
+    floor:   0.85,   // flat multiplier for floor faces
+    ceiling: 0.95,   // flat multiplier for ceiling faces
+    wallMin: 0.9,    // brightness for side walls (normal ⊥ camera)
+    wallMax: 1.1,    // brightness for facing walls (normal ∥ camera)
+  },
 })
 
 // Update entities on every turn
@@ -1545,16 +1549,28 @@ AO corner values are derived from the solid map at build time. If your game modi
 
 #### Directional Surface Lighting
 
-Directional surface lighting is always active when an atlas is used. No option is required to enable it. It applies a per-surface brightness multiplier that makes floor, ceiling, and wall orientation immediately readable without requiring dynamic lights.
+Directional surface lighting is always active when an atlas is used. It applies a per-surface brightness multiplier that makes floor, ceiling, and wall orientation immediately readable without requiring dynamic lights. All values are tunable via the `surfaceLighting` option.
 
-**Brightness values by surface**
+**Default brightness values by surface**
 
-| Surface | Multiplier |
-|---|---|
-| Floor | `0.85` (fixed) |
-| Ceiling | `0.95` (fixed) |
-| Wall facing the camera | up to `1.1` |
-| Wall perpendicular to the camera (side wall) | `0.9` |
+| Surface | Default | Option field |
+|---|---|---|
+| Floor | `0.85` | `surfaceLighting.floor` |
+| Ceiling | `0.95` | `surfaceLighting.ceiling` |
+| Wall facing the camera | `1.1` | `surfaceLighting.wallMax` |
+| Wall perpendicular to the camera (side wall) | `0.9` | `surfaceLighting.wallMin` |
+
+```js
+var renderer = AtomicCore.createDungeonRenderer(el, game, {
+  // All fields optional — omit the whole object to use defaults
+  surfaceLighting: {
+    floor:   0.80,   // darken floors a little more
+    ceiling: 0.95,   // leave ceiling as default
+    wallMin: 0.85,   // tighten the wall contrast range
+    wallMax: 1.05,
+  },
+})
+```
 
 **How walls are calculated**
 
