@@ -131,10 +131,17 @@ export type DungeonRendererOptions = {
    */
   onCellHover?: (info: CellInfo | null) => void;
   /**
-   * Vertex ambient occlusion for floor, ceiling, and wall faces.
-   * Pass `true` for a default intensity of 0.75, a number in [0, 1] for a
-   * custom intensity, or omit / `false` to disable (default).
-   * Has no effect when no atlas is provided.
+   * Vertex ambient occlusion intensity. Darkens where walls, floors, and
+   * ceilings meet by sampling the solid map at each face's four corners at
+   * dungeon-build time and storing the result in the `aAoCorners` attribute.
+   *
+   * Pass `true` for the default intensity of 0.75, a number in [0, 1] for a
+   * custom value, or omit / `false` to disable (default). Has no effect when
+   * no atlas is provided.
+   *
+   * Note: directional surface lighting (floor 0.85 / ceiling 0.95 / wall
+   * camera-angle formula) is a separate always-on pass that runs on top of AO
+   * and requires no option to activate.
    */
   ambientOcclusion?: boolean | number;
 };
@@ -404,6 +411,7 @@ function buildInstancedMesh(
   cellX?: Float32Array,
   cellZ?: Float32Array,
   aoCorners?: Float32Array,
+  faceNormals?: Float32Array,
 ): THREE.InstancedMesh {
   const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -451,14 +459,24 @@ function buildInstancedMesh(
     );
 
     if (cellX && cellZ) {
-      geo.setAttribute("aCellX", new THREE.InstancedBufferAttribute(cellX, 1));
-      geo.setAttribute("aCellZ", new THREE.InstancedBufferAttribute(cellZ, 1));
+      const cellArr = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        cellArr[i * 2]     = cellX[i] ?? 0;
+        cellArr[i * 2 + 1] = cellZ[i] ?? 0;
+      }
+      geo.setAttribute("aCell", new THREE.InstancedBufferAttribute(cellArr, 2));
+    } else {
+      geo.setAttribute("aCell", new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2));
     }
 
     // aAoCorners: 4 floats per instance [tl, tr, bl, br] in [0,1].
     // Default to all-ones so uncomputed faces (skirts, layers) are fully lit.
     const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1.0);
     geo.setAttribute("aAoCorners", new THREE.InstancedBufferAttribute(aoArr, 4));
+
+    // aFaceN: XZ outward normal per instance (non-zero for walls).
+    const fnArr = faceNormals ?? new Float32Array(n * 2);
+    geo.setAttribute("aFaceN", new THREE.InstancedBufferAttribute(fnArr, 2));
   }
 
   const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
@@ -698,7 +716,7 @@ export function createDungeonRenderer(
     set(ceilWallSkirtMat,  overlayWall.tex);
   }
 
-  function makeAtlasMaterial(): THREE.ShaderMaterial {
+  function makeAtlasMaterial(surfaceLight = 1.0): THREE.ShaderMaterial {
     const canvas = packedAtlas!.texture as HTMLCanvasElement;
     const mat = new THREE.ShaderMaterial({
       vertexShader: BASIC_ATLAS_VERT,
@@ -713,6 +731,7 @@ export function createDungeonRenderer(
         overlayLookup: overlayFloor.tex,
         dungeonSize: new THREE.Vector2(1, 1),
         aoIntensity,
+        surfaceLight,
       }),
       side: THREE.FrontSide,
     });
@@ -720,36 +739,36 @@ export function createDungeonRenderer(
     return mat;
   }
 
-  function makeAtlasMaterialDoubleSide(): THREE.ShaderMaterial {
-    const mat = makeAtlasMaterial();
+  function makeAtlasMaterialDoubleSide(surfaceLight = 1.0): THREE.ShaderMaterial {
+    const mat = makeAtlasMaterial(surfaceLight);
     mat.side = THREE.DoubleSide;
     return mat;
   }
 
   // ── Plain (fallback) materials ────────────────────────────────────────────
   const floorMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(0.85)
     : new THREE.MeshStandardMaterial({ color: 0x555566 });
   const ceilMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(0.95)
     : new THREE.MeshStandardMaterial({ color: 0x222233 });
   const wallMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(-1.0)   // directional: 0.9 + abs(dot(normal, camFwd)) * 0.2
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
   const floorEdgeMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(-1.0)
     : new THREE.MeshStandardMaterial({ color: 0x555566 });
   const ceilEdgeMat = packedAtlas
-    ? makeAtlasMaterialDoubleSide()
+    ? makeAtlasMaterialDoubleSide(-1.0)
     : new THREE.MeshStandardMaterial({
         color: 0x222233,
         side: THREE.DoubleSide,
       });
   const floorWallSkirtMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(-1.0)
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
   const ceilWallSkirtMat = packedAtlas
-    ? makeAtlasMaterial()
+    ? makeAtlasMaterial(-1.0)
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 
   // ── Dungeon geometry ──────────────────────────────────────────────────────
@@ -1063,6 +1082,8 @@ export function createDungeonRenderer(
     const floorsAo: number[] = [];
     const ceilsAo: number[] = [];
     const wallsAo: number[] = [];
+    // XZ outward normals per wall instance: [nx, nz] pairs.
+    const wallNormals: number[] = [];
     const wallRots: number[] = [];
     const floorEdgeRots: number[] = [];
     const ceilEdgeRots: number[] = [];
@@ -1143,6 +1164,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallNormals.push(0, 1);   // north wall faces south (+Z)
           wallCellMap.push({ cx, cz });
           if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "north"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
@@ -1162,6 +1184,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallNormals.push(0, -1);  // south wall faces north (-Z)
           wallCellMap.push({ cx, cz });
           if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "south"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
@@ -1181,6 +1204,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallNormals.push(1, 0);   // west wall faces east (+X)
           wallCellMap.push({ cx, cz });
           if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "west"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
@@ -1200,6 +1224,7 @@ export function createDungeonRenderer(
           );
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
+          wallNormals.push(-1, 0);  // east wall faces west (-X)
           wallCellMap.push({ cx, cz });
           if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "east"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
@@ -1403,6 +1428,7 @@ export function createDungeonRenderer(
       walls, wallRects, wallMat, !!packedAtlas,
       undefined, wallRots, undefined, wallCX, wallCZ,
       aoEnabled && wallsAo.length ? new Float32Array(wallsAo) : undefined,
+      new Float32Array(wallNormals),
     );
     scene.add(wallMesh);
     meshToCellMap.set(wallMesh, wallCellMap);
@@ -1627,6 +1653,14 @@ export function createDungeonRenderer(
 
       camera.position.set(curX, ceilingH * eyeHeightFactor, curZ);
       camera.rotation.set(0, curYaw, 0, "YXZ");
+
+      // Update camera forward direction for directional surface lighting.
+      const cfx = -Math.sin(curYaw);
+      const cfz = -Math.cos(curYaw);
+      for (const mat of atlasMaterials) {
+        const u = mat.uniforms['uCamDir'];
+        if (u) (u.value as THREE.Vector2).set(cfx, cfz);
+      }
 
       // Update all live billboard handles with current camera yaw.
       for (const e of currentEntities) {

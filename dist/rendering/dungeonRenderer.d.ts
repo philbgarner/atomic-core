@@ -115,10 +115,17 @@ export type DungeonRendererOptions = {
      */
     onCellHover?: (info: CellInfo | null) => void;
     /**
-     * Vertex ambient occlusion for floor, ceiling, and wall faces.
-     * Pass `true` for a default intensity of 0.75, a number in [0, 1] for a
-     * custom intensity, or omit / `false` to disable (default).
-     * Has no effect when no atlas is provided.
+     * Vertex ambient occlusion intensity. Darkens where walls, floors, and
+     * ceilings meet by sampling the solid map at each face's four corners at
+     * dungeon-build time and storing the result in the `aAoCorners` attribute.
+     *
+     * Pass `true` for the default intensity of 0.75, a number in [0, 1] for a
+     * custom value, or omit / `false` to disable (default). Has no effect when
+     * no atlas is provided.
+     *
+     * Note: directional surface lighting (floor 0.85 / ceiling 0.95 / wall
+     * camera-angle formula) is a separate always-on pass that runs on top of AO
+     * and requires no option to activate.
      */
     ambientOcclusion?: boolean | number;
 };

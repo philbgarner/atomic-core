@@ -397,6 +397,10 @@ atlasImg.onload = function() {
       fogFar:       24,
       fogColor:     '#000000',
       lerpFactor:   0.18,
+
+      // Vertex AO — darkens corners where walls/floors/ceilings meet.
+      // Directional surface lighting (floor 0.85 / ceil 0.95 / wall angle) is
+      // always on and needs no option.
       ambientOcclusion: 0.75,
     },
   )
@@ -1467,7 +1471,12 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   fogFar:   24,              // default 24
   fogColor: '#000000',       // CSS colour string; default '#000000'
 
-  // ── Ambient occlusion ─────────────────────────────────────────────────────
+  // ── Lighting ──────────────────────────────────────────────────────────────
+  // Directional surface lighting is always on (no option needed):
+  //   floor = 0.85 × base colour, ceiling = 0.95, walls = 0.9–1.1 based on
+  //   the angle between the wall's outward normal and the camera forward vector.
+  //
+  // Vertex AO is opt-in — darkens corners where surfaces meet:
   ambientOcclusion: 0.75,    // true = default 0.75; number in [0,1]; false/omit = off
 })
 
@@ -1505,6 +1514,8 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 
 Ambient occlusion softens corners by darkening where walls, floors, and ceilings meet. It is baked into vertex data at dungeon-build time and controlled at runtime via a single shader uniform — so adjusting the intensity is free and takes effect immediately, but changing which cells are solid requires a geometry rebuild.
 
+AO is one of two lighting passes in the atlas shader. It runs first, followed by the always-on directional surface lighting pass described in the next section. Both multiply into the final colour before fog is applied.
+
 **How it is calculated**
 
 When `ambientOcclusion` is enabled, `buildDungeon()` runs once per `game.generate()` (or `renderer.rebuild()`) and calls `computeFaceAO()` for every floor, ceiling, and wall face. That function samples the dungeon's `solid` map at the four corners of each face and packs the result into a `Float32Array` stored as the `aAoCorners` instanced attribute on the mesh. A corner touching one or more solid neighbors darkens; a corner in open space stays fully lit. Skirt and edge faces default to fully lit (`aAoCorners = 1.0`).
@@ -1529,6 +1540,44 @@ renderer.setAmbientOcclusion(0)    // disable entirely
 **When to rebuild**
 
 AO corner values are derived from the solid map at build time. If your game modifies the dungeon layout at runtime (e.g. breakable walls, locked doors that open), call `renderer.rebuild()` to recompute the geometry — including fresh AO data — from the updated solid map.
+
+---
+
+#### Directional Surface Lighting
+
+Directional surface lighting is always active when an atlas is used. No option is required to enable it. It applies a per-surface brightness multiplier that makes floor, ceiling, and wall orientation immediately readable without requiring dynamic lights.
+
+**Brightness values by surface**
+
+| Surface | Multiplier |
+|---|---|
+| Floor | `0.85` (fixed) |
+| Ceiling | `0.95` (fixed) |
+| Wall facing the camera | up to `1.1` |
+| Wall perpendicular to the camera (side wall) | `0.9` |
+
+**How walls are calculated**
+
+Each wall face carries a precomputed outward unit normal stored in the `aFaceN` per-instance attribute (`vec2`, XZ plane only):
+
+| Direction | Normal |
+|---|---|
+| North wall (faces south, +Z) | `(0, +1)` |
+| South wall (faces north, −Z) | `(0, −1)` |
+| West wall (faces east, +X) | `(+1, 0)` |
+| East wall (faces west, −X) | `(−1, 0)` |
+
+Each frame the renderer pushes the camera's forward XZ vector (`-sin(yaw), -cos(yaw)`) into the `uCamDir` uniform on every atlas material. The vertex shader computes:
+
+```glsl
+vFacingLight = 0.9 + abs(dot(aFaceN, uCamDir)) * 0.2;
+```
+
+`abs()` ensures walls behind the camera and walls in front are treated identically — only the axis alignment matters, not the facing direction. The result is interpolated across each face and multiplied into the final colour after the AO pass.
+
+**Interaction with ambient occlusion**
+
+Both passes are independent multipliers applied in sequence. A deeply occluded corner on a side wall might be darkened by both AO (`× 0.25` at intensity 0.75) and directional lighting (`× 0.9`). Neither pass is aware of the other.
 
 ---
 
