@@ -168,7 +168,7 @@ export type LayerSpec = {
      */
     filter?: (cx: number, cz: number, direction?: "north" | "south" | "east" | "west") => LayerFaceResult;
     /**
-     * Whether to attach atlas shader attributes (aTileId, aUvRotation, etc.)
+     * Whether to attach atlas shader attributes (aUvRect, aSurface, etc.)
      * to the instanced geometry.  Defaults to `true` when an atlas was passed
      * to `createDungeonRenderer`, `false` otherwise.
      */

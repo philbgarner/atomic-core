@@ -3112,7 +3112,7 @@ attribute vec4 aAoCorners;
 attribute vec4 aCellFace;
 
 // ── Uniforms ──────────────────────────────────────────────────────────────────
-// Width and height of the dungeon grid in cells. Used to normalise aCell
+// Width and height of the dungeon grid in cells. Used to normalise aCellFace.xy
 // into [0,1] UV space for the overlay lookup texture.
 uniform vec2 uDungeonSize;
 
@@ -3130,7 +3130,7 @@ uniform float uSurfaceLight;
 // Wall directional lighting range. Only used when uSurfaceLight < 0.
 //   uWallLightMin : brightness when wall normal is perpendicular to camera (side wall)
 //   uWallLightMax : brightness when wall normal is parallel   to camera (facing wall)
-// Formula: vFacingLight = uWallLightMin + abs(dot(aFaceN, uCamDir)) * (uWallLightMax - uWallLightMin)
+// Formula: vFacingLight = uWallLightMin + abs(dot(aCellFace.zw, uCamDir)) * (uWallLightMax - uWallLightMin)
 // Defaults: min=0.9, max=1.1  →  range [0.9, 1.1]
 uniform float uWallLightMin;
 uniform float uWallLightMax;
@@ -6010,7 +6010,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.7.9",
+		version: "0.8.0",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
