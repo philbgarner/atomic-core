@@ -114,6 +114,13 @@ export type DungeonRendererOptions = {
      * Throttled: only fires when the cell actually changes.
      */
     onCellHover?: (info: CellInfo | null) => void;
+    /**
+     * Vertex ambient occlusion for floor, ceiling, and wall faces.
+     * Pass `true` for a default intensity of 0.75, a number in [0, 1] for a
+     * custom intensity, or omit / `false` to disable (default).
+     * Has no effect when no atlas is provided.
+     */
+    ambientOcclusion?: boolean | number;
 };
 /** Which class of dungeon geometry a layer targets. */
 export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
@@ -241,6 +248,11 @@ export type DungeonRenderer = {
      * ```
      */
     highlightCells(filter: (cx: number, cz: number, regionId: number) => string | null | false | undefined): LayerHandle;
+    /**
+     * Update the ambient occlusion intensity at runtime. `intensity` is clamped
+     * to [0, 1]. Takes effect on the next rendered frame.
+     */
+    setAmbientOcclusion(intensity: number): void;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };

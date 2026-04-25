@@ -3063,6 +3063,9 @@ attribute float aUvHeightScale;
 // Per-instance grid cell coordinates — used to look up the overlay texture.
 attribute float aCellX;
 attribute float aCellZ;
+// Per-instance corner AO values in face-local UV order: x=TL(0,1), y=TR(1,1), z=BL(0,0), w=BR(1,0).
+// Each component is in [0,1]. Defaults to (0,0,0,0) when not set (handled by uAoIntensity=0).
+attribute vec4 aAoCorners;
 
 uniform vec2 uDungeonSize;
 
@@ -3072,12 +3075,20 @@ varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
 varying float vFogDist;
+varying float vAo;
 
 void main() {
   // Scale face height dimension BEFORE rotation so it always affects the
   // physical height axis of the face, regardless of UV rotation.
   float hs = clamp(aUvHeightScale, 0.0, 1.0);
   vec2 localUv = vec2(uv.x, uv.y * hs);
+
+  // Select the per-corner AO value using the raw (pre-rotation) UV.
+  // GPU interpolates vAo across the triangle from the four corner values.
+  if      (uv.x < 0.5 && uv.y >= 0.5) vAo = aAoCorners.x; // TL
+  else if (uv.x >= 0.5 && uv.y >= 0.5) vAo = aAoCorners.y; // TR
+  else if (uv.x < 0.5 && uv.y <  0.5) vAo = aAoCorners.z; // BL
+  else                                  vAo = aAoCorners.w; // BR
 
   // Rotate UV within tile bounds (0=0°, 1=90°CCW, 2=180°, 3=270°CCW).
   int iRot = int(floor(aUvRotation + 0.5));
@@ -3111,6 +3122,8 @@ uniform vec2  uTexelSize;
 uniform vec3  uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+// Ambient occlusion intensity in [0,1]. 0 = disabled (no cost).
+uniform float uAoIntensity;
 
 // Surface painter overlay system.
 // uOverlayLookup: W×H Uint8 RGBA texture — each channel holds one overlay tile ID (0 = none).
@@ -3127,6 +3140,7 @@ varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
 varying float vFogDist;
+varying float vAo;
 
 vec4 sampleOverlayTile(float id) {
   vec2 luv = vec2((id + 0.5) / uTileUvCount, 0.5);
@@ -3173,6 +3187,9 @@ void main() {
   float sk3 = floor(skirtSlots.a * 255.0 + 0.5);
   if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
+  // Darken occluded corners: vAo=1 → full brightness, vAo=0 → (1-intensity) brightness.
+  color.rgb *= mix(1.0 - uAoIntensity, 1.0, vAo);
+
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
 }
@@ -3190,6 +3207,7 @@ function makeBasicAtlasUniforms(params) {
 		uFogColor: { value: params.fogColor },
 		uFogNear: { value: params.fogNear },
 		uFogFar: { value: params.fogFar },
+		uAoIntensity: { value: params.aoIntensity ?? 0 },
 		uTileUvLookup: { value: params.tileUvLookup ?? defaultTex },
 		uTileUvCount: { value: params.tileUvCount ?? 1 },
 		uOverlayLookup: { value: params.overlayLookup ?? defaultTex },
@@ -3634,6 +3652,77 @@ function createBillboard(entity, packedAtlas, scene, resolver) {
 var HALF_PI = Math.PI / 2;
 /** Eye height as a fraction of ceiling height (same as PerspectiveDungeonView). */
 var EYE_HEIGHT_FACTOR = .66;
+function vertexAO(s1, s2, c) {
+	if (s1 && s2) return 0;
+	return 3 - ((s1 ? 1 : 0) + (s2 ? 1 : 0) + (c ? 1 : 0));
+}
+/**
+* Compute per-corner AO for one face, returned as [tl, tr, bl, br] in [0,1].
+* Corners map to face-local UV space: tl=UV(0,1), tr=UV(1,1), bl=UV(0,0), br=UV(1,0).
+* For wall faces the top and bottom of each column share the same value.
+* UV orientation per direction is derived from the face rotation used in buildDungeon.
+*/
+function computeFaceAO(isSol, cx, cz, dir) {
+	const n = isSol;
+	if (dir === "floor") return [
+		vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3,
+		vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3,
+		vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3,
+		vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3
+	];
+	if (dir === "ceil") return [
+		vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3,
+		vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3,
+		vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3,
+		vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3
+	];
+	if (dir === "north") {
+		const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
+		const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
+		return [
+			aoL,
+			aoR,
+			aoL,
+			aoR
+		];
+	}
+	if (dir === "south") {
+		const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
+		const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
+		return [
+			aoR,
+			aoL,
+			aoR,
+			aoL
+		];
+	}
+	if (dir === "west") {
+		const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
+		const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
+		return [
+			aoS,
+			aoN,
+			aoS,
+			aoN
+		];
+	}
+	if (dir === "east") {
+		const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
+		const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
+		return [
+			aoN,
+			aoS,
+			aoN,
+			aoS
+		];
+	}
+	return [
+		1,
+		1,
+		1,
+		1
+	];
+}
 function makeFaceMatrix(x, y, z, rx, ry, rz, w, h) {
 	return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(w, h, 1));
 }
@@ -3641,7 +3730,7 @@ function makeFaceMatrix(x, y, z, rx, ry, rz, w, h) {
 * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 */
-function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ) {
+function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners) {
 	const geo = new THREE.PlaneGeometry(1, 1);
 	if (useAtlas) {
 		const n = matrices.length;
@@ -3675,6 +3764,8 @@ function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets
 			geo.setAttribute("aCellX", new THREE.InstancedBufferAttribute(cellX, 1));
 			geo.setAttribute("aCellZ", new THREE.InstancedBufferAttribute(cellZ, 1));
 		}
+		const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1);
+		geo.setAttribute("aAoCorners", new THREE.InstancedBufferAttribute(aoArr, 4));
 	}
 	const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
 	matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -3717,6 +3808,9 @@ function createDungeonRenderer(element, game, options = {}) {
 	const fogColor = new THREE.Color(fogHex);
 	const packedAtlas = options.packedAtlas;
 	const resolver = options.tileNameResolver;
+	let aoIntensity = options.ambientOcclusion === true ? .75 : typeof options.ambientOcclusion === "number" ? Math.max(0, Math.min(1, options.ambientOcclusion)) : 0;
+	const aoEnabled = aoIntensity > 0;
+	const atlasMaterials = [];
 	function getUvRect(id) {
 		const sprite = packedAtlas?.getById(id);
 		return sprite ? spriteToUvRect(sprite) : {
@@ -3880,7 +3974,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	}
 	function makeAtlasMaterial() {
 		const canvas = packedAtlas.texture;
-		return new THREE.ShaderMaterial({
+		const mat = new THREE.ShaderMaterial({
 			vertexShader: BASIC_ATLAS_VERT,
 			fragmentShader: BASIC_ATLAS_FRAG,
 			uniforms: makeBasicAtlasUniforms({
@@ -3894,10 +3988,13 @@ function createDungeonRenderer(element, game, options = {}) {
 					tileUvCount
 				} : {},
 				overlayLookup: overlayFloor.tex,
-				dungeonSize: new THREE.Vector2(1, 1)
+				dungeonSize: new THREE.Vector2(1, 1),
+				aoIntensity
 			}),
 			side: THREE.FrontSide
 		});
+		atlasMaterials.push(mat);
+		return mat;
 	}
 	function makeAtlasMaterialDoubleSide() {
 		const mat = makeAtlasMaterial();
@@ -4071,6 +4168,9 @@ function createDungeonRenderer(element, game, options = {}) {
 		const ceilEdgeRects = [];
 		const floorOffsets = [];
 		const ceilOffsets = [];
+		const floorsAo = [];
+		const ceilsAo = [];
+		const wallsAo = [];
 		const wallRots = [];
 		const floorEdgeRots = [];
 		const ceilEdgeRots = [];
@@ -4114,6 +4214,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					cx,
 					cz
 				});
+				if (aoEnabled) {
+					const v = computeFaceAO(isSolid, cx, cz, "floor");
+					floorsAo.push(v[0], v[1], v[2], v[3]);
+				}
 			}
 			const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
 			ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
@@ -4123,6 +4227,10 @@ function createDungeonRenderer(element, game, options = {}) {
 				cx,
 				cz
 			});
+			if (aoEnabled) {
+				const v = computeFaceAO(isSolid, cx, cz, "ceil");
+				ceilsAo.push(v[0], v[1], v[2], v[3]);
+			}
 			if (isSolid(cx, cz - 1)) {
 				const s = spec(wallTiles, "north", wallId);
 				walls.push(makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
@@ -4132,6 +4240,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					cx,
 					cz
 				});
+				if (aoEnabled) {
+					const v = computeFaceAO(isSolid, cx, cz, "north");
+					wallsAo.push(v[0], v[1], v[2], v[3]);
+				}
 			}
 			if (isSolid(cx, cz + 1)) {
 				const s = spec(wallTiles, "south", wallId);
@@ -4142,6 +4254,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					cx,
 					cz
 				});
+				if (aoEnabled) {
+					const v = computeFaceAO(isSolid, cx, cz, "south");
+					wallsAo.push(v[0], v[1], v[2], v[3]);
+				}
 			}
 			if (isSolid(cx - 1, cz)) {
 				const s = spec(wallTiles, "west", wallId);
@@ -4152,6 +4268,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					cx,
 					cz
 				});
+				if (aoEnabled) {
+					const v = computeFaceAO(isSolid, cx, cz, "west");
+					wallsAo.push(v[0], v[1], v[2], v[3]);
+				}
 			}
 			if (isSolid(cx + 1, cz)) {
 				const s = spec(wallTiles, "east", wallId);
@@ -4162,6 +4282,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					cx,
 					cz
 				});
+				if (aoEnabled) {
+					const v = computeFaceAO(isSolid, cx, cz, "east");
+					wallsAo.push(v[0], v[1], v[2], v[3]);
+				}
 			}
 			if (floorVal !== 0) {
 				const currentFloorY = (floorVal - 128) * offsetStep;
@@ -4324,13 +4448,13 @@ function createDungeonRenderer(element, game, options = {}) {
 		const [wallCX, wallCZ] = cellArrays(wallCellMap);
 		const [fEdgeCX, fEdgeCZ] = cellArrays(floorEdgeCellMap);
 		const [cEdgeCX, cEdgeCZ] = cellArrays(ceilEdgeCellMap);
-		floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets), void 0, void 0, floorCX, floorCZ);
+		floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets), void 0, void 0, floorCX, floorCZ, aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : void 0);
 		scene.add(floorMesh);
 		meshToCellMap.set(floorMesh, floorCellMap);
-		ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets), void 0, void 0, ceilCX, ceilCZ);
+		ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets), void 0, void 0, ceilCX, ceilCZ, aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : void 0);
 		scene.add(ceilMesh);
 		meshToCellMap.set(ceilMesh, ceilCellMap);
-		wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots, void 0, wallCX, wallCZ);
+		wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots, void 0, wallCX, wallCZ, aoEnabled && wallsAo.length ? new Float32Array(wallsAo) : void 0);
 		scene.add(wallMesh);
 		meshToCellMap.set(wallMesh, wallCellMap);
 		floorEdgeMesh = buildInstancedMesh(floorEdges, floorEdgeRects, floorEdgeMat, !!packedAtlas, void 0, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ);
@@ -4670,6 +4794,10 @@ function createDungeonRenderer(element, game, options = {}) {
 				for (const h of subHandles) h.remove();
 				for (const m of subMaterials) m.dispose();
 			} };
+		},
+		setAmbientOcclusion(intensity) {
+			aoIntensity = Math.max(0, Math.min(1, intensity));
+			for (const mat of atlasMaterials) mat.uniforms["uAoIntensity"].value = aoIntensity;
 		},
 		rebuild() {
 			for (const mesh of [
