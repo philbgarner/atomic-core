@@ -397,8 +397,7 @@ atlasImg.onload = function() {
       fogFar:       24,
       fogColor:     '#000000',
       lerpFactor:   0.18,
-      bandNear:     8,
-      torchIntensity: 0.33,
+      ambientOcclusion: 0.75,
     },
   )
 
@@ -1468,11 +1467,6 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   fogFar:   24,              // default 24
   fogColor: '#000000',       // CSS colour string; default '#000000'
 
-  // ── Torch lighting ────────────────────────────────────────────────────────
-  bandNear:       8,         // world units before falloff begins; default 8
-  torchColor:     new THREE.Color(1.0, 0.85, 0.4),  // warm yellow default
-  torchIntensity: 0.33,      // 0-2 multiplier; default 0.33
-
   // ── Ambient occlusion ─────────────────────────────────────────────────────
   ambientOcclusion: 0.75,    // true = default 0.75; number in [0,1]; false/omit = off
 })
@@ -1504,6 +1498,37 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 | `renderer.worldToScreen(gridX, gridZ, worldY?)` | Project a grid cell to pixel coords; returns `null` when off-screen |
 | `renderer.createAtlasMaterial()` | Create a new `ShaderMaterial` with the same atlas/fog settings as the renderer |
 | `renderer.destroy()` | Unmount the canvas and release all Three.js resources |
+
+---
+
+#### Ambient Occlusion
+
+Ambient occlusion softens corners by darkening where walls, floors, and ceilings meet. It is baked into vertex data at dungeon-build time and controlled at runtime via a single shader uniform — so adjusting the intensity is free and takes effect immediately, but changing which cells are solid requires a geometry rebuild.
+
+**How it is calculated**
+
+When `ambientOcclusion` is enabled, `buildDungeon()` runs once per `game.generate()` (or `renderer.rebuild()`) and calls `computeFaceAO()` for every floor, ceiling, and wall face. That function samples the dungeon's `solid` map at the four corners of each face and packs the result into a `Float32Array` stored as the `aAoCorners` instanced attribute on the mesh. A corner touching one or more solid neighbors darkens; a corner in open space stays fully lit. Skirt and edge faces default to fully lit (`aAoCorners = 1.0`).
+
+The fragment shader darkens each pixel by `mix(1 - uAoIntensity, 1.0, vAo)`, where `vAo` is the corner value interpolated across the face. At `uAoIntensity = 0` the term is always `1.0` — the pass costs nothing. At `uAoIntensity = 1` fully-occluded corners go black.
+
+**Runtime intensity**
+
+`renderer.setAmbientOcclusion(intensity)` writes only to the `uAoIntensity` shader uniform on every atlas material — no geometry is touched. The change is visible on the next rendered frame.
+
+```js
+// Enable at creation time
+var renderer = AtomicCore.createDungeonRenderer(el, game, {
+  ambientOcclusion: 0.75,   // or true for the same default
+})
+
+// Adjust later — no rebuild needed
+renderer.setAmbientOcclusion(0.5)
+renderer.setAmbientOcclusion(0)    // disable entirely
+```
+
+**When to rebuild**
+
+AO corner values are derived from the solid map at build time. If your game modifies the dungeon layout at runtime (e.g. breakable walls, locked doors that open), call `renderer.rebuild()` to recompute the geometry — including fresh AO data — from the updated solid map.
 
 ---
 
@@ -1741,7 +1766,7 @@ All settings are passed directly to `AtomicCore.createGame()` or the relevant `a
 | `combat` | `damageFormula`, `factions`, `onDamage`, `onDeath`, `onMiss` |
 | `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
 | `transport` | `ActionTransport` instance (e.g. from `createWebSocketTransport`) |
-| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `bandNear`, `torchColor`, `torchIntensity` |
+| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `ambientOcclusion` |
 | `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
 | `attachSpawner` | `onSpawn` - callback receiving `{ dungeon, roomId, x, y }` |
 | `attachDecorator` | `onDecorate` - callback receiving `{ dungeon, roomId, x, y }` |
