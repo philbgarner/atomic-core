@@ -24,6 +24,9 @@ attribute float aUvHeightScale;
 // Per-instance grid cell coordinates — used to look up the overlay texture.
 attribute float aCellX;
 attribute float aCellZ;
+// Per-instance corner AO values in face-local UV order: x=TL(0,1), y=TR(1,1), z=BL(0,0), w=BR(1,0).
+// Each component is in [0,1]. Defaults to (0,0,0,0) when not set (handled by uAoIntensity=0).
+attribute vec4 aAoCorners;
 
 uniform vec2 uDungeonSize;
 
@@ -33,12 +36,20 @@ varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
 varying float vFogDist;
+varying float vAo;
 
 void main() {
   // Scale face height dimension BEFORE rotation so it always affects the
   // physical height axis of the face, regardless of UV rotation.
   float hs = clamp(aUvHeightScale, 0.0, 1.0);
   vec2 localUv = vec2(uv.x, uv.y * hs);
+
+  // Select the per-corner AO value using the raw (pre-rotation) UV.
+  // GPU interpolates vAo across the triangle from the four corner values.
+  if      (uv.x < 0.5 && uv.y >= 0.5) vAo = aAoCorners.x; // TL
+  else if (uv.x >= 0.5 && uv.y >= 0.5) vAo = aAoCorners.y; // TR
+  else if (uv.x < 0.5 && uv.y <  0.5) vAo = aAoCorners.z; // BL
+  else                                  vAo = aAoCorners.w; // BR
 
   // Rotate UV within tile bounds (0=0°, 1=90°CCW, 2=180°, 3=270°CCW).
   int iRot = int(floor(aUvRotation + 0.5));
@@ -73,6 +84,8 @@ uniform vec2  uTexelSize;
 uniform vec3  uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+// Ambient occlusion intensity in [0,1]. 0 = disabled (no cost).
+uniform float uAoIntensity;
 
 // Surface painter overlay system.
 // uOverlayLookup: W×H Uint8 RGBA texture — each channel holds one overlay tile ID (0 = none).
@@ -89,6 +102,7 @@ varying vec2  vTileSize;
 varying vec2  vLocalUv;
 varying vec2  vOverlayUv;
 varying float vFogDist;
+varying float vAo;
 
 vec4 sampleOverlayTile(float id) {
   vec2 luv = vec2((id + 0.5) / uTileUvCount, 0.5);
@@ -134,6 +148,9 @@ void main() {
   if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
   float sk3 = floor(skirtSlots.a * 255.0 + 0.5);
   if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+
+  // Darken occluded corners: vAo=1 → full brightness, vAo=0 → (1-intensity) brightness.
+  color.rgb *= mix(1.0 - uAoIntensity, 1.0, vAo);
 
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
@@ -200,6 +217,8 @@ export function makeBasicAtlasUniforms(params: {
   skirtLookup?: THREE.Texture;
   /** Dungeon grid dimensions (width, height). Used by vertex shader. */
   dungeonSize?: THREE.Vector2;
+  /** Ambient occlusion intensity in [0,1]. 0 (default) disables the effect. */
+  aoIntensity?: number;
 }): Record<string, { value: unknown }> {
   const defaultTex = makeSinglePixelTex();
   return {
@@ -208,6 +227,7 @@ export function makeBasicAtlasUniforms(params: {
     uFogColor:       { value: params.fogColor },
     uFogNear:        { value: params.fogNear },
     uFogFar:         { value: params.fogFar },
+    uAoIntensity:    { value: params.aoIntensity ?? 0 },
     uTileUvLookup:   { value: params.tileUvLookup ?? defaultTex },
     uTileUvCount:    { value: params.tileUvCount ?? 1 },
     uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },

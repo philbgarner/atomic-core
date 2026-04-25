@@ -4,7 +4,7 @@
 
 > **createItem**(`opts`): [`Item`](../interfaces/Item.md)
 
-Defined in: [entities/inventory.ts:70](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/entities/inventory.ts#L70)
+Defined in: [entities/inventory.ts:70](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/entities/inventory.ts#L70)
 
 Create an item with an auto-generated id.
 

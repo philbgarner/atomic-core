@@ -130,6 +130,13 @@ export type DungeonRendererOptions = {
    * Throttled: only fires when the cell actually changes.
    */
   onCellHover?: (info: CellInfo | null) => void;
+  /**
+   * Vertex ambient occlusion for floor, ceiling, and wall faces.
+   * Pass `true` for a default intensity of 0.75, a number in [0, 1] for a
+   * custom intensity, or omit / `false` to disable (default).
+   * Has no effect when no atlas is provided.
+   */
+  ambientOcclusion?: boolean | number;
 };
 
 // ---------------------------------------------------------------------------
@@ -278,6 +285,11 @@ export type DungeonRenderer = {
   highlightCells(
     filter: (cx: number, cz: number, regionId: number) => string | null | false | undefined,
   ): LayerHandle;
+  /**
+   * Update the ambient occlusion intensity at runtime. `intensity` is clamped
+   * to [0, 1]. Takes effect on the next rendered frame.
+   */
+  setAmbientOcclusion(intensity: number): void;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -294,6 +306,71 @@ const HALF_PI = Math.PI / 2;
 /** Eye height as a fraction of ceiling height (same as PerspectiveDungeonView). */
 // using the d&d standard of 7.5ft shrinking cubes, 0.66x gives eye level for a medium creature at about 5ft which is what we expect.
 const EYE_HEIGHT_FACTOR = 0.66;
+
+function vertexAO(s1: boolean, s2: boolean, c: boolean): number {
+  if (s1 && s2) return 0;
+  return 3 - ((s1 ? 1 : 0) + (s2 ? 1 : 0) + (c ? 1 : 0));
+}
+
+/**
+ * Compute per-corner AO for one face, returned as [tl, tr, bl, br] in [0,1].
+ * Corners map to face-local UV space: tl=UV(0,1), tr=UV(1,1), bl=UV(0,0), br=UV(1,0).
+ * For wall faces the top and bottom of each column share the same value.
+ * UV orientation per direction is derived from the face rotation used in buildDungeon.
+ */
+function computeFaceAO(
+  isSol: (x: number, z: number) => boolean,
+  cx: number,
+  cz: number,
+  dir: "floor" | "ceil" | "north" | "south" | "east" | "west",
+): [number, number, number, number] {
+  const n = isSol;
+  if (dir === "floor") {
+    // R_x(-π/2): UV(0,1)→world(-x,-z), UV(1,1)→(+x,-z), UV(0,0)→(-x,+z), UV(1,0)→(+x,+z)
+    return [
+      vertexAO(n(cx-1,cz), n(cx,cz-1), n(cx-1,cz-1)) / 3,
+      vertexAO(n(cx+1,cz), n(cx,cz-1), n(cx+1,cz-1)) / 3,
+      vertexAO(n(cx-1,cz), n(cx,cz+1), n(cx-1,cz+1)) / 3,
+      vertexAO(n(cx+1,cz), n(cx,cz+1), n(cx+1,cz+1)) / 3,
+    ];
+  }
+  if (dir === "ceil") {
+    // R_x(+π/2): UV(0,1)→world(-x,+z), UV(1,1)→(+x,+z), UV(0,0)→(-x,-z), UV(1,0)→(+x,-z)
+    return [
+      vertexAO(n(cx-1,cz), n(cx,cz+1), n(cx-1,cz+1)) / 3,
+      vertexAO(n(cx+1,cz), n(cx,cz+1), n(cx+1,cz+1)) / 3,
+      vertexAO(n(cx-1,cz), n(cx,cz-1), n(cx-1,cz-1)) / 3,
+      vertexAO(n(cx+1,cz), n(cx,cz-1), n(cx+1,cz-1)) / 3,
+    ];
+  }
+  // Walls: s2 is always the solid cell behind the wall (always true by definition).
+  // Only horizontal neighbors vary; top/bottom of each column share the same AO value.
+  if (dir === "north") {
+    // ry=0: UV x≈0 → world left (cx side), UV x≈1 → world right ((cx+1) side)
+    const aoL = vertexAO(n(cx-1,cz), true, n(cx-1,cz-1)) / 3;
+    const aoR = vertexAO(n(cx+1,cz), true, n(cx+1,cz-1)) / 3;
+    return [aoL, aoR, aoL, aoR];
+  }
+  if (dir === "south") {
+    // ry=π: UV x≈0 → world right ((cx+1) side), UV x≈1 → world left (cx side)
+    const aoR = vertexAO(n(cx+1,cz), true, n(cx+1,cz+1)) / 3;
+    const aoL = vertexAO(n(cx-1,cz), true, n(cx-1,cz+1)) / 3;
+    return [aoR, aoL, aoR, aoL];
+  }
+  if (dir === "west") {
+    // ry=+π/2: UV x≈0 → world south ((cz+1) side), UV x≈1 → world north (cz side)
+    const aoS = vertexAO(n(cx,cz+1), true, n(cx-1,cz+1)) / 3;
+    const aoN = vertexAO(n(cx,cz-1), true, n(cx-1,cz-1)) / 3;
+    return [aoS, aoN, aoS, aoN];
+  }
+  if (dir === "east") {
+    // ry=-π/2: UV x≈0 → world north (cz side), UV x≈1 → world south ((cz+1) side)
+    const aoN = vertexAO(n(cx,cz-1), true, n(cx+1,cz-1)) / 3;
+    const aoS = vertexAO(n(cx,cz+1), true, n(cx+1,cz+1)) / 3;
+    return [aoN, aoS, aoN, aoS];
+  }
+  return [1, 1, 1, 1];
+}
 
 function makeFaceMatrix(
   x: number,
@@ -326,6 +403,7 @@ function buildInstancedMesh(
   uvHeightScales?: number[],
   cellX?: Float32Array,
   cellZ?: Float32Array,
+  aoCorners?: Float32Array,
 ): THREE.InstancedMesh {
   const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -376,6 +454,11 @@ function buildInstancedMesh(
       geo.setAttribute("aCellX", new THREE.InstancedBufferAttribute(cellX, 1));
       geo.setAttribute("aCellZ", new THREE.InstancedBufferAttribute(cellZ, 1));
     }
+
+    // aAoCorners: 4 floats per instance [tl, tr, bl, br] in [0,1].
+    // Default to all-ones so uncomputed faces (skirts, layers) are fully lit.
+    const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1.0);
+    geo.setAttribute("aAoCorners", new THREE.InstancedBufferAttribute(aoArr, 4));
   }
 
   const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
@@ -428,6 +511,13 @@ export function createDungeonRenderer(
   const fogColor = new THREE.Color(fogHex);
   const packedAtlas = options.packedAtlas;
   const resolver = options.tileNameResolver;
+  let aoIntensity = options.ambientOcclusion === true
+    ? 0.75
+    : typeof options.ambientOcclusion === "number"
+      ? Math.max(0, Math.min(1, options.ambientOcclusion))
+      : 0;
+  const aoEnabled = aoIntensity > 0;
+  const atlasMaterials: THREE.ShaderMaterial[] = [];
 
   function getUvRect(id: number): UvRect {
     const sprite = packedAtlas?.getById(id);
@@ -622,9 +712,11 @@ export function createDungeonRenderer(
         ...(tileUvLookupTex ? { tileUvLookup: tileUvLookupTex, tileUvCount } : {}),
         overlayLookup: overlayFloor.tex,
         dungeonSize: new THREE.Vector2(1, 1),
+        aoIntensity,
       }),
       side: THREE.FrontSide,
     });
+    atlasMaterials.push(mat);
     return mat;
   }
 
@@ -967,6 +1059,10 @@ export function createDungeonRenderer(
     const ceilEdgeRects: UvRect[] = [];
     const floorOffsets: number[] = [];
     const ceilOffsets: number[] = [];
+    // AO corner data packed as [tl, tr, bl, br] per face (4 floats per entry).
+    const floorsAo: number[] = [];
+    const ceilsAo: number[] = [];
+    const wallsAo: number[] = [];
     const wallRots: number[] = [];
     const floorEdgeRots: number[] = [];
     const ceilEdgeRots: number[] = [];
@@ -1017,6 +1113,7 @@ export function createDungeonRenderer(
           floorRects.push(getUvRect(floorId));
           floorOffsets.push((floorVal - 128) * offsetStep); // vertex shader applies this
           floorCellMap.push({ cx, cz });
+          if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "floor"); floorsAo.push(v[0], v[1], v[2], v[3]); }
         }
 
         // Ceiling — inverted: value < 128 raises ceiling, > 128 lowers it.
@@ -1027,6 +1124,7 @@ export function createDungeonRenderer(
         ceilRects.push(getUvRect(ceilId));
         ceilOffsets.push(-(ceilVal - 128) * offsetStep); // vertex shader applies this (inverted)
         ceilCellMap.push({ cx, cz });
+        if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "ceil"); ceilsAo.push(v[0], v[1], v[2], v[3]); }
 
         // Walls — north/south/west/east with per-direction tile + rotation.
         if (isSolid(cx, cz - 1)) {
@@ -1046,6 +1144,7 @@ export function createDungeonRenderer(
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
           wallCellMap.push({ cx, cz });
+          if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "north"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
         if (isSolid(cx, cz + 1)) {
           const s = spec(wallTiles, "south", wallId);
@@ -1064,6 +1163,7 @@ export function createDungeonRenderer(
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
           wallCellMap.push({ cx, cz });
+          if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "south"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
         if (isSolid(cx - 1, cz)) {
           const s = spec(wallTiles, "west", wallId);
@@ -1082,6 +1182,7 @@ export function createDungeonRenderer(
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
           wallCellMap.push({ cx, cz });
+          if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "west"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
         if (isSolid(cx + 1, cz)) {
           const s = spec(wallTiles, "east", wallId);
@@ -1100,6 +1201,7 @@ export function createDungeonRenderer(
           wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
           wallRots.push(s.rotation ?? 0);
           wallCellMap.push({ cx, cz });
+          if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "east"); wallsAo.push(v[0], v[1], v[2], v[3]); }
         }
 
         // Voxel-style floor edge skirts: tiled panels covering the full step height.
@@ -1284,6 +1386,7 @@ export function createDungeonRenderer(
     floorMesh = buildInstancedMesh(
       floors, floorRects, floorMat, !!packedAtlas,
       new Float32Array(floorOffsets), undefined, undefined, floorCX, floorCZ,
+      aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined,
     );
     scene.add(floorMesh);
     meshToCellMap.set(floorMesh, floorCellMap);
@@ -1291,6 +1394,7 @@ export function createDungeonRenderer(
     ceilMesh = buildInstancedMesh(
       ceils, ceilRects, ceilMat, !!packedAtlas,
       new Float32Array(ceilOffsets), undefined, undefined, ceilCX, ceilCZ,
+      aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined,
     );
     scene.add(ceilMesh);
     meshToCellMap.set(ceilMesh, ceilCellMap);
@@ -1298,6 +1402,7 @@ export function createDungeonRenderer(
     wallMesh = buildInstancedMesh(
       walls, wallRects, wallMat, !!packedAtlas,
       undefined, wallRots, undefined, wallCX, wallCZ,
+      aoEnabled && wallsAo.length ? new Float32Array(wallsAo) : undefined,
     );
     scene.add(wallMesh);
     meshToCellMap.set(wallMesh, wallCellMap);
@@ -1730,6 +1835,12 @@ export function createDungeonRenderer(
           for (const m of subMaterials) m.dispose();
         },
       };
+    },
+    setAmbientOcclusion(intensity: number) {
+      aoIntensity = Math.max(0, Math.min(1, intensity));
+      for (const mat of atlasMaterials) {
+        (mat.uniforms["uAoIntensity"] as { value: number }).value = aoIntensity;
+      }
     },
     rebuild() {
       // Remove and dispose existing dungeon meshes.

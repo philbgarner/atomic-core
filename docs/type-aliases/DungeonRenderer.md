@@ -4,7 +4,7 @@
 
 > **DungeonRenderer** = `object`
 
-Defined in: [rendering/dungeonRenderer.ts:210](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L210)
+Defined in: [rendering/dungeonRenderer.ts:217](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L217)
 
 ## Methods
 
@@ -12,7 +12,7 @@ Defined in: [rendering/dungeonRenderer.ts:210](https://github.com/philbgarner/at
 
 > **addLayer**(`spec`): [`LayerHandle`](LayerHandle.md)
 
-Defined in: [rendering/dungeonRenderer.ts:235](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L235)
+Defined in: [rendering/dungeonRenderer.ts:249](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L249)
 
 Add an instanced geometry layer on top of existing walls, ceilings, or
 floors.  May be called before or after the dungeon is generated; layers
@@ -36,7 +36,7 @@ Returns a handle whose `remove()` method tears the layer down.
 
 > **createAtlasMaterial**(): `ShaderMaterial` \| `null`
 
-Defined in: [rendering/dungeonRenderer.ts:248](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L248)
+Defined in: [rendering/dungeonRenderer.ts:262](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L262)
 
 Create a new atlas `ShaderMaterial` using the same texture, fog, and
 shader settings as the renderer's own geometry.  Useful when building a
@@ -53,7 +53,7 @@ Returns `null` when no atlas was passed to `createDungeonRenderer`.
 
 > **destroy**(): `void`
 
-Defined in: [rendering/dungeonRenderer.ts:275](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L275)
+Defined in: [rendering/dungeonRenderer.ts:294](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L294)
 
 Unmount the canvas and release all Three.js resources.
 
@@ -67,7 +67,7 @@ Unmount the canvas and release all Three.js resources.
 
 > **highlightCells**(`filter`): [`LayerHandle`](LayerHandle.md)
 
-Defined in: [rendering/dungeonRenderer.ts:271](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L271)
+Defined in: [rendering/dungeonRenderer.ts:285](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L285)
 
 Overlay coloured floor highlights on a subset of cells.
 
@@ -106,7 +106,7 @@ handle.remove();
 
 > **rebuild**(): `void`
 
-Defined in: [rendering/dungeonRenderer.ts:241](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L241)
+Defined in: [rendering/dungeonRenderer.ts:255](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L255)
 
 Tear down all existing dungeon geometry and rebuild it from the current
 dungeon outputs. Call this after `game.regenerate()` to keep the renderer
@@ -118,11 +118,32 @@ in sync when the dungeon layout has changed (e.g. a new seed).
 
 ***
 
+### setAmbientOcclusion()
+
+> **setAmbientOcclusion**(`intensity`): `void`
+
+Defined in: [rendering/dungeonRenderer.ts:292](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L292)
+
+Update the ambient occlusion intensity at runtime. `intensity` is clamped
+to [0, 1]. Takes effect on the next rendered frame.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `intensity` | `number` |
+
+#### Returns
+
+`void`
+
+***
+
 ### setEntities()
 
 > **setEntities**(`entities`): `void`
 
-Defined in: [rendering/dungeonRenderer.ts:215](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L215)
+Defined in: [rendering/dungeonRenderer.ts:222](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L222)
 
 Update the renderer's entity list. Call this on every 'turn' event
 (or whenever entity positions change) to keep the scene in sync.
@@ -139,11 +160,34 @@ Update the renderer's entity list. Call this on every 'turn' event
 
 ***
 
+### setObjects()
+
+> **setObjects**(`objects`): `void`
+
+Defined in: [rendering/dungeonRenderer.ts:229](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L229)
+
+Register stationary billboard objects derived from `ObjectPlacement` records.
+Call once after `game.generate()` (or pass `game.dungeon.objects` directly).
+Objects with a `spriteMap` are rendered as camera-facing billboard sprites;
+objects without one are ignored by the renderer.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `objects` | [`ObjectPlacement`](../interfaces/ObjectPlacement.md)[] |
+
+#### Returns
+
+`void`
+
+***
+
 ### worldToScreen()
 
 > **worldToScreen**(`gridX`, `gridZ`, `worldY?`): \{ `x`: `number`; `y`: `number`; \} \| `null`
 
-Defined in: [rendering/dungeonRenderer.ts:227](https://github.com/philbgarner/atomic-core/blob/059d282bcb55e802a623f9e7a0f2cb290623baf0/src/lib/rendering/dungeonRenderer.ts#L227)
+Defined in: [rendering/dungeonRenderer.ts:241](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/rendering/dungeonRenderer.ts#L241)
 
 Project a dungeon grid cell to 2D pixel coordinates relative to the
 renderer's container element, using the current camera state.

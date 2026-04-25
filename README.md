@@ -418,6 +418,8 @@ atlasImg.src = './atlas.png'
 | Method | Description |
 |---|---|
 | `renderer.setEntities(entities)` | Pass the current live entity list; call on every `'turn'` event |
+| `renderer.setAmbientOcclusion(intensity)` | Update AO intensity at runtime (`0`–`1`); takes effect next frame |
+| `renderer.rebuild()` | Rebuild all dungeon geometry (call after `game.regenerate()`) |
 | `renderer.destroy()` | Unmount the canvas and release all Three.js resources |
 
 ### Surface painting callback
@@ -1470,6 +1472,9 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   bandNear:       8,         // world units before falloff begins; default 8
   torchColor:     new THREE.Color(1.0, 0.85, 0.4),  // warm yellow default
   torchIntensity: 0.33,      // 0-2 multiplier; default 0.33
+
+  // ── Ambient occlusion ─────────────────────────────────────────────────────
+  ambientOcclusion: 0.75,    // true = default 0.75; number in [0,1]; false/omit = off
 })
 
 // Update entities on every turn
@@ -1477,11 +1482,28 @@ game.events.on('turn', function() {
   renderer.setEntities(enemies)
 })
 
+// Adjust AO intensity at runtime (clamped to [0, 1])
+renderer.setAmbientOcclusion(0.5)
+
 // Clean up when done
 renderer.destroy()
 ```
 
 If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandardMaterial` - useful for prototyping before an atlas is ready.
+
+`createDungeonRenderer` returns a `DungeonRenderer` handle:
+
+| Method | Description |
+|---|---|
+| `renderer.setEntities(entities)` | Pass the current live entity list; call on every `'turn'` event |
+| `renderer.setObjects(objects)` | Register stationary billboard objects from `game.dungeon.objects` |
+| `renderer.addLayer(spec)` | Stack an instanced geometry layer on any surface; returns a `LayerHandle` |
+| `renderer.highlightCells(filter)` | Overlay coloured floor highlights on a subset of cells; returns a `LayerHandle` |
+| `renderer.setAmbientOcclusion(intensity)` | Update AO intensity at runtime (`0`–`1`); takes effect next frame |
+| `renderer.rebuild()` | Tear down and rebuild all dungeon geometry (call after `game.regenerate()`) |
+| `renderer.worldToScreen(gridX, gridZ, worldY?)` | Project a grid cell to pixel coords; returns `null` when off-screen |
+| `renderer.createAtlasMaterial()` | Create a new `ShaderMaterial` with the same atlas/fog settings as the renderer |
+| `renderer.destroy()` | Unmount the canvas and release all Three.js resources |
 
 ---
 
