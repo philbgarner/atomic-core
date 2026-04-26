@@ -200,6 +200,40 @@ export type EntityAppearanceSpec = {
 };
 export type DungeonRenderer = {
     /**
+     * The Three.js Scene used by the renderer.
+     * Add PointLights, DirectionalLights, or any other Three.js objects directly.
+     * Attach a PointLight to `camera` for a player-locked torch:
+     *   `renderer.camera.add(new THREE.PointLight(0xffaa44, 5, 20))`
+     */
+    scene: THREE.Scene;
+    /**
+     * The PerspectiveCamera tracking the player.
+     * Attach lights as children for player-relative effects:
+     *   `renderer.camera.add(torch)` — torch follows the player automatically.
+     */
+    camera: THREE.PerspectiveCamera;
+    /**
+     * Add a Three.js light to the renderer scene.
+     * Returns the same light object so you can modify it at any time —
+     * changes to position, intensity, or color take effect on the next frame.
+     * Lights added here are automatically removed when `destroy()` is called.
+     *
+     * @example
+     * // Player torch — attach to camera so it follows the player:
+     * const torch = renderer.addLight(new THREE.PointLight(0xffaa44, 4, 20, 2));
+     * renderer.camera.add(torch);
+     *
+     * // Fixed wall sconce:
+     * const sconce = renderer.addLight(new THREE.PointLight(0xff6622, 2, 12, 2));
+     * sconce.position.set(wx, wy, wz);
+     */
+    addLight<T extends THREE.Light>(light: T): T;
+    /**
+     * Remove a light previously added with `addLight`.
+     * Has no effect if the light was not added through this API.
+     */
+    removeLight(light: THREE.Light): void;
+    /**
      * Update the renderer's entity list. Call this on every 'turn' event
      * (or whenever entity positions change) to keep the scene in sync.
      */

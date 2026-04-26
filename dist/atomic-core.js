@@ -3149,6 +3149,7 @@ varying vec2  vOverlayUv;   // UV into the overlay lookup texture
 varying float vFogDist;     // Eye-space distance used for linear fog
 varying float vAo;          // Interpolated AO value for this fragment [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
+varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -3191,6 +3192,7 @@ void main() {
   // ── 7. Fog distance (eye-space length) ────────────────────────────────────
   vec4 eyePos = viewMatrix * worldPos;
   vFogDist    = length(eyePos.xyz);
+  vViewPos    = eyePos.xyz;
 
   // ── 8. Directional surface lighting ───────────────────────────────────────
   // For walls (uSurfaceLight < 0): brightness depends on how directly the wall
@@ -3222,6 +3224,9 @@ void main() {
 *   6. Fog                 — linear blend to uFogColor over [uFogNear, uFogFar].
 */
 var BASIC_ATLAS_FRAG = `
+#include <common>
+#include <lights_pars_begin>
+
 // ── Uniforms ──────────────────────────────────────────────────────────────────
 uniform sampler2D uAtlas;
 // Half-texel size of the atlas texture, used to inset UV clamp bounds and
@@ -3265,6 +3270,7 @@ varying vec2  vOverlayUv;   // UV into the overlay / skirt lookup textures
 varying float vFogDist;     // Eye-space distance for fog
 varying float vAo;          // Interpolated AO corner value [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
+varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 
 // Look up tile ID's UV rect from the 1D tileUvLookup, then sample the atlas
 // at vLocalUv within that rect. Used by the overlay composite passes.
@@ -3336,6 +3342,27 @@ void main() {
   //                                * (uWallLightMax - uWallLightMin)
   //                  defaults: min=0.9 (side walls), max=1.1 (facing walls)
   color.rgb *= vFacingLight;
+
+  // ── 5.5. Scene lights ──────────────────────────────────────────────────────
+  // Requires lights: true on the ShaderMaterial. Three.js injects ambientLightColor
+  // (sum of all AmbientLights) and pointLights[] (view-space position + color +
+  // attenuation params) automatically. With the default AmbientLight(white, 1.0)
+  // and no PointLights this step is a no-op — fully backward compatible.
+  //
+  // To use dynamic lighting: lower/remove the ambient, add THREE.PointLight objects
+  // to renderer.scene. Attach a PointLight to renderer.camera for a player torch.
+  {
+    vec3 lightAccum = ambientLightColor;
+    #if NUM_POINT_LIGHTS > 0
+      for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+        vec3  lVec  = pointLights[i].position - vViewPos;
+        float atten = getDistanceAttenuation(
+          length(lVec), pointLights[i].distance, pointLights[i].decay);
+        lightAccum += pointLights[i].color * atten;
+      }
+    #endif
+    color.rgb *= lightAccum;
+  }
 
   // ── 6. Fog ────────────────────────────────────────────────────────────────
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
@@ -3992,6 +4019,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	const scene = new THREE.Scene();
 	scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
 	const camera = new THREE.PerspectiveCamera(fov, 1, .05, fogFar * 2);
+	scene.add(camera);
 	scene.add(new THREE.AmbientLight(16777215, 1));
 	const dirLight = new THREE.DirectionalLight(16777215, .6);
 	dirLight.position.set(.5, 1, .75);
@@ -4134,7 +4162,8 @@ function createDungeonRenderer(element, game, options = {}) {
 		const mat = new THREE.ShaderMaterial({
 			vertexShader: BASIC_ATLAS_VERT,
 			fragmentShader: BASIC_ATLAS_FRAG,
-			uniforms: makeBasicAtlasUniforms({
+			lights: true,
+			uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.lights, makeBasicAtlasUniforms({
 				atlas: sharedAtlasTex,
 				texelSize: new THREE.Vector2(1 / canvas.width, 1 / canvas.height),
 				fogColor,
@@ -4150,7 +4179,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				surfaceLight,
 				wallLightMin,
 				wallLightMax
-			}),
+			})]),
 			side: THREE.FrontSide
 		});
 		atlasMaterials.push(mat);
@@ -4187,6 +4216,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	let floorWallSkirtCellMap = [];
 	let ceilWallSkirtCellMap = [];
 	const meshToCellMap = /* @__PURE__ */ new Map();
+	const managedLights = /* @__PURE__ */ new Set();
 	const layerEntries = [];
 	/** Build an instanced mesh for a single LayerSpec by scanning the dungeon map. */
 	function buildLayerMesh(spec) {
@@ -4887,6 +4917,17 @@ function createDungeonRenderer(element, game, options = {}) {
 		} };
 	}
 	return {
+		scene,
+		camera,
+		addLight(light) {
+			scene.add(light);
+			managedLights.add(light);
+			return light;
+		},
+		removeLight(light) {
+			light.removeFromParent();
+			managedLights.delete(light);
+		},
 		setEntities(entities) {
 			currentEntities = entities;
 			syncEntities(entities);
@@ -5031,6 +5072,8 @@ function createDungeonRenderer(element, game, options = {}) {
 			if (overlayWall !== defSurf) overlayWall.tex.dispose();
 			if (overlayCeil !== defSurf) overlayCeil.tex.dispose();
 			_defaultOverlayTex.dispose();
+			for (const light of managedLights) light.removeFromParent();
+			managedLights.clear();
 			glRenderer.dispose();
 			canvas.remove();
 		}

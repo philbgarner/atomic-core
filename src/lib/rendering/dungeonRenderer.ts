@@ -238,6 +238,40 @@ export type EntityAppearanceSpec = {
 
 export type DungeonRenderer = {
   /**
+   * The Three.js Scene used by the renderer.
+   * Add PointLights, DirectionalLights, or any other Three.js objects directly.
+   * Attach a PointLight to `camera` for a player-locked torch:
+   *   `renderer.camera.add(new THREE.PointLight(0xffaa44, 5, 20))`
+   */
+  scene: THREE.Scene;
+  /**
+   * The PerspectiveCamera tracking the player.
+   * Attach lights as children for player-relative effects:
+   *   `renderer.camera.add(torch)` — torch follows the player automatically.
+   */
+  camera: THREE.PerspectiveCamera;
+  /**
+   * Add a Three.js light to the renderer scene.
+   * Returns the same light object so you can modify it at any time —
+   * changes to position, intensity, or color take effect on the next frame.
+   * Lights added here are automatically removed when `destroy()` is called.
+   *
+   * @example
+   * // Player torch — attach to camera so it follows the player:
+   * const torch = renderer.addLight(new THREE.PointLight(0xffaa44, 4, 20, 2));
+   * renderer.camera.add(torch);
+   *
+   * // Fixed wall sconce:
+   * const sconce = renderer.addLight(new THREE.PointLight(0xff6622, 2, 12, 2));
+   * sconce.position.set(wx, wy, wz);
+   */
+  addLight<T extends THREE.Light>(light: T): T;
+  /**
+   * Remove a light previously added with `addLight`.
+   * Has no effect if the light was not added through this API.
+   */
+  removeLight(light: THREE.Light): void;
+  /**
    * Update the renderer's entity list. Call this on every 'turn' event
    * (or whenever entity positions change) to keep the scene in sync.
    */
@@ -565,7 +599,10 @@ export function createDungeonRenderer(
   scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
 
   // ── Camera ────────────────────────────────────────────────────────────────
+  // Added to scene so that children (e.g. a PointLight parented to the camera
+  // for a player torch) are included in Three.js's scene-graph light collection.
   const camera = new THREE.PerspectiveCamera(fov, 1, 0.05, fogFar * 2);
+  scene.add(camera);
 
   // ── Lighting ──────────────────────────────────────────────────────────────
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
@@ -725,7 +762,10 @@ export function createDungeonRenderer(
     const mat = new THREE.ShaderMaterial({
       vertexShader: BASIC_ATLAS_VERT,
       fragmentShader: BASIC_ATLAS_FRAG,
-      uniforms: makeBasicAtlasUniforms({
+      lights: true,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.lights,
+        makeBasicAtlasUniforms({
         atlas: sharedAtlasTex!,
         texelSize: new THREE.Vector2(1 / canvas.width, 1 / canvas.height),
         fogColor,
@@ -739,6 +779,7 @@ export function createDungeonRenderer(
         wallLightMin,
         wallLightMax,
       }),
+      ]),
       side: THREE.FrontSide,
     });
     atlasMaterials.push(mat);
@@ -799,6 +840,9 @@ export function createDungeonRenderer(
   let ceilWallSkirtCellMap: CellRef[] = [];
   // Fast lookup: InstancedMesh → its cell array.
   const meshToCellMap = new Map<THREE.InstancedMesh, CellRef[]>();
+
+  // ── Managed lights ────────────────────────────────────────────────────────
+  const managedLights = new Set<THREE.Light>();
 
   // ── Layer state ───────────────────────────────────────────────────────────
   type LayerEntry = {
@@ -1795,6 +1839,17 @@ export function createDungeonRenderer(
 
   // ── Public handle ─────────────────────────────────────────────────────────
   return {
+    scene,
+    camera,
+    addLight<T extends THREE.Light>(light: T): T {
+      scene.add(light);
+      managedLights.add(light);
+      return light;
+    },
+    removeLight(light: THREE.Light): void {
+      light.removeFromParent();
+      managedLights.delete(light);
+    },
     setEntities(entities) {
       currentEntities = entities;
       syncEntities(entities);
@@ -1947,6 +2002,8 @@ export function createDungeonRenderer(
       if (overlayWall  !== defSurf) overlayWall.tex.dispose();
       if (overlayCeil  !== defSurf) overlayCeil.tex.dispose();
       _defaultOverlayTex.dispose();
+      for (const light of managedLights) light.removeFromParent();
+      managedLights.clear();
       glRenderer.dispose();
       canvas.remove();
     },
