@@ -6082,7 +6082,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "0.8.1",
+			version: "0.8.2",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,
