@@ -132,6 +132,7 @@ async function init() {
       west: { tile: "flagstone_floor_stone.png", rotation: 3 },
     },
     wallTile: "cobble_wall_stone.png", // corridor base; room walls use brick via a layer
+    ambientOcclusion: 0.75,
   });
 
   // ── Layers ────────────────────────────────────────────────────────────────

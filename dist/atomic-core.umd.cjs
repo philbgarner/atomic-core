@@ -3738,7 +3738,7 @@ void main() {
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
 	*/
-	function createBillboard(entity, packedAtlas, scene, resolver) {
+	function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize = 64) {
 		const { spriteMap } = entity;
 		const group = new three.Group();
 		scene.add(group);
@@ -3805,8 +3805,8 @@ void main() {
 				}).y) * tileSize;
 				group.position.set(wx, wy, wz);
 				group.rotation.set(0, cameraYaw, 0, "YXZ");
-				const sprW = tileSize * (spriteMap.frameSize.w / 64);
-				const sprH = tileSize * (spriteMap.frameSize.h / 64);
+				const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
+				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {
@@ -4259,6 +4259,10 @@ void main() {
 			const rotations = [];
 			const offsets = [];
 			const heightScales = [];
+			const cellXs = [];
+			const cellZs = [];
+			const aoCornerArr = [];
+			const faceNormals = [];
 			const filter = spec.filter ?? (() => ({ tile: 0 }));
 			function isSolid(cx, cz) {
 				if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
@@ -4274,7 +4278,7 @@ void main() {
 				if (isSolid(ncx, ncz)) return null;
 				return ceilOffData ? ceilOffData[ncz * width + ncx] ?? 128 : 128;
 			}
-			function tryAdd(result, matrix, offset = 0, hs = 1) {
+			function tryAdd(result, matrix, offset = 0, hs = 1, faceCx = 0, faceCz = 0, aoDir, normalX = 0, normalZ = 0) {
 				if (!result) return;
 				matrices.push(matrix);
 				const id = result.tile !== void 0 ? resolveTile(result.tile, resolver) : 0;
@@ -4282,6 +4286,13 @@ void main() {
 				rotations.push(result.rotation ?? 0);
 				offsets.push(offset);
 				heightScales.push(hs);
+				cellXs.push(faceCx);
+				cellZs.push(faceCz);
+				if (aoEnabled && aoDir) {
+					const v = computeFaceAO(isSolid, faceCx, faceCz, aoDir);
+					aoCornerArr.push(v[0], v[1], v[2], v[3]);
+				} else aoCornerArr.push(1, 1, 1, 1);
+				faceNormals.push(normalX, normalZ);
 			}
 			for (let cz = 0; cz < height; cz++) for (let cx = 0; cx < width; cx++) {
 				if (isSolid(cx, cz)) continue;
@@ -4290,13 +4301,13 @@ void main() {
 				const wz = (cz + .5) * tileSize;
 				const floorVal = floorOffData ? floorOffData[idx] ?? 128 : 128;
 				const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
-				if (spec.target === "floor" && floorVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize), (floorVal - 128) * offsetStep);
-				if (spec.target === "ceil") tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize), -(ceilVal - 128) * offsetStep);
+				if (spec.target === "floor" && floorVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize), (floorVal - 128) * offsetStep, 1, cx, cz, "floor");
+				if (spec.target === "ceil") tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize), -(ceilVal - 128) * offsetStep, 1, cx, cz, "ceil");
 				if (spec.target === "wall") {
-					if (isSolid(cx, cz - 1)) tryAdd(filter(cx, cz, "north"), makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
-					if (isSolid(cx, cz + 1)) tryAdd(filter(cx, cz, "south"), makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH));
-					if (isSolid(cx - 1, cz)) tryAdd(filter(cx, cz, "west"), makeFaceMatrix(cx * tileSize, wallMidY, wz, 0, HALF_PI, 0, tileSize, ceilingH));
-					if (isSolid(cx + 1, cz)) tryAdd(filter(cx, cz, "east"), makeFaceMatrix((cx + 1) * tileSize, wallMidY, wz, 0, -HALF_PI, 0, tileSize, ceilingH));
+					if (isSolid(cx, cz - 1)) tryAdd(filter(cx, cz, "north"), makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH), 0, 1, cx, cz, "north", 0, 1);
+					if (isSolid(cx, cz + 1)) tryAdd(filter(cx, cz, "south"), makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH), 0, 1, cx, cz, "south", 0, -1);
+					if (isSolid(cx - 1, cz)) tryAdd(filter(cx, cz, "west"), makeFaceMatrix(cx * tileSize, wallMidY, wz, 0, HALF_PI, 0, tileSize, ceilingH), 0, 1, cx, cz, "west", 1, 0);
+					if (isSolid(cx + 1, cz)) tryAdd(filter(cx, cz, "east"), makeFaceMatrix((cx + 1) * tileSize, wallMidY, wz, 0, -HALF_PI, 0, tileSize, ceilingH), 0, 1, cx, cz, "east", -1, 0);
 				}
 				if (spec.target === "floorSkirt" && floorVal !== 0) {
 					const currentFloorY = (floorVal - 128) * offsetStep;
@@ -4307,8 +4318,8 @@ void main() {
 						const stepH = currentFloorY - neighborFloorY;
 						const fullPanels = Math.floor(stepH / tileSize);
 						const rem = stepH - fullPanels * tileSize;
-						for (let i = 0; i < fullPanels; i++) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize), 0, 1);
-						if (rem > .001) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + fullPanels * tileSize + rem / 2, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize);
+						for (let i = 0; i < fullPanels; i++) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize), 0, 1, cx, cz);
+						if (rem > .001) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + fullPanels * tileSize + rem / 2, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
 					}
 					const nfN = openFloorVal(cx, cz - 1);
 					if (nfN !== null && nfN < floorVal) tryAddFloorSkirtTiled(nfN, wx, cz * tileSize, Math.PI, "north");
@@ -4328,8 +4339,8 @@ void main() {
 						if (!result) return;
 						const fullPanels = Math.floor(h / tileSize);
 						const rem = h - fullPanels * tileSize;
-						for (let i = 0; i < fullPanels; i++) tryAdd(result, makeFaceMatrix(mx, yCurrent - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize), 0, 1);
-						if (rem > .001) tryAdd(result, makeFaceMatrix(mx, yCurrent - fullPanels * tileSize - rem / 2, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize);
+						for (let i = 0; i < fullPanels; i++) tryAdd(result, makeFaceMatrix(mx, yCurrent - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize), 0, 1, cx, cz);
+						if (rem > .001) tryAdd(result, makeFaceMatrix(mx, yCurrent - fullPanels * tileSize - rem / 2, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
 					};
 					addCS(openCeilVal(cx, cz - 1), wx, cz * tileSize, Math.PI, "north");
 					addCS(openCeilVal(cx, cz + 1), wx, (cz + 1) * tileSize, 0, "south");
@@ -4339,7 +4350,7 @@ void main() {
 			}
 			if (matrices.length === 0) return null;
 			const useAtlas = spec.useAtlas ?? !!packedAtlas;
-			const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, new Float32Array(offsets), rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0);
+			const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, new Float32Array(offsets), rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0, new Float32Array(cellXs), new Float32Array(cellZs), aoCornerArr.length ? new Float32Array(aoCornerArr) : void 0, faceNormals.length ? new Float32Array(faceNormals) : void 0);
 			if (spec.polygonOffset !== false) {
 				spec.material.polygonOffset = true;
 				spec.material.polygonOffsetFactor = -1;

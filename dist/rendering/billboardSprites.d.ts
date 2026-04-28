@@ -66,5 +66,5 @@ export interface BillboardHandle {
  */
 export declare function createBillboard(entity: EntityBase & {
     spriteMap: SpriteMap;
-}, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number): BillboardHandle;
+}, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number): BillboardHandle;
 //# sourceMappingURL=billboardSprites.d.ts.map

@@ -872,6 +872,10 @@ export function createDungeonRenderer(
     const rotations: number[] = [];
     const offsets: number[] = [];
     const heightScales: number[] = [];
+    const cellXs: number[] = [];
+    const cellZs: number[] = [];
+    const aoCornerArr: number[] = [];
+    const faceNormals: number[] = [];
 
     const filter = spec.filter ?? (() => ({ tile: 0 }));
 
@@ -895,6 +899,11 @@ export function createDungeonRenderer(
       matrix: THREE.Matrix4,
       offset = 0,
       hs = 1.0,
+      faceCx = 0,
+      faceCz = 0,
+      aoDir?: "floor" | "ceil" | "north" | "south" | "east" | "west",
+      normalX = 0,
+      normalZ = 0,
     ) {
       if (!result) return;
       matrices.push(matrix);
@@ -903,6 +912,15 @@ export function createDungeonRenderer(
       rotations.push(result.rotation ?? 0);
       offsets.push(offset);
       heightScales.push(hs);
+      cellXs.push(faceCx);
+      cellZs.push(faceCz);
+      if (aoEnabled && aoDir) {
+        const v = computeFaceAO(isSolid, faceCx, faceCz, aoDir);
+        aoCornerArr.push(v[0], v[1], v[2], v[3]);
+      } else {
+        aoCornerArr.push(1, 1, 1, 1);
+      }
+      faceNormals.push(normalX, normalZ);
     }
 
     for (let cz = 0; cz < height; cz++) {
@@ -920,6 +938,7 @@ export function createDungeonRenderer(
             filter(cx, cz, undefined),
             makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize),
             (floorVal - 128) * offsetStep,
+            1.0, cx, cz, "floor",
           );
         }
 
@@ -928,6 +947,7 @@ export function createDungeonRenderer(
             filter(cx, cz, undefined),
             makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
             -(ceilVal - 128) * offsetStep,
+            1.0, cx, cz, "ceil",
           );
         }
 
@@ -945,6 +965,7 @@ export function createDungeonRenderer(
                 tileSize,
                 ceilingH,
               ),
+              0, 1.0, cx, cz, "north", 0, 1,
             );
           if (isSolid(cx, cz + 1))
             tryAdd(
@@ -959,6 +980,7 @@ export function createDungeonRenderer(
                 tileSize,
                 ceilingH,
               ),
+              0, 1.0, cx, cz, "south", 0, -1,
             );
           if (isSolid(cx - 1, cz))
             tryAdd(
@@ -973,6 +995,7 @@ export function createDungeonRenderer(
                 tileSize,
                 ceilingH,
               ),
+              0, 1.0, cx, cz, "west", 1, 0,
             );
           if (isSolid(cx + 1, cz))
             tryAdd(
@@ -987,6 +1010,7 @@ export function createDungeonRenderer(
                 tileSize,
                 ceilingH,
               ),
+              0, 1.0, cx, cz, "east", -1, 0,
             );
         }
 
@@ -1007,11 +1031,11 @@ export function createDungeonRenderer(
             const rem = stepH - fullPanels * tileSize;
             for (let i = 0; i < fullPanels; i++) {
               const midY = neighborFloorY + i * tileSize + tileSize / 2;
-              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize), 0, 1.0);
+              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize), 0, 1.0, cx, cz);
             }
             if (rem > 0.001) {
               const midY = neighborFloorY + fullPanels * tileSize + rem / 2;
-              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize);
+              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
             }
           }
           const nfN = openFloorVal(cx, cz - 1);
@@ -1041,11 +1065,11 @@ export function createDungeonRenderer(
             const rem = h - fullPanels * tileSize;
             for (let i = 0; i < fullPanels; i++) {
               const midY = yCurrent - i * tileSize - tileSize / 2;
-              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize), 0, 1.0);
+              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize), 0, 1.0, cx, cz);
             }
             if (rem > 0.001) {
               const midY = yCurrent - fullPanels * tileSize - rem / 2;
-              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize);
+              tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
             }
           };
           addCS(openCeilVal(cx, cz - 1), wx, cz * tileSize, Math.PI, "north");
@@ -1067,6 +1091,10 @@ export function createDungeonRenderer(
       new Float32Array(offsets),
       rotations,
       (spec.target === "ceilSkirt" || spec.target === "floorSkirt") ? heightScales : undefined,
+      new Float32Array(cellXs),
+      new Float32Array(cellZs),
+      aoCornerArr.length ? new Float32Array(aoCornerArr) : undefined,
+      faceNormals.length ? new Float32Array(faceNormals) : undefined,
     );
 
     if (spec.polygonOffset !== false) {
