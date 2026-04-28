@@ -3836,6 +3836,33 @@ void main() {
 		};
 	}
 	//#endregion
+	//#region src/lib/rendering/skybox.ts
+	/**
+	* Load a `THREE.CubeTexture` from 6 face image URLs and apply an optional
+	* Y-axis rotation. The returned texture is ready to assign to `scene.background`.
+	*/
+	function loadSkybox(opts) {
+		if (opts.faces instanceof three.CubeTexture) {
+			const tex = opts.faces;
+			if (opts.rotationY) tex.rotation = opts.rotationY;
+			return Promise.resolve(tex);
+		}
+		return new Promise((resolve, reject) => {
+			const { px, nx, py, ny, pz, nz } = opts.faces;
+			new three.CubeTextureLoader().load([
+				px,
+				nx,
+				py,
+				ny,
+				pz,
+				nz
+			], (tex) => {
+				if (opts.rotationY) tex.rotation = opts.rotationY;
+				resolve(tex);
+			}, void 0, reject);
+		});
+	}
+	//#endregion
 	//#region src/lib/rendering/dungeonRenderer.ts
 	/**
 	* dungeonRenderer.ts
@@ -4044,6 +4071,27 @@ void main() {
 		element.appendChild(canvas);
 		const scene = new three.Scene();
 		scene.fog = new three.Fog(fogColor, fogNear, fogFar);
+		let skyboxTex = null;
+		let skyboxOwned = false;
+		function applySkybox(tex, owned) {
+			if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+			skyboxTex = tex;
+			skyboxOwned = owned;
+			scene.background = tex;
+		}
+		function clearSkybox() {
+			if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+			skyboxTex = null;
+			skyboxOwned = false;
+			scene.background = fogColor;
+		}
+		if (options.skybox) {
+			const opts = options.skybox;
+			if (opts.faces instanceof three.CubeTexture) {
+				if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+				applySkybox(opts.faces, false);
+			} else loadSkybox(opts).then((tex) => applySkybox(tex, true)).catch(console.error);
+		}
 		const camera = new three.PerspectiveCamera(fov, 1, .05, fogFar * 2);
 		scene.add(camera);
 		scene.add(new three.AmbientLight(16777215, 1));
@@ -5091,6 +5139,18 @@ void main() {
 				dungeonBuilt = false;
 				buildDungeon();
 			},
+			setSkybox(opts) {
+				if (opts === null) {
+					clearSkybox();
+					return Promise.resolve();
+				}
+				if (opts.faces instanceof three.CubeTexture) {
+					if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+					applySkybox(opts.faces, false);
+					return Promise.resolve();
+				}
+				return loadSkybox(opts).then((tex) => applySkybox(tex, true));
+			},
 			destroy() {
 				cancelAnimationFrame(rafId);
 				ro.disconnect();
@@ -5111,6 +5171,7 @@ void main() {
 				_defaultOverlayTex.dispose();
 				for (const light of managedLights) light.removeFromParent();
 				managedLights.clear();
+				if (skyboxTex && skyboxOwned) skyboxTex.dispose();
 				glRenderer.dispose();
 				canvas.remove();
 			}
@@ -6164,6 +6225,7 @@ void main() {
 	exports.isLightPassableCell = isLightPassableCell;
 	exports.isWalkableCell = isWalkableCell;
 	exports.loadMultiAtlas = loadMultiAtlas;
+	exports.loadSkybox = loadSkybox;
 	exports.loadTextureAtlas = loadTextureAtlas;
 	exports.loadTiledMap = loadTiledMap;
 	exports.packedAtlasResolver = packedAtlasResolver;

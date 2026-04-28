@@ -57,6 +57,9 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
   - [Inventory Dialog](#inventory-dialog-1)
   - [Hidden Passages](#hidden-passages)
   - [3D Renderer](#3d-renderer-1)
+    - [Ambient Occlusion](#ambient-occlusion)
+    - [Directional Surface Lighting](#directional-surface-lighting)
+    - [Skybox](#skybox)
     - [Per-direction Tile Specs](#per-direction-tile-specs)
     - [Layer System](#layer-system)
     - [Surface Painting](#surface-painting)
@@ -98,6 +101,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Turn-animation callback system — register async handlers on `game.animations` for `damage`, `death`, `move`, `attack`, `miss`, `heal`, and `xp-gain`; engine awaits all handlers between turn resolution and entity-position sync
 - Audio hooks (Howler.js compatible)
 - Optional multiplayer transport layer (WebSocket-based, server-authoritative)
+- **6-texture skybox** — `skybox` option on `createDungeonRenderer` or `renderer.setSkybox()` at runtime; accepts 6 image URL strings or a pre-loaded `THREE.CubeTexture`; optional `rotationY` aligns the front face to the dungeon's north axis
 - **Texture Loader / Sprite Packer** — `loadTextureAtlas()` fetches a TexturePacker-format atlas, shelf-packs sprites into a power-of-two `OffscreenCanvas`, and returns a `PackedAtlas` with UV data accessible by name or id
 - Script tag API - no build step required
 - localhost friendly - if you want to serve it with Node.
@@ -422,6 +426,7 @@ atlasImg.src = './atlas.png'
 |---|---|
 | `renderer.setEntities(entities)` | Pass the current live entity list; call on every `'turn'` event |
 | `renderer.setAmbientOcclusion(intensity)` | Update AO intensity at runtime (`0`–`1`); takes effect next frame |
+| `renderer.setSkybox(opts)` | Attach or swap the skybox; pass `null` to revert to the fog colour |
 | `renderer.rebuild()` | Rebuild all dungeon geometry (call after `game.regenerate()`) |
 | `renderer.destroy()` | Unmount the canvas and release all Three.js resources |
 
@@ -1482,6 +1487,21 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
     wallMin: 0.9,    // brightness for side walls (normal ⊥ camera)
     wallMax: 1.1,    // brightness for facing walls (normal ∥ camera)
   },
+
+  // ── Skybox ────────────────────────────────────────────────────────────────
+  // Replaces the flat fog-colour background with a 6-texture cube map.
+  // Fog still applies to dungeon geometry. See "Skybox" section for details.
+  skybox: {
+    faces: {
+      px: 'sky/right.png',   // +X (right)
+      nx: 'sky/left.png',    // -X (left)
+      py: 'sky/top.png',     // +Y (top)
+      ny: 'sky/bottom.png',  // -Y (bottom)
+      pz: 'sky/front.png',   // +Z (front)
+      nz: 'sky/back.png',    // -Z (back)
+    },
+    rotationY: 0,             // radians — aligns front face to dungeon north
+  },
 })
 
 // Update entities on every turn
@@ -1507,6 +1527,7 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 | `renderer.addLayer(spec)` | Stack an instanced geometry layer on any surface; returns a `LayerHandle` |
 | `renderer.highlightCells(filter)` | Overlay coloured floor highlights on a subset of cells; returns a `LayerHandle` |
 | `renderer.setAmbientOcclusion(intensity)` | Update AO intensity at runtime (`0`–`1`); takes effect next frame |
+| `renderer.setSkybox(opts)` | Attach or swap the skybox cube map; pass `null` to revert to the plain fog colour |
 | `renderer.rebuild()` | Tear down and rebuild all dungeon geometry (call after `game.regenerate()`) |
 | `renderer.worldToScreen(gridX, gridZ, worldY?)` | Project a grid cell to pixel coords; returns `null` when off-screen |
 | `renderer.createAtlasMaterial()` | Create a new `ShaderMaterial` with the same atlas/fog settings as the renderer |
@@ -1594,6 +1615,80 @@ vFacingLight = 0.9 + abs(dot(aCellFace.zw, uCamDir)) * 0.2;
 **Interaction with ambient occlusion**
 
 Both passes are independent multipliers applied in sequence. A deeply occluded corner on a side wall might be darkened by both AO (`× 0.25` at intensity 0.75) and directional lighting (`× 0.9`). Neither pass is aware of the other.
+
+---
+
+#### Skybox
+
+A standard 6-texture cube-map skybox replaces the flat fog-colour scene background with a panoramic environment. Fog continues to apply to dungeon geometry as normal — the skybox is only visible through open areas (pit cells, transparent geometry).
+
+**Creation-time setup**
+
+Pass a `skybox` object in `DungeonRendererOptions`. The six face images are fetched asynchronously; the fog colour shows until all images load.
+
+```js
+var renderer = AtomicCore.createDungeonRenderer(el, game, {
+  fogColor: '#000011',
+  skybox: {
+    faces: {
+      px: 'sky/right.png',   // +X (right)
+      nx: 'sky/left.png',    // -X (left)
+      py: 'sky/top.png',     // +Y (top)
+      ny: 'sky/bottom.png',  // -Y (bottom)
+      pz: 'sky/front.png',   // +Z (front)
+      nz: 'sky/back.png',    // -Z (back)
+    },
+    rotationY: Math.PI,  // rotate 180° to put the front face behind the player at start
+  },
+})
+```
+
+**Runtime attachment and swapping**
+
+`renderer.setSkybox(opts)` returns a `Promise` that resolves once the textures are loaded. Pass `null` to remove the skybox and revert to the plain fog colour.
+
+```js
+// Swap skybox when entering a new area
+await renderer.setSkybox({
+  faces: { px: 'cave/right.png', nx: 'cave/left.png', /* ... */ },
+})
+
+// Remove skybox entirely
+await renderer.setSkybox(null)
+```
+
+**Pre-loaded `THREE.CubeTexture`**
+
+Pass a pre-loaded `THREE.CubeTexture` directly when you need synchronous application or want to manage texture loading yourself. The renderer will not dispose a pre-loaded texture — ownership stays with the caller.
+
+```js
+const cubeLoader = new THREE.CubeTextureLoader()
+const skyTex = await new Promise((resolve, reject) =>
+  cubeLoader.load(['px.png','nx.png','py.png','ny.png','pz.png','nz.png'], resolve, undefined, reject)
+)
+
+renderer.setSkybox({ faces: skyTex, rotationY: 0 })
+
+// You must dispose it yourself:
+// skyTex.dispose()
+```
+
+**Y-axis rotation**
+
+`rotationY` (radians) rotates the cube map around the vertical axis. Useful for aligning the artist's "front" face with the dungeon's north direction. For any other transform — pitch, roll, or per-face adjustments — access `renderer.scene.background` directly after attaching:
+
+```js
+renderer.setSkybox({ faces: { /* ... */ } }).then(() => {
+  renderer.scene.background.rotation = Math.PI / 4   // additional Y offset after load
+})
+```
+
+**Ownership and disposal**
+
+| Source | Disposed by renderer? |
+|---|---|
+| URL strings (`SkyboxFaces`) | Yes — on `setSkybox(null)`, skybox swap, or `destroy()` |
+| Pre-loaded `THREE.CubeTexture` | No — caller is responsible |
 
 ---
 

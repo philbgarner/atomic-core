@@ -3810,6 +3810,33 @@ function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize
 	};
 }
 //#endregion
+//#region src/lib/rendering/skybox.ts
+/**
+* Load a `THREE.CubeTexture` from 6 face image URLs and apply an optional
+* Y-axis rotation. The returned texture is ready to assign to `scene.background`.
+*/
+function loadSkybox(opts) {
+	if (opts.faces instanceof THREE.CubeTexture) {
+		const tex = opts.faces;
+		if (opts.rotationY) tex.rotation = opts.rotationY;
+		return Promise.resolve(tex);
+	}
+	return new Promise((resolve, reject) => {
+		const { px, nx, py, ny, pz, nz } = opts.faces;
+		new THREE.CubeTextureLoader().load([
+			px,
+			nx,
+			py,
+			ny,
+			pz,
+			nz
+		], (tex) => {
+			if (opts.rotationY) tex.rotation = opts.rotationY;
+			resolve(tex);
+		}, void 0, reject);
+	});
+}
+//#endregion
 //#region src/lib/rendering/dungeonRenderer.ts
 /**
 * dungeonRenderer.ts
@@ -4018,6 +4045,27 @@ function createDungeonRenderer(element, game, options = {}) {
 	element.appendChild(canvas);
 	const scene = new THREE.Scene();
 	scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+	let skyboxTex = null;
+	let skyboxOwned = false;
+	function applySkybox(tex, owned) {
+		if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+		skyboxTex = tex;
+		skyboxOwned = owned;
+		scene.background = tex;
+	}
+	function clearSkybox() {
+		if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+		skyboxTex = null;
+		skyboxOwned = false;
+		scene.background = fogColor;
+	}
+	if (options.skybox) {
+		const opts = options.skybox;
+		if (opts.faces instanceof THREE.CubeTexture) {
+			if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+			applySkybox(opts.faces, false);
+		} else loadSkybox(opts).then((tex) => applySkybox(tex, true)).catch(console.error);
+	}
 	const camera = new THREE.PerspectiveCamera(fov, 1, .05, fogFar * 2);
 	scene.add(camera);
 	scene.add(new THREE.AmbientLight(16777215, 1));
@@ -5065,6 +5113,18 @@ function createDungeonRenderer(element, game, options = {}) {
 			dungeonBuilt = false;
 			buildDungeon();
 		},
+		setSkybox(opts) {
+			if (opts === null) {
+				clearSkybox();
+				return Promise.resolve();
+			}
+			if (opts.faces instanceof THREE.CubeTexture) {
+				if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+				applySkybox(opts.faces, false);
+				return Promise.resolve();
+			}
+			return loadSkybox(opts).then((tex) => applySkybox(tex, true));
+		},
 		destroy() {
 			cancelAnimationFrame(rafId);
 			ro.disconnect();
@@ -5085,6 +5145,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			_defaultOverlayTex.dispose();
 			for (const light of managedLights) light.removeFromParent();
 			managedLights.clear();
+			if (skyboxTex && skyboxOwned) skyboxTex.dispose();
 			glRenderer.dispose();
 			canvas.remove();
 		}
@@ -6110,6 +6171,6 @@ function dungeonMapFromJson(json) {
 	return importDungeonMap(JSON.parse(json));
 }
 //#endregion
-export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setFloorSkirtTiles, showInventory, spriteToUvRect, toFaceRotation };
+export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDecoration, createDungeonRenderer, createEnemy, createGame, createItem, createNpc, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setFloorSkirtTiles, showInventory, spriteToUvRect, toFaceRotation };
 
 //# sourceMappingURL=atomic-core.js.map

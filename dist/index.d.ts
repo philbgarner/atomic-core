@@ -8,7 +8,8 @@ export { loadTextureAtlas, loadMultiAtlas, resolveSprite, toFaceRotation, packed
 export type { AtlasFrameRect, AtlasFrame, TextureAtlasJson, AtlasSource, PackedSprite, PackedAtlas, LoadingOptions, UvRect } from './rendering/textureLoader';
 export { THEMES, THEME_KEYS, resolveTheme, registerTheme, getTheme } from './dungeon/themes';
 export type { ThemeDef, ThemeSelector } from './dungeon/themes';
-export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle, SpriteMap } from './rendering/dungeonRenderer';
+export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle, SpriteMap, SkyboxFaces, SkyboxOptions } from './rendering/dungeonRenderer';
+export { loadSkybox } from './rendering/skybox';
 export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites';
 export { createWebSocketTransport } from './transport/websocket';
 export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload } from './transport/types';

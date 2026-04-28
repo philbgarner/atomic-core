@@ -4,7 +4,7 @@
 
 > **attachDecorator**(`game`, `opts`): `void`
 
-Defined in: [api/createGame.ts:1522](https://github.com/philbgarner/atomic-core/blob/064594a1b398f6ecf2f1112923401d0eaddbea06/src/lib/api/createGame.ts#L1522)
+Defined in: [api/createGame.ts:1538](https://github.com/philbgarner/atomic-core/blob/498d6b46e9389c84d1eb5047eb7861b469b0e47a/src/lib/api/createGame.ts#L1538)
 
 Register a decorator callback. Called per floor tile during `generate()`.
 

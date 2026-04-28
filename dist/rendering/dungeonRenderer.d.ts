@@ -2,6 +2,7 @@ import { GameHandle } from '../api/createGame';
 import { EntityBase, ObjectPlacement } from '../entities/types';
 import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
+import { SkyboxOptions } from './skybox';
 /**
  * dungeonRenderer.ts
  *
@@ -29,6 +30,7 @@ import { PackedAtlas } from './textureLoader';
 import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
 export type { SpriteMap } from './billboardSprites';
+export type { SkyboxFaces, SkyboxOptions } from './skybox';
 /**
  * Information about a dungeon cell returned by mouse interaction callbacks.
  */
@@ -143,6 +145,16 @@ export type DungeonRendererOptions = {
         wallMin?: number;
         wallMax?: number;
     };
+    /**
+     * Optional 6-texture cube-map skybox. When provided the plain fog-colour
+     * scene background is replaced by the cube map. Fog still applies to dungeon
+     * geometry as normal. Supply either six image URL strings via `faces`, or a
+     * pre-loaded `THREE.CubeTexture`. An optional `rotationY` (radians) aligns
+     * the front face to the dungeon's north axis.
+     *
+     * Can also be attached or swapped at runtime via `renderer.setSkybox()`.
+     */
+    skybox?: SkyboxOptions;
 };
 /** Which class of dungeon geometry a layer targets. */
 export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
@@ -320,6 +332,17 @@ export type DungeonRenderer = {
         wallMin?: number;
         wallMax?: number;
     }): void;
+    /**
+     * Attach or replace the skybox cube map at runtime.
+     * Pass `null` to remove the skybox and revert to the plain fog colour.
+     * Resolves after all six face images have loaded (instant when a pre-loaded
+     * `THREE.CubeTexture` is supplied or when `null` is passed).
+     *
+     * Note: when a pre-loaded `THREE.CubeTexture` is supplied, ownership stays
+     * with the caller — the renderer will not dispose it on `destroy()` or on a
+     * subsequent `setSkybox()` call.
+     */
+    setSkybox(opts: SkyboxOptions | null): Promise<void>;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };

@@ -20,6 +20,7 @@ src/lib/
     temperatureMask.ts
     billboardSprites.ts
     textureLoader.ts
+    skybox.ts
   dungeon/
     bsp.ts
     cellular.ts
@@ -119,6 +120,16 @@ Camera-facing billboard quads driven by a multi-layer sprite system. Actors decl
 - `rendering/camera.ts` — camera state, `tryMove` wall-collision logic, lerp movement, EotB-style movement as secondary export
 - `rendering/tileAtlas.ts` — UV coordinate helpers; exports `FaceRotation`, `FaceTileSpec` (`tile: string | number`), `DirectionFaceMap` types for per-face tile and rotation overrides; `resolveTile()` helper resolves string names via an optional resolver function
 - `rendering/temperatureMask.ts` — optional per-region temperature tinting, passed as a shader uniform
+
+---
+
+### Skybox (6-texture cube map)
+
+Standard cube-map skybox for the dungeon renderer. When active, replaces the flat fog-colour scene background with a `THREE.CubeTexture` sampled from 6 face images. Fog continues to apply to dungeon geometry. Two integration paths: pass `skybox` in `DungeonRendererOptions` at creation time (fire-and-forget URL loading), or call `renderer.setSkybox(opts)` / `renderer.setSkybox(null)` at runtime to swap or remove the skybox. Both paths accept either 6 URL strings (`SkyboxFaces`) or a pre-loaded `THREE.CubeTexture`. URL-loaded textures are owned and disposed by the renderer; pre-loaded textures are not disposed (caller retains ownership). An optional `rotationY` field on `SkyboxOptions` rotates the cube map around the Y axis to align the front face with the dungeon's north direction; callers needing full control can mutate `renderer.scene.background.rotation` directly.
+
+**Files:**
+- `rendering/skybox.ts` — `SkyboxFaces` (6 URL strings), `SkyboxOptions` (`faces: SkyboxFaces | THREE.CubeTexture`, `rotationY?`), `loadSkybox(opts)` async loader using `THREE.CubeTextureLoader`; returns `Promise<THREE.CubeTexture>`
+- `rendering/dungeonRenderer.ts` — `skybox?` field on `DungeonRendererOptions`; `setSkybox(opts | null): Promise<void>` on `DungeonRenderer` handle; internal `applySkybox()` / `clearSkybox()` helpers track ownership; owned textures disposed on swap, `setSkybox(null)`, and `destroy()`
 
 ---
 
@@ -427,4 +438,4 @@ Self-contained save/load layer that wraps a `SerializedDungeon` with all setting
 - `api/player.ts` — player handle and action methods
 - `api/actions.ts` — action pipeline middleware
 - `api/keybindings.ts` — DOM keybinding attachment
-- `index.ts` — re-exports the public `CrawlLib` namespace: `createGame`, `attachMinimap`, `attachSpawner`, `attachDecorator`, `attachSurfacePainter`, `attachKeybindings`, `createNpc`, `createEnemy`, `createDecoration`, `createItem`, `buildTilesetMap`, `createWebSocketTransport`, `packedAtlasResolver`
+- `index.ts` — re-exports the public `AtomicCore` namespace: `createGame`, `attachMinimap`, `attachSpawner`, `attachDecorator`, `attachSurfacePainter`, `attachKeybindings`, `createNpc`, `createEnemy`, `createDecoration`, `createItem`, `buildTilesetMap`, `createWebSocketTransport`, `packedAtlasResolver`, `loadSkybox`; types: `SkyboxFaces`, `SkyboxOptions`

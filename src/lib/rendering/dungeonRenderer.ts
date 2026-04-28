@@ -39,6 +39,9 @@ import { spriteToUvRect } from "./textureLoader";
 import { createBillboard } from "./billboardSprites";
 import type { BillboardHandle, SpriteMap } from "./billboardSprites";
 export type { SpriteMap } from "./billboardSprites";
+import { loadSkybox } from "./skybox";
+import type { SkyboxOptions } from "./skybox";
+export type { SkyboxFaces, SkyboxOptions } from "./skybox";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -159,6 +162,16 @@ export type DungeonRendererOptions = {
     wallMin?: number;
     wallMax?: number;
   };
+  /**
+   * Optional 6-texture cube-map skybox. When provided the plain fog-colour
+   * scene background is replaced by the cube map. Fog still applies to dungeon
+   * geometry as normal. Supply either six image URL strings via `faces`, or a
+   * pre-loaded `THREE.CubeTexture`. An optional `rotationY` (radians) aligns
+   * the front face to the dungeon's north axis.
+   *
+   * Can also be attached or swapped at runtime via `renderer.setSkybox()`.
+   */
+  skybox?: SkyboxOptions;
 };
 
 // ---------------------------------------------------------------------------
@@ -357,6 +370,17 @@ export type DungeonRenderer = {
     wallMin?: number;
     wallMax?: number;
   }): void;
+  /**
+   * Attach or replace the skybox cube map at runtime.
+   * Pass `null` to remove the skybox and revert to the plain fog colour.
+   * Resolves after all six face images have loaded (instant when a pre-loaded
+   * `THREE.CubeTexture` is supplied or when `null` is passed).
+   *
+   * Note: when a pre-loaded `THREE.CubeTexture` is supplied, ownership stays
+   * with the caller — the renderer will not dispose it on `destroy()` or on a
+   * subsequent `setSkybox()` call.
+   */
+  setSkybox(opts: SkyboxOptions | null): Promise<void>;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -597,6 +621,37 @@ export function createDungeonRenderer(
   // ── Scene ─────────────────────────────────────────────────────────────────
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+
+  // ── Skybox ────────────────────────────────────────────────────────────────
+  // Tracks the active cube texture so we can dispose URL-loaded textures on
+  // swap or destroy. Textures supplied as pre-loaded CubeTextures are NOT
+  // owned by the renderer and will not be disposed.
+  let skyboxTex: THREE.CubeTexture | null = null;
+  let skyboxOwned = false; // true when we loaded it from URLs (we own disposal)
+
+  function applySkybox(tex: THREE.CubeTexture, owned: boolean): void {
+    if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+    skyboxTex  = tex;
+    skyboxOwned = owned;
+    scene.background = tex;
+  }
+
+  function clearSkybox(): void {
+    if (skyboxTex && skyboxOwned) skyboxTex.dispose();
+    skyboxTex   = null;
+    skyboxOwned = false;
+    scene.background = fogColor;
+  }
+
+  if (options.skybox) {
+    const opts = options.skybox;
+    if (opts.faces instanceof THREE.CubeTexture) {
+      if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+      applySkybox(opts.faces, false);
+    } else {
+      loadSkybox(opts).then((tex) => applySkybox(tex, true)).catch(console.error);
+    }
+  }
 
   // ── Camera ────────────────────────────────────────────────────────────────
   // Added to scene so that children (e.g. a PointLight parented to the camera
@@ -2012,6 +2067,18 @@ export function createDungeonRenderer(
       dungeonBuilt = false;
       buildDungeon();
     },
+    setSkybox(opts: SkyboxOptions | null): Promise<void> {
+      if (opts === null) {
+        clearSkybox();
+        return Promise.resolve();
+      }
+      if (opts.faces instanceof THREE.CubeTexture) {
+        if (opts.rotationY) opts.faces.rotation = opts.rotationY;
+        applySkybox(opts.faces, false);
+        return Promise.resolve();
+      }
+      return loadSkybox(opts).then((tex) => applySkybox(tex, true));
+    },
     destroy() {
       cancelAnimationFrame(rafId);
       ro.disconnect();
@@ -2032,6 +2099,7 @@ export function createDungeonRenderer(
       _defaultOverlayTex.dispose();
       for (const light of managedLights) light.removeFromParent();
       managedLights.clear();
+      if (skyboxTex && skyboxOwned) skyboxTex.dispose();
       glRenderer.dispose();
       canvas.remove();
     },
