@@ -937,7 +937,20 @@ dungeon: {
 }
 ```
 
-Tiles with a floor offset value of `0` are treated as **pits** - the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable). The renderer reads both textures and applies the offset as a Y translation per instance.
+Tiles with a floor offset value of `0` are treated as **pits** — the floor mesh is omitted and the player cannot walk on them (the solid map marks them impassable).
+
+Tiles with a ceiling offset value of `0` are treated as **open sky** — the ceiling mesh is omitted so the skybox is visible through the hole. A thin rim (one `offsetStep` tall) is rendered around the hole edges to give them visible depth. Both sentinels use the raw value `0` because the floor and ceiling encodings run in opposite directions (`-(ceilVal - 128)` vs `+(floorVal - 128)`), so `0` is the maximum of each range.
+
+The `openSkyLighting` renderer option brightens the pre-baked AO on floor tiles directly below open-sky cells and their immediate neighbours, simulating diffuse daylight through the opening:
+
+```js
+var renderer = AtomicCore.createDungeonRenderer(el, game, {
+  ambientOcclusion: 0.75,   // required — openSkyLighting modifies the AO values
+  openSkyLighting:  0.8,    // [0, 1]: direct cell gets full boost, neighbours get half
+})
+```
+
+The renderer reads both textures and applies the offset as a Y translation per instance.
 
 ---
 

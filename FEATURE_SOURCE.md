@@ -135,9 +135,13 @@ Standard cube-map skybox for the dungeon renderer. When active, replaces the fla
 
 ### Ceiling and floor height offsets
 
+Both encodings use raw value `128` for no offset. Floor encoding: `+(floorVal - 128) * offsetStep` — `0` = pit (floor tile omitted). Ceiling encoding is inverted: `-(ceilVal - 128) * offsetStep` — `0` = open sky (ceiling tile omitted). Both sentinels are `0` because the encodings run in opposite directions so `0` is the maximum raise of each range.
+
+Open-sky cells omit their ceiling face and instead render a thin rim (one `offsetStep` tall) around hole edges for visible depth. Normal ceil-skirt neighbours skip drawing steps toward open-sky cells. The `openSkyLighting` renderer option (`[0,1]`) blends pre-baked AO corner values toward fully lit for floor tiles directly below open-sky cells and their cardinal neighbours, simulating diffuse daylight through the opening.
+
 **Files:**
-- `dungeon/bsp.ts` — generates `floorHeightOffset` and `ceilingHeightOffset` R8 DataTextures (128 = no offset, 0 = pit marker for floor); encoding described in `DungeonOutputs`
-- `rendering/dungeonRenderer.ts` — reads offset textures in `buildDungeon()`, populates the `aSurface.x` component (heightOffset) of the packed `aSurface` vec3 attribute; vertex shader applies the world-space Y offset; floor tiles with value 0 are omitted (pit)
+- `dungeon/bsp.ts` — generates `floorHeightOffset` and `ceilingHeightOffset` R8 DataTextures; encoding and sentinel values described in `DungeonOutputs` JSDoc
+- `rendering/dungeonRenderer.ts` — reads offset textures in `buildDungeon()`; floor tiles with `floorVal === 0` are omitted (pit); ceiling tiles with `ceilVal === 0` are omitted (open sky) and replaced with a rim skirt; `isOpenSkyCeil()` helper predicate used for both rim generation and `openSkyLighting` AO boost; `openSkyLighting` option (`DungeonRendererOptions`) controls AO brightening near sky holes; `buildLayerMesh()` also guards `ceil` and `ceilSkirt` layer targets against open-sky cells
 
 ---
 

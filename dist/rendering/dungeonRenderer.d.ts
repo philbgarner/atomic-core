@@ -146,6 +146,15 @@ export type DungeonRendererOptions = {
         wallMax?: number;
     };
     /**
+     * Ambient brightness boost for floor tiles directly below open-sky ceiling cells
+     * (`ceilingHeightOffset === 0`) and their immediate neighbours. Blends the
+     * pre-baked AO corner values toward fully lit (`1.0`), simulating diffuse
+     * daylight falling through the opening. The current cell receives the full boost;
+     * cardinal neighbours receive half. Value in `[0, 1]`; default `0` (no effect).
+     * Requires `ambientOcclusion` to be enabled — has no visible effect without AO.
+     */
+    openSkyLighting?: number;
+    /**
      * Optional 6-texture cube-map skybox. When provided the plain fog-colour
      * scene background is replaced by the cube map. Fog still applies to dungeon
      * geometry as normal. Supply either six image URL strings via `faces`, or a

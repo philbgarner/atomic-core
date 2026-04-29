@@ -61,7 +61,10 @@ export type DungeonOutputs = {
     floorHeightOffset?: THREE.DataTexture;
     /**
      * Per-cell ceiling height offset (R8). Encoding is inverted relative to floor:
-     * 128 = no offset, 127 = +1 step up (ceiling raised), 129 = +1 step down (ceiling lowered).
+     * 128 = no offset, 127 = +1 step up (ceiling raised), 129 = +1 step down (ceiling lowered),
+     * 0 = open sky (ceiling tile omitted entirely; a thin rim skirt of one offsetStep is
+     * rendered at the hole edges instead). Symmetric with floor pits (also 0) — both
+     * sentinels use the minimum raw value because the encodings run in opposite directions.
      * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
      * All floor cells default to 128. Wall cells are 128.
      * Not present for cellular/tiled dungeon outputs.
