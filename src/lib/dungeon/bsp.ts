@@ -169,6 +169,12 @@ export type BspDungeonOutputs = RoomedDungeonOutputs;
 // RNG (seeded)
 // -----------------------------
 
+/**
+ * Convert a seed value to a 32-bit unsigned integer for use with mulberry32.
+ * Strings are hashed with FNV-1a (32-bit): XOR each char code into a running hash,
+ * then multiply by the FNV prime 0x01000193. Numbers are used directly (0 falls back
+ * to 0x12345678). `undefined` also falls back to 0x12345678.
+ */
 function hashSeedToUint32(seed: number | string | undefined): number {
   if (seed === undefined) return 0x12345678;
   if (typeof seed === "number") return seed >>> 0 || 0x12345678;
@@ -181,6 +187,12 @@ function hashSeedToUint32(seed: number | string | undefined): number {
   return h >>> 0;
 }
 
+/**
+ * Mulberry32 — a fast, high-quality 32-bit PRNG.
+ * Returns a closure that yields uniformly distributed floats in [0, 1).
+ * State is a single 32-bit integer advanced each call by the Weyl constant 0x6d2b79f5,
+ * then mixed through a series of multiply-and-shift rounds.
+ */
 function mulberry32(seed: number) {
   let t = seed >>> 0;
   return function rand() {
@@ -198,6 +210,12 @@ type RNG = {
   chance(p: number): boolean;
 };
 
+/**
+ * Wrap a mulberry32 seed into a convenience RNG object with:
+ * - `next()` — float in [0, 1)
+ * - `int(min, max)` — inclusive integer in [min, max]; arguments are clamped so min ≤ max
+ * - `chance(p)` — true with probability p
+ */
 function makeRng(seedU32: number): RNG {
   const r = mulberry32(seedU32);
   return {
@@ -223,6 +241,11 @@ function idx(x: number, y: number, w: number) {
   return y * w + x;
 }
 
+/**
+ * Clear all cells within rect `r` to floor (solid=0).
+ * Out-of-bounds cells are silently skipped.
+ * When `keepOuterWalls` is true, the outermost row/column border is never cleared.
+ */
 function carveRect(
   solid: Uint8Array,
   W: number,
@@ -240,6 +263,11 @@ function carveRect(
   }
 }
 
+/**
+ * Clear a single cell at `p` to floor (solid=0).
+ * No-ops if `p` is out of bounds or if `keepOuterWalls` is true and the cell
+ * is on the outermost row or column.
+ */
 function carvePoint(
   solid: Uint8Array,
   W: number,
@@ -256,6 +284,13 @@ function carvePoint(
   solid[idx(p.x, p.y, W)] = 0;
 }
 
+/**
+ * Carve a straight corridor from `a` to `b` with a square cross-section of
+ * `corridorWidth` cells. At each step a `corridorWidth × corridorWidth` square
+ * centred on the current position is cleared. Movement advances one cell per step
+ * along the dominant axis (Chebyshev walk without diagonals), so use two calls
+ * with a shared midpoint to produce L- or Z-shaped bends.
+ */
 function carveCorridor(
   solid: Uint8Array,
   W: number,
@@ -306,6 +341,22 @@ function clampInt(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/**
+ * Recursively partition `rect` using Binary Space Partitioning.
+ *
+ * Split axis selection (per node):
+ * - w/h > 1.25 → vertical split (cut along X)
+ * - w/h < 0.80 → horizontal split (cut along Y)
+ * - otherwise  → 50/50 random
+ *
+ * The split position is drawn uniformly from
+ * [start + splitPadding + minLeafSize, end − splitPadding − minLeafSize].
+ * If that range is empty the node becomes a leaf with no further splits.
+ * Recursion also stops when `depth >= maxDepth` AND the rect fits within `maxLeafSize`
+ * on both axes.
+ *
+ * Returns the root BspNode and the maximum depth actually reached.
+ */
 function buildBsp(
   rect: Rect,
   depth: number,
@@ -382,6 +433,10 @@ function buildBsp(
   }
 }
 
+/**
+ * Call `fn` for every leaf node in a BSP tree (nodes with no children).
+ * Traversal is depth-first, left then right.
+ */
 function forEachLeaf(node: BspNode, fn: (leaf: BspNode) => void) {
   if (!node.left && !node.right) {
     fn(node);
@@ -399,6 +454,10 @@ function pickRandomPointInRect(r: Rect, rng: RNG): Point {
 // Rooms + regionId labeling
 // -----------------------------
 
+/**
+ * Write `idVal` into every in-bounds cell of rect `r` in the flat `regionId` array.
+ * Used to label all cells of a newly carved room with that room's region ID.
+ */
 function writeRegionRect(
   regionId: Uint8Array,
   W: number,
@@ -414,6 +473,20 @@ function writeRegionRect(
   }
 }
 
+/**
+ * Place one room rectangle inside each BSP leaf and carve it into `solid`.
+ *
+ * For each leaf the available area is the leaf rect shrunk by `roomPadding` on all sides.
+ * Room dimensions are drawn from [minRoomSize, maxRoomSize] clamped to the available area.
+ * When `rng.chance(roomFillLeafChance)` is true the room fills the entire available area.
+ * The room origin is placed at a random position that keeps it within the padded leaf.
+ *
+ * Side effects (all written in-place):
+ * - `solid`: room cells set to 0 (floor)
+ * - `regionId`: room cells labelled with an auto-incrementing ID (1–255, wraps at 256)
+ * - `floorType`: room cells set to 1 (default floor type; override via theme painting)
+ * - `leaf.room`, `leaf.roomId`, `leaf.rep` populated on every leaf node
+ */
 function createRooms(
   root: BspNode,
   solid: Uint8Array,
@@ -484,6 +557,20 @@ function createRooms(
 // Corridors
 // -----------------------------
 
+/**
+ * Recursively connect BSP sibling subtrees with corridors, bottom-up.
+ *
+ * At each internal node the representative points of the left (L) and right (R)
+ * subtrees are connected:
+ * - If L and R share an X or Y coordinate, a single straight corridor is carved.
+ * - Otherwise a Z-bend is used: with 50/50 probability either
+ *   L→(R.x, L.y)→R  or  L→(L.x, R.y)→R  (two perpendicular straight segments).
+ *
+ * The adjacency graph receives a bidirectional edge between the two subtree room IDs.
+ *
+ * Returns the merged subtree's representative point and room ID (randomly chosen from
+ * L or R), which propagates upward for the next level's connection.
+ */
 function connectSiblings(
   node: BspNode,
   solid: Uint8Array,
@@ -539,6 +626,12 @@ function connectSiblings(
 // Room metadata
 // -----------------------------
 
+/**
+ * Build the public `rooms` Map from BSP leaf nodes and the room adjacency graph.
+ * Each leaf with a room gets a `RoomInfo` entry (type="room") whose `connections`
+ * array lists all room IDs connected to it via corridors.
+ * Corridor segment entries are appended separately by `assignCorridorRegions`.
+ */
 function buildRoomsMap(
   root: BspNode,
   adjacency: Map<number, Set<number>>,
@@ -693,6 +786,19 @@ export function buildFullRegionIds(
 // Start/end room selection
 // -----------------------------
 
+/**
+ * Choose start and end room IDs from a room adjacency graph so they are
+ * maximally far apart, preferring dead-end rooms (rooms with exactly one neighbour).
+ *
+ * Algorithm:
+ * 1. Collect dead-end candidates (degree = 1). If none exist, use all rooms.
+ * 2. Run BFS-furthest from every candidate; the one that yields the longest
+ *    shortest-path distance to any other room becomes `endRoomId`.
+ * 3. Run BFS-furthest from `endRoomId`; the room reached last becomes `startRoomId`.
+ *
+ * Edge cases: returns `{ startRoomId: 1, endRoomId: 1 }` when the graph is empty;
+ * returns the sole room ID for both when there is only one room.
+ */
 function pickStartEndRooms(adjacency: Map<number, Set<number>>): {
   startRoomId: number;
   endRoomId: number;
@@ -750,6 +856,12 @@ function pickStartEndRooms(adjacency: Map<number, Set<number>>): {
 // Distance-to-wall (BFS)
 // -----------------------------
 
+/**
+ * Multi-source BFS from all wall cells (solid !== 0).
+ * Each floor cell receives the Manhattan distance to its nearest wall cell.
+ * Values are clamped to [0, 255] and returned as a Uint8Array (same length as `solid`).
+ * Floor cells on maps with no reachable wall (degenerate input) get value 255.
+ */
 function computeDistanceToWall(
   solid: Uint8Array,
   W: number,
@@ -812,6 +924,13 @@ function computeDistanceToWall(
 // Texture helpers
 // -----------------------------
 
+/**
+ * Wrap a Uint8Array as an R8 THREE.DataTexture (one byte per texel).
+ * The texture shares the buffer with `mask` — mutations to `mask` are visible
+ * after setting `tex.needsUpdate = true`.
+ * NearestFilter on both min/mag, ClampToEdge wrap, no mipmaps, no color-space
+ * conversion, flipY=false.
+ */
 function maskToDataTextureR8(
   mask: Uint8Array,
   W: number,
@@ -837,6 +956,12 @@ function maskToDataTextureR8(
   return tex;
 }
 
+/**
+ * Wrap a Uint8Array as an RGBA8 THREE.DataTexture (4 bytes per texel).
+ * The texture shares the buffer with `mask`.
+ * NearestFilter on both min/mag, ClampToEdge wrap, no mipmaps, no color-space
+ * conversion, flipY=false.
+ */
 function maskToDataTextureRGBA(
   mask: Uint8Array,
   W: number,
@@ -866,6 +991,30 @@ function maskToDataTextureRGBA(
 // Public generator
 // -----------------------------
 
+/**
+ * Generate a BSP dungeon and return the full texture set as `BspDungeonOutputs`.
+ *
+ * Pipeline:
+ * 1. Hash `options.seed` to a 32-bit integer (FNV-1a for strings); seed a mulberry32 PRNG.
+ * 2. Recursively partition the map rect into a BSP tree (`buildBsp`). Split axis is chosen
+ *    by aspect ratio; position is randomised within [minLeafSize, maxLeafSize] padding.
+ * 3. Place one room per BSP leaf (`createRooms`); rooms are labelled 1..N in `regionId`
+ *    and carved into `solid`.
+ * 4. Connect sibling subtrees bottom-up with straight or Z-shaped corridors
+ *    (`connectSiblings`); the adjacency graph records all room-to-room connections.
+ * 5. Pick `startRoomId` / `endRoomId` via double-BFS on the room graph
+ *    (`pickStartEndRooms`): furthest dead-end pair preferred.
+ * 6. Flood-fill corridor floor cells into unique region IDs starting at `maxRoomId + 1`
+ *    (`assignCorridorRegions`); bake those IDs back into the `regionId` texture so every
+ *    floor cell has a non-zero region ID.
+ * 7. BFS-propagate `floorType` from room cells into unassigned corridor cells; then
+ *    propagate outward into wall cells for `wallType`.
+ * 8. Compute `distanceToWall` (multi-source BFS from all wall cells; clamped to [0, 255]).
+ * 9. Initialize remaining textures: `temperature` = 127 for floor cells, `ceilingType` = 1
+ *    for floor cells, height offsets = 128 (no offset), `colliderFlags` derived from solid.
+ *
+ * @throws if width or height ≤ 2, or if minLeafSize < 4.
+ */
 export function generateBspDungeon(
   options: BspDungeonOptions,
 ): BspDungeonOutputs {

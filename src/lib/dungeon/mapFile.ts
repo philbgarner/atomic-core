@@ -105,6 +105,11 @@ export type ImportResult = {
 // Internal helpers
 // --------------------------------
 
+/**
+ * Strip non-JSON-serializable fields from DungeonRendererOptions before embedding in a map file.
+ * Removed: `packedAtlas` (binary atlas data), `tileNameResolver` (function),
+ * `onCellClick` and `onCellHover` (event callbacks). All remaining options are plain JSON.
+ */
 function stripNonSerializable(opts: DungeonRendererOptions): SerializedRendererOptions {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { packedAtlas: _pa, tileNameResolver: _tnr, onCellClick: _occ, onCellHover: _och, ...rest } = opts;
@@ -155,9 +160,10 @@ export function dungeonMapToJson(
  * Reconstruct a dungeon from a DungeonMapFile.
  *
  * The returned `dungeon` is ready to pass to buildDungeon / syncEntities.
- * Note: surface-painter overlays are zeroed on import (not serialized) —
- * call game.dungeon.paint() to reapply them.
- * Re-supply packedAtlas and tileNameResolver when creating the renderer.
+ * If the file contained surface-painter overlays they are returned in `result.paintMap`
+ * as plain strings — re-apply them via `game.dungeon.paint(x, z, target)` after
+ * `game.generate()`. Re-supply `packedAtlas` and `tileNameResolver` when creating
+ * the renderer.
  */
 export function importDungeonMap(data: DungeonMapFile): ImportResult {
   return {

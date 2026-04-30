@@ -64,6 +64,11 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
 // RNG (seeded mulberry32)
 // --------------------------------
 
+/**
+ * Convert a seed to a 32-bit unsigned integer for use with mulberry32.
+ * Strings are hashed with FNV-1a (32-bit). Numbers are used directly.
+ * `undefined` or `0` falls back to 0x12345678.
+ */
 function hashSeed(seed: number | string | undefined): number {
   if (seed === undefined) return 0x12345678;
   if (typeof seed === "number") return seed >>> 0 || 0x12345678;
@@ -75,6 +80,10 @@ function hashSeed(seed: number | string | undefined): number {
   return h >>> 0;
 }
 
+/**
+ * Create a mulberry32 PRNG from a 32-bit seed.
+ * Returns a bare `() => number` closure yielding floats uniformly in [0, 1).
+ */
 function makeRng(seedU32: number) {
   let t = seedU32 >>> 0;
   return () => {
@@ -94,6 +103,11 @@ function idx(x: number, y: number, W: number): number {
   return y * W + x;
 }
 
+/**
+ * Count wall neighbours of cell (x, y) in the Moore (8-direction) neighbourhood.
+ * Out-of-bounds positions are treated as walls, so the outer border of the grid
+ * always appears fully walled during cellular-automata smoothing passes.
+ */
 function countWallNeighbours(solid: Uint8Array, x: number, y: number, W: number, H: number): number {
   let count = 0;
   for (let dy = -1; dy <= 1; dy++) {
@@ -109,6 +123,12 @@ function countWallNeighbours(solid: Uint8Array, x: number, y: number, W: number,
   return count;
 }
 
+/**
+ * 4-connected BFS flood fill starting from cell index `startIdx`.
+ * Expands into neighbouring floor cells (solid=0) that have not yet been visited.
+ * Marks each visited cell in `visited` (caller-supplied Uint8Array) to prevent re-entry.
+ * Returns the flat indices of all cells in the connected component.
+ */
 function floodFill(
   solid: Uint8Array,
   W: number,
@@ -144,6 +164,11 @@ function floodFill(
   return region;
 }
 
+/**
+ * Multi-source BFS from all wall cells (solid !== 0).
+ * Each floor cell receives the Manhattan distance to its nearest wall.
+ * Values are clamped to [0, 255] and returned as a Uint8Array (same length as `solid`).
+ */
 function computeDistanceToWall(solid: Uint8Array, W: number, H: number): Uint8Array {
   const dist = new Uint16Array(W * H).fill(0xffff);
   const queue = new Int32Array(W * H);
@@ -185,6 +210,11 @@ function computeDistanceToWall(solid: Uint8Array, W: number, H: number): Uint8Ar
   return out;
 }
 
+/**
+ * Wrap a Uint8Array as an R8 THREE.DataTexture (one byte per texel).
+ * Shares the buffer with `mask`; set `tex.needsUpdate = true` after mutations.
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ */
 function maskToDataTextureR8(mask: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(mask, W, H, THREE.RedFormat, THREE.UnsignedByteType);
   tex.name = name;
@@ -199,6 +229,11 @@ function maskToDataTextureR8(mask: Uint8Array, W: number, H: number, name: strin
   return tex;
 }
 
+/**
+ * Wrap a Uint8Array as an RGBA8 THREE.DataTexture (4 bytes per texel).
+ * Shares the buffer with `mask`; set `tex.needsUpdate = true` after mutations.
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ */
 function maskToDataTextureRGBA(mask: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(mask, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.name = name;
@@ -218,10 +253,22 @@ function maskToDataTextureRGBA(mask: Uint8Array, W: number, H: number, name: str
 // --------------------------------
 
 /**
- * Assign Voronoi room IDs by doing a multi-source BFS from the local maxima of
- * the distanceToWall field. Each local maximum seeds one "room"; every reachable
- * floor cell is claimed by the nearest seed. The regionId array (1..N, 0 = wall)
- * is written in-place and the full room graph is returned.
+ * Assign Voronoi room IDs by multi-source BFS seeded from strict local maxima of
+ * the `distanceToWall` field.
+ *
+ * Seed selection: a floor cell is a seed if its `distanceToWall` value strictly exceeds
+ * all four 4-connected neighbours AND is ≥ MIN_SEED_DIST (2). If no seeds pass that
+ * threshold, the single cell with the highest `distanceToWall` is used as a fallback.
+ * Room count is capped at 254 to keep region IDs within an R8 texture (0=wall, 1..254=room).
+ *
+ * Voronoi expansion: all seeds are enqueued simultaneously and BFS claims each unvisited
+ * floor cell for the seed that reaches it first, producing contiguous Voronoi regions.
+ * Because the cellular dungeon has no explicit corridors, `firstCorridorRegionId = N + 1`
+ * and no corridor entries are added to the `rooms` map.
+ *
+ * Bounding rects and the adjacency graph (two regions are adjacent if they share a border
+ * cell) are computed in a single scan pass after expansion.
+ * `startRoomId` / `endRoomId` are then chosen via `pickStartEndRooms`.
  */
 function buildVoronoiRooms(
   solid: Uint8Array,
@@ -339,6 +386,15 @@ function buildVoronoiRooms(
   return { regionIdArr, rooms, firstCorridorRegionId: N + 1, startRoomId, endRoomId };
 }
 
+/**
+ * Choose start and end room IDs from a room adjacency graph so they are maximally
+ * far apart, preferring dead-end rooms (degree = 1).
+ *
+ * Algorithm (identical to BSP):
+ * 1. Collect dead-end candidates (degree = 1); fall back to all rooms if none exist.
+ * 2. BFS-furthest from every candidate; the one yielding the longest path becomes `endRoomId`.
+ * 3. BFS-furthest from `endRoomId` gives `startRoomId`.
+ */
 function pickStartEndRooms(adjacency: Map<number, Set<number>>): { startRoomId: number; endRoomId: number } {
   const allRooms = Array.from(adjacency.keys());
   if (allRooms.length === 0) return { startRoomId: 1, endRoomId: 1 };
@@ -381,9 +437,24 @@ function pickStartEndRooms(adjacency: Map<number, Set<number>>): { startRoomId: 
 // --------------------------------
 
 /**
- * Generate a cellular-automata cave dungeon.
- * Unlike BSP, there is no explicit room graph; use regionId for flood-fill regions.
- * Pass the output directly to generateContent() as it shares the same texture layout.
+ * Generate a cellular-automata cave dungeon and return the full texture set.
+ *
+ * Pipeline:
+ * 1. Seed the mulberry32 PRNG from `options.seed` (FNV-1a for strings).
+ * 2. Fill the grid randomly: each interior cell becomes wall with probability `fillProbability`.
+ *    Outer border is always wall when `keepOuterWalls` is true.
+ * 3. Smooth `iterations` times using Moore-neighbourhood rules:
+ *    - Floor cell: becomes wall if wall-neighbour count ≥ `birthThreshold`.
+ *    - Wall cell: stays wall if wall-neighbour count ≥ `survivalThreshold`; otherwise → floor.
+ * 4. Identify all 4-connected floor regions via flood fill; keep only the largest and
+ *    re-solidify all others (eliminates disconnected pockets).
+ * 5. Compute `distanceToWall` (multi-source BFS from all wall cells), then derive Voronoi
+ *    room IDs from its strict 4-connected local maxima (`buildVoronoiRooms`).
+ *    `startRoomId` / `endRoomId` are chosen via double-BFS on the room adjacency graph.
+ *
+ * Output is compatible with `generateContent`, `aStar8`, `computeFov`, and all rendering
+ * APIs. Unlike BSP, corridor entries are not added to `rooms`; `firstCorridorRegionId = N + 1`.
+ * @throws if width or height ≤ 2.
  */
 export function generateCellularDungeon(options: CellularOptions): CellularDungeonOutputs {
   const W = options.width;

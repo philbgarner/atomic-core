@@ -33,9 +33,23 @@ export type DoorRecord = {
 };
 
 /**
- * Finds door candidate locations: one per corridor-to-room opening, centered
- * in the opening. Corridor cells are identified as solid=0 with regionId=0;
- * room cells as solid=0 with regionId!=0.
+ * Find door candidate locations — one per corridor-to-room opening, centered
+ * on the opening's median threshold cell.
+ *
+ * Identification convention (caller must match this):
+ * - Corridor cell: solid=0 AND regionId=0
+ * - Room cell:     solid=0 AND regionId≠0
+ *
+ * Pass the pre-assignment regionId data where corridors still have value 0.
+ * After `generateBspDungeon` the regionId texture has unique non-zero IDs for
+ * corridors (baked by `assignCorridorRegions`), so it cannot be used directly here.
+ *
+ * Grouping: threshold cells (corridor cells adjacent to a room cell) are grouped
+ * by their corridor axis and fixed coordinate, so each opening (a contiguous run
+ * of threshold cells along one wall) becomes a single candidate. The door is placed
+ * at the median cell of each group.
+ *
+ * `yaw` is 0 for doors facing Z (dx=0) and π/2 for doors facing X.
  */
 export function findDoorCandidates(
   regionIdData: Uint8Array,
@@ -108,9 +122,17 @@ export function findDoorCandidates(
 }
 
 /**
- * Walls off all non-door cells in a door opening group plus the two flanking
- * corridor cells beside the door. Modifies solidData and colliderFlagsData
- * in-place; the caller is responsible for marking textures as needsUpdate.
+ * Narrow a door opening to exactly one cell (the median) by walling off the
+ * surrounding cells.
+ *
+ * Two kinds of cells are walled (solid set to 1, colliderFlags set to IS_BLOCKED):
+ * 1. All cells in `candidate.groupCells` except the median at `midIdx`.
+ * 2. The two corridor cells flanking the door perpendicularly — i.e., the cells at
+ *    (doorX ± dz, doorZ ∓ dx) — if they are floor corridor cells (solid=0, regionId=0).
+ *    This prevents diagonal walk-through at the door frame.
+ *
+ * Modifies `solidData`, `colliderFlagsData`, and `regionIdData` in-place.
+ * The caller must set `needsUpdate = true` on the corresponding textures.
  */
 export function wallOffDoorGroup(
   candidate: DoorCandidate,

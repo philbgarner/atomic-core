@@ -57,6 +57,7 @@ export type SerializedDungeon = {
 // Base64 helpers
 // --------------------------------
 
+/** Encode a Uint8Array to a base64 string suitable for JSON storage. */
 function uint8ToBase64(data: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < data.length; i++) {
@@ -65,6 +66,7 @@ function uint8ToBase64(data: Uint8Array): string {
   return btoa(binary);
 }
 
+/** Decode a base64 string produced by `uint8ToBase64` back to a Uint8Array. */
 function base64ToUint8(str: string): Uint8Array {
   const binary = atob(str);
   const out = new Uint8Array(binary.length);
@@ -74,6 +76,7 @@ function base64ToUint8(str: string): Uint8Array {
   return out;
 }
 
+/** Extract the raw pixel buffer from a DataTexture as a Uint8Array. */
 function textureData(tex: THREE.DataTexture): Uint8Array {
   return tex.image.data as Uint8Array;
 }
@@ -82,6 +85,10 @@ function textureData(tex: THREE.DataTexture): Uint8Array {
 // DataTexture reconstruction
 // --------------------------------
 
+/**
+ * Reconstruct an R8 DataTexture from a raw byte array.
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ */
 function makeDataTexture(data: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
   tex.name = name;
@@ -96,6 +103,10 @@ function makeDataTexture(data: Uint8Array, W: number, H: number, name: string): 
   return tex;
 }
 
+/**
+ * Reconstruct an RGBA DataTexture from a raw byte array.
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ */
 function makeDataTextureRGBA(data: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.name = name;

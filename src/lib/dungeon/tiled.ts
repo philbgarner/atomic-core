@@ -98,6 +98,11 @@ export interface TiledMapOutputs extends DungeonOutputs {
 // DataTexture helpers (identical settings to bsp.ts)
 // ----------------------------------------------------------------
 
+/**
+ * Create an R8 DataTexture from a Uint8Array (one byte per texel).
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ * Shares the buffer with `data`; set `tex.needsUpdate = true` after mutations.
+ */
 function r8Texture(data: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
   tex.name = name;
@@ -112,6 +117,11 @@ function r8Texture(data: Uint8Array, W: number, H: number, name: string): THREE.
   return tex;
 }
 
+/**
+ * Create an RGBA DataTexture from a Uint8Array (4 bytes per texel).
+ * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+ * Shares the buffer with `data`; set `tex.needsUpdate = true` after mutations.
+ */
 function rgbaTexture(data: Uint8Array, W: number, H: number, name: string): THREE.DataTexture {
   const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.name = name;

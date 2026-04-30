@@ -4,7 +4,7 @@
 
 > **isLightPassableCell**(`flags`): `boolean`
 
-Defined in: [dungeon/colliderFlags.ts:54](https://github.com/philbgarner/atomic-core/blob/4041e6411d0bb6dd169f8ed8eae77a3af59aedf0/src/lib/dungeon/colliderFlags.ts#L54)
+Defined in: [dungeon/colliderFlags.ts:54](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/colliderFlags.ts#L54)
 
 Returns true when light/LOS passes through this cell.
 

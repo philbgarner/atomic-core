@@ -4,11 +4,25 @@
 
 > **generateCellularDungeon**(`options`): [`CellularDungeonOutputs`](../type-aliases/CellularDungeonOutputs.md)
 
-Defined in: [dungeon/cellular.ts:388](https://github.com/philbgarner/atomic-core/blob/4041e6411d0bb6dd169f8ed8eae77a3af59aedf0/src/lib/dungeon/cellular.ts#L388)
+Defined in: [dungeon/cellular.ts:459](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/cellular.ts#L459)
 
-Generate a cellular-automata cave dungeon.
-Unlike BSP, there is no explicit room graph; use regionId for flood-fill regions.
-Pass the output directly to generateContent() as it shares the same texture layout.
+Generate a cellular-automata cave dungeon and return the full texture set.
+
+Pipeline:
+1. Seed the mulberry32 PRNG from `options.seed` (FNV-1a for strings).
+2. Fill the grid randomly: each interior cell becomes wall with probability `fillProbability`.
+   Outer border is always wall when `keepOuterWalls` is true.
+3. Smooth `iterations` times using Moore-neighbourhood rules:
+   - Floor cell: becomes wall if wall-neighbour count ≥ `birthThreshold`.
+   - Wall cell: stays wall if wall-neighbour count ≥ `survivalThreshold`; otherwise → floor.
+4. Identify all 4-connected floor regions via flood fill; keep only the largest and
+   re-solidify all others (eliminates disconnected pockets).
+5. Compute `distanceToWall` (multi-source BFS from all wall cells), then derive Voronoi
+   room IDs from its strict 4-connected local maxima (`buildVoronoiRooms`).
+   `startRoomId` / `endRoomId` are chosen via double-BFS on the room adjacency graph.
+
+Output is compatible with `generateContent`, `aStar8`, `computeFov`, and all rendering
+APIs. Unlike BSP, corridor entries are not added to `rooms`; `firstCorridorRegionId = N + 1`.
 
 ## Parameters
 
@@ -19,3 +33,7 @@ Pass the output directly to generateContent() as it shares the same texture layo
 ## Returns
 
 [`CellularDungeonOutputs`](../type-aliases/CellularDungeonOutputs.md)
+
+## Throws
+
+if width or height ≤ 2.

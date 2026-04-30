@@ -4,14 +4,15 @@
 
 > **importDungeonMap**(`data`): [`ImportResult`](../type-aliases/ImportResult.md)
 
-Defined in: [dungeon/mapFile.ts:162](https://github.com/philbgarner/atomic-core/blob/4041e6411d0bb6dd169f8ed8eae77a3af59aedf0/src/lib/dungeon/mapFile.ts#L162)
+Defined in: [dungeon/mapFile.ts:168](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L168)
 
 Reconstruct a dungeon from a DungeonMapFile.
 
 The returned `dungeon` is ready to pass to buildDungeon / syncEntities.
-Note: surface-painter overlays are zeroed on import (not serialized) —
-call game.dungeon.paint() to reapply them.
-Re-supply packedAtlas and tileNameResolver when creating the renderer.
+If the file contained surface-painter overlays they are returned in `result.paintMap`
+as plain strings — re-apply them via `game.dungeon.paint(x, z, target)` after
+`game.generate()`. Re-supply `packedAtlas` and `tileNameResolver` when creating
+the renderer.
 
 ## Parameters
 
