@@ -369,19 +369,21 @@ Evaluator-driven mission system that hooks into the turn loop. The developer reg
 
 Dependency-injection layer that makes the server authoritative for all player actions and monster AI. When `GameOptions.transport` is set, `game.turns.commit()` forwards actions to the server instead of applying them locally; the server validates each action, runs monster AI (chase + 4-directional movement + melee combat), updates canonical state, and broadcasts a `ServerStateUpdate` to all connected clients. `createGame` registers a reconciliation handler that patches local turn state, auto-registers monster entities in `entityById` for non-host clients, and re-emits the `"turn"` event. Initial state messages buffered during `connect()` are replayed when the first `onStateUpdate` handler registers so late-joining clients see current monster positions immediately. Single-player code paths are completely unaffected.
 
+Developer-defined entity fields (e.g. `mp`, `stamina`, `spriteName`, `effects`) are automatically synced to all peers on every action: `turns.commit()` bundles all non-server-managed fields into the action message; the server strips protected fields (`x`, `y`, `hp`, `maxHp`, `alive`, `facing`) and relays the rest; the reconciliation handler spreads them back onto the entity so peers can access `entity.mp` etc. directly. The old `sendMeta` / `PlayerNetState.meta` pattern has been removed — `PlayerNetState` now carries an index signature for arbitrary fields.
+
 **Files:**
-- `transport/types.ts` — `ActionTransport` interface, `ServerStateUpdate`, `PlayerNetState`, `DungeonInitPayload`, `MonsterNetState` (uses `spriteName`; deprecated `type`/`sprite` kept optional for backward compatibility with older save files)
-- `transport/websocket.ts` — `createWebSocketTransport(url)` browser-side factory; buffers `state` messages before `onStateUpdate` is registered and replays them on first handler registration
-- `api/createGame.ts` — `GameOptions.transport`, `PlayerOptions.id`, commit intercept, reconciliation wiring; auto-registers and syncs monster entities from state updates
+- `transport/types.ts` — `ActionTransport` interface, `ServerStateUpdate`, `PlayerNetState` (index signature for developer-defined fields; server-authoritative fields explicitly typed), `DungeonInitPayload`, `MonsterNetState` (uses `spriteName`; deprecated `type`/`sprite` kept optional for backward compatibility with older save files)
+- `transport/websocket.ts` — `createWebSocketTransport(url)` browser-side factory; buffers `state` messages before `onStateUpdate` is registered and replays them on first handler registration; `send()` includes `entityState` with each action
+- `api/createGame.ts` — `GameOptions.transport`, `PlayerOptions.id`, commit intercept (collects entity extra fields and passes to `transport.send()`), reconciliation wiring (spreads all server state fields onto entity); auto-registers and syncs monster entities from state updates
 
 **Server:**
-- `src/server/index.js` — Express + `ws` authoritative server; generates the dungeon server-side; validates player moves (including monster-blocking); resolves player→monster and monster→player melee combat; runs `runMonsterAI()` (4-directional chase, one step per player action) after each accepted action; broadcasts full state to all peers
+- `src/server/index.js` — Express + `ws` authoritative server; generates the dungeon server-side; validates player moves (including monster-blocking); resolves player→monster and monster→player melee combat; runs `runMonsterAI()` (4-directional chase, one step per player action) after each accepted action; stores developer-defined entity fields in `player.extra` (server-managed fields stripped); broadcasts `{ ...player.extra, x, y, hp, maxHp, alive, facing }` to all peers
 - `src/server/dungeon-entry.ts` — thin build entry that re-exports `generateBspDungeon` for the server build
 - `src/server/three-shim.js` — minimal `THREE.DataTexture` shim so `bsp.ts` runs in Node without a real GPU or browser context; only `image.data` is needed server-side
 - `vite.config.server.ts` — separate Vite config that compiles the server dungeon module with `three` aliased to the shim; outputs `dist/server/dungeon.js`
 
 **Example:**
-- `examples/multiplayer/` — mirrors the basic example but connects to the server first; host sends solid data after `generate()`; other players rendered as billboard entities via `"network-state"` events
+- `examples/localhost/multiplayer/` — mirrors the basic example but connects to the server first; `spriteName` passed via both `connect()` meta and `player.spriteName` so it seeds the server's initial state and stays in sync on every action; `network-state` handler spreads the full `ps` object onto each peer entity (y→z remapped) so all custom fields are accessible directly; `spriteMapForKey(ps.spriteName)` replaces the old `ps.meta?.sprite` lookup
 
 ---
 

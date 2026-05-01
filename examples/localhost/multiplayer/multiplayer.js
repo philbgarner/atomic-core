@@ -2,12 +2,14 @@
 //
 // Compared to basic.js, the only differences are:
 //  1. Connect to the server first (async, before createGame).
-//  2. Pass player.id (server-assigned) and transport into createGame options.
+//  2. Pass player.id (server-assigned), spriteName, and transport into createGame options.
 //  3. Host sends the solid map to the server after generate() so the server
 //     can validate moves.
 //  4. Listen to 'network-state' events to render other players as entities.
 //     The renderer is also updated on every network-state event (not just on
 //     the local player's turn) so remote moves are visible in real-time.
+//     Other players' full entity state (spriteName, hp, custom attributes, etc.)
+//     is available directly on the ps object — no meta unwrapping needed.
 //  5. Player list panel and in-viewport chat overlay with modal input.
 
 const {
@@ -74,10 +76,8 @@ const SPRITE_MAPS = {
   mage: mageSpriteMap,
 };
 
-function spriteForPlayer(ps) {
-  const key = ps.meta?.sprite;
-  const fn = SPRITE_MAPS[key] ?? rogueSpriteMap;
-  return fn();
+function spriteMapForKey(key) {
+  return (SPRITE_MAPS[key] ?? rogueSpriteMap)();
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ connectBtn.addEventListener("click", async () => {
 
   let info;
   try {
-    info = await transport.connect({ sprite: chosenSprite, attack: 5, defense: 2, maxHp: 30 });
+    info = await transport.connect({ spriteName: chosenSprite, attack: 5, defense: 2, maxHp: 30 });
   } catch (err) {
     connectError.textContent = "Could not connect: " + (err?.message ?? err);
     connectError.style.display = "block";
@@ -222,7 +222,8 @@ async function startGame(
   const game = createGame(document.body, {
     dungeon,
     player: {
-      id: playerId, // <-- match server-assigned id so reconciliation aligns
+      id: playerId,       // match server-assigned id so reconciliation aligns
+      spriteName: chosenSprite, // synced to all peers on every action
       hp: 30,
       maxHp: 30,
       attack: 5,
@@ -402,24 +403,19 @@ async function startGame(
 
     otherPlayerEntities = allPlayers
       .filter(([pid]) => pid !== playerId)
-      .map(([pid, ps]) => ({
-        id: pid,
-        kind: "npc",
-        type: "player",
-        sprite: "player",
-        x: ps.x,
-        z: ps.y,
-        hp: ps.hp,
-        maxHp: ps.maxHp,
-        alive: ps.alive,
-        attack: 0,
-        defense: 0,
-        speed: 0,
-        blocksMove: false,
-        faction: "player",
-        tick: 0,
-        spriteMap: spriteForPlayer(ps),
-      }));
+      .map(([pid, ps]) => {
+        // ps contains the remote player's full entity state (spriteName, hp,
+        // any custom attributes, etc.) — spread it so nothing gets dropped.
+        // The server uses 'y' for the grid row; remap to 'z' for the client.
+        const { y, ...rest } = ps;
+        return {
+          ...rest,
+          id: pid,
+          kind: "npc",
+          z: y,
+          spriteMap: spriteMapForKey(ps.spriteName),
+        };
+      });
 
     // Server is authoritative for monster positions — sync all clients.
     if (Array.isArray(update.monsters)) {

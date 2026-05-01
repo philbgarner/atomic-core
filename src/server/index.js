@@ -51,7 +51,8 @@ const MIN_ACTION_INTERVAL_MS = Number(process.env.MIN_ACTION_INTERVAL_MS ?? 150)
 /**
  * @typedef {{
  *   x: number, y: number, hp: number, maxHp: number,
- *   alive: boolean, facing: number, meta: Record<string,unknown>,
+ *   alive: boolean, facing: number,
+ *   extra: Record<string,unknown>,
  *   lastActionAt: number,
  *   ws: import('ws').WebSocket
  * }} RoomPlayer
@@ -195,7 +196,7 @@ function findSpawnPos(room, preferX, preferY) {
 function stateSnapshot(room) {
   const players = {}
   for (const [id, p] of room.players) {
-    players[id] = { x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, alive: p.alive, facing: p.facing, meta: p.meta }
+    players[id] = { ...p.extra, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, alive: p.alive, facing: p.facing }
   }
   return JSON.stringify({ type: 'state', players, turn: room.turn, monsters: room.monsters })
 }
@@ -302,16 +303,17 @@ wss.on('connection', (ws) => {
       // hasn't been initialised yet (host hasn't sent dungeon_init) the spawn
       // defaults to (1,1) and will be corrected when dungeon_init arrives.
       const spawnPos = findSpawnPos(room, room.spawnX, room.spawnY)
-      const joinMeta = (msg.meta && typeof msg.meta === 'object') ? msg.meta : {}
-      const maxHp = Number(joinMeta.maxHp ?? 30)
+      const joinExtra = (msg.meta && typeof msg.meta === 'object') ? msg.meta : {}
+      const maxHp = Number(joinExtra.maxHp ?? 30)
+      const { x: _x, y: _y, hp: _hp, maxHp: _mhp, alive: _alive, facing: _facing, ...safeExtra } = joinExtra
       room.players.set(playerId, {
         x: spawnPos.x, y: spawnPos.y,
         hp: maxHp, maxHp,
-        attack: Number(joinMeta.attack ?? 5),
-        defense: Number(joinMeta.defense ?? 2),
+        attack: Number(joinExtra.attack ?? 5),
+        defense: Number(joinExtra.defense ?? 2),
         alive: true,
         facing: 0,
-        meta: joinMeta,
+        extra: safeExtra,
         lastActionAt: 0,
         ws,
       })
@@ -380,6 +382,13 @@ wss.on('connection', (ws) => {
         const now = Date.now()
         if (now - player.lastActionAt < MIN_ACTION_INTERVAL_MS) return
         player.lastActionAt = now
+
+        // Merge developer-defined entity fields. Server-managed fields are
+        // stripped so clients cannot spoof position, hp, or alive state.
+        if (msg.entityState && typeof msg.entityState === 'object') {
+          const { x: _x, y: _y, hp: _hp, maxHp: _mhp, alive: _alive, facing: _facing, ...safeExtra } = msg.entityState
+          player.extra = { ...player.extra, ...safeExtra }
+        }
       }
       const accepted = applyAction(room, playerId, msg.action ?? {})
       if (!accepted) return
@@ -396,16 +405,6 @@ wss.on('connection', (ws) => {
       const text = String(msg.text ?? '').trim().slice(0, 200)
       if (!text) return
       broadcastAll(room, { type: 'chat', playerId, text })
-    }
-
-    // ── player_meta ────────────────────────────────────────────────────────
-    if (msg.type === 'player_meta') {
-      const player = room.players.get(playerId)
-      if (!player) return
-      if (msg.meta && typeof msg.meta === 'object') {
-        player.meta = { ...player.meta, ...msg.meta }
-        broadcastAll(room, stateSnapshot(room))
-      }
     }
 
     // ── monster_state ──────────────────────────────────────────────────────

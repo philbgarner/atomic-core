@@ -116,9 +116,9 @@ export function createWebSocketTransport(url: string): ActionTransport {
       });
     },
 
-    send(action: TurnAction) {
+    send(action: TurnAction, entityState?: Record<string, unknown>) {
       if (!ws || !_playerId) return;
-      ws.send(JSON.stringify({ type: 'action', action }));
+      ws.send(JSON.stringify({ type: 'action', action, entityState }));
     },
 
     onStateUpdate(handler: (update: ServerStateUpdate) => void) {
@@ -141,11 +141,6 @@ export function createWebSocketTransport(url: string): ActionTransport {
     sendChat(text: string) {
       if (!ws || !_playerId) return;
       ws.send(JSON.stringify({ type: 'chat', text }));
-    },
-
-    sendMeta(meta: Record<string, unknown>) {
-      if (!ws || !_playerId) return;
-      ws.send(JSON.stringify({ type: 'player_meta', meta }));
     },
 
     sendMonsterState(monsters: MonsterNetState[]) {

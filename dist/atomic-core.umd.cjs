@@ -2852,7 +2852,18 @@
 			},
 			async commit(action) {
 				if (internal.options.transport) {
-					internal.options.transport.send(action);
+					const serverKeys = new Set([
+						"id",
+						"x",
+						"z",
+						"alive",
+						"hp",
+						"maxHp",
+						"facing"
+					]);
+					const entityState = {};
+					for (const [k, v] of Object.entries(internal.playerState.entity)) if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
+					internal.options.transport.send(action, entityState);
 					return;
 				}
 				if (!internal.turnState || !internal.dungeonOutputs) return;
@@ -3385,11 +3396,14 @@
 				await internal.animationRegistry._flush();
 				const myState = update.players[internal.playerActorId];
 				if (myState) {
-					internal.playerState.entity.x = myState.x;
-					internal.playerState.entity.z = myState.y;
-					internal.playerState.entity.hp = myState.hp;
-					internal.playerState.entity.alive = myState.alive;
-					if (myState.facing !== void 0) internal.playerState.facing = myState.facing;
+					const { x, y, hp, maxHp, alive, facing, ...extra } = myState;
+					internal.playerState.entity.x = x;
+					internal.playerState.entity.z = y;
+					internal.playerState.entity.hp = hp;
+					internal.playerState.entity.maxHp = maxHp;
+					internal.playerState.entity.alive = alive;
+					if (facing !== void 0) internal.playerState.facing = facing;
+					Object.assign(internal.playerState.entity, extra);
 				}
 				syncAllEntitiesFromTurnState(internal);
 				internal.turnCounter = update.turn;
@@ -5879,11 +5893,12 @@ void main() {
 					ws.onclose = () => {};
 				});
 			},
-			send(action) {
+			send(action, entityState) {
 				if (!ws || !_playerId) return;
 				ws.send(JSON.stringify({
 					type: "action",
-					action
+					action,
+					entityState
 				}));
 			},
 			onStateUpdate(handler) {
@@ -5907,13 +5922,6 @@ void main() {
 				ws.send(JSON.stringify({
 					type: "chat",
 					text
-				}));
-			},
-			sendMeta(meta) {
-				if (!ws || !_playerId) return;
-				ws.send(JSON.stringify({
-					type: "player_meta",
-					meta
 				}));
 			},
 			sendMonsterState(monsters) {

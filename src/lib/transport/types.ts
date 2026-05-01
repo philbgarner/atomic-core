@@ -17,7 +17,14 @@ import type { TurnAction } from '../turn/types';
 // State shapes shared between client and server
 // ---------------------------------------------------------------------------
 
-/** Network state snapshot for a single player, broadcast in every `ServerStateUpdate`. */
+/**
+ * Network state snapshot for a single player, broadcast in every `ServerStateUpdate`.
+ *
+ * The server is authoritative for `x`, `y`, `hp`, `maxHp`, `alive`, and `facing`.
+ * All other fields are relayed verbatim from the client's entity object, so peers
+ * can access developer-defined attributes (e.g. `mp`, `stamina`, `spriteName`)
+ * directly on the entity without any extra unwrapping.
+ */
 export type PlayerNetState = {
   /** Grid X position. */
   x: number;
@@ -28,8 +35,8 @@ export type PlayerNetState = {
   alive: boolean;
   /** Yaw in radians. Optional — omit when server doesn't track facing. */
   facing?: number;
-  /** Arbitrary client-defined metadata (e.g. sprite choice) broadcast to all peers. */
-  meta?: Record<string, unknown>;
+  /** Developer-defined entity fields relayed from the client. */
+  [key: string]: unknown;
 };
 
 /** Minimal monster state needed to render enemies on non-host clients. */
@@ -103,8 +110,12 @@ export type ActionTransport = {
    * Send a player action to the authoritative server instead of applying it
    * locally. Called automatically by game.turns.commit() when a transport is
    * configured.
+   *
+   * `entityState` carries the client's current entity fields (everything except
+   * server-managed position/hp/alive). The server relays these to all peers so
+   * they can read developer-defined attributes directly on the entity object.
    */
-  send(action: TurnAction): void;
+  send(action: TurnAction, entityState?: Record<string, unknown>): void;
 
   /**
    * Register a handler that fires whenever the server pushes a state update.
@@ -130,13 +141,6 @@ export type ActionTransport = {
    * Send a chat message to all players in the room.
    */
   sendChat(text: string): void;
-
-  /**
-   * Send arbitrary metadata to the server to be broadcast to all peers via
-   * the state snapshot. Useful for things like sprite choice that other
-   * clients need to know but that the server doesn't act on.
-   */
-  sendMeta(meta: Record<string, unknown>): void;
 
   /**
    * Send the current monster state to the server so it can be broadcast to

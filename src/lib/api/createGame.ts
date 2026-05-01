@@ -141,6 +141,9 @@ export type PlayerOptions = {
   attack?: number;
   defense?: number;
   speed?: number;
+  spriteName?: string;
+  faction?: string;
+  blocksMove?: boolean;
 };
 
 export type OnPlaceContext = {
@@ -767,7 +770,15 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
 
     async commit(action: TurnAction): Promise<void> {
       if (internal.options.transport) {
-        internal.options.transport.send(action);
+        // Collect developer-defined entity fields. Server-managed fields are
+        // excluded — the server is authoritative for those and will ignore them
+        // anyway, but we skip them here to avoid sending stale values.
+        const serverKeys = new Set(['id', 'x', 'z', 'alive', 'hp', 'maxHp', 'facing']);
+        const entityState: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(internal.playerState.entity)) {
+          if (!serverKeys.has(k) && typeof v !== 'function') entityState[k] = v;
+        }
+        internal.options.transport.send(action, entityState);
         return;
       }
 
@@ -1421,13 +1432,17 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
 
       const myState = update.players[internal.playerActorId];
       if (myState) {
-        internal.playerState.entity.x = myState.x;
-        internal.playerState.entity.z = myState.y;
-        (internal.playerState.entity as Record<string, unknown>).hp = myState.hp;
-        internal.playerState.entity.alive = myState.alive;
-        if (myState.facing !== undefined) {
-          internal.playerState.facing = myState.facing;
-        }
+        // Spread all fields from the server snapshot onto the entity so
+        // developer-defined attributes (mp, stamina, spriteName, etc.) are
+        // always in sync without any manual unwrapping.
+        const { x, y, hp, maxHp, alive, facing, ...extra } = myState;
+        internal.playerState.entity.x = x;
+        internal.playerState.entity.z = y;
+        (internal.playerState.entity as Record<string, unknown>).hp = hp;
+        (internal.playerState.entity as Record<string, unknown>).maxHp = maxHp;
+        internal.playerState.entity.alive = alive;
+        if (facing !== undefined) internal.playerState.facing = facing;
+        Object.assign(internal.playerState.entity, extra);
       }
 
       syncAllEntitiesFromTurnState(internal);

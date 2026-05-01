@@ -73,6 +73,9 @@ export type PlayerOptions = {
     attack?: number;
     defense?: number;
     speed?: number;
+    spriteName?: string;
+    faction?: string;
+    blocksMove?: boolean;
 };
 export type OnPlaceContext = {
     rooms: PublicRoom[];
