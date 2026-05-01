@@ -67,6 +67,12 @@
 	}
 	//#endregion
 	//#region src/lib/dungeon/bsp.ts
+	/**
+	* Convert a seed value to a 32-bit unsigned integer for use with mulberry32.
+	* Strings are hashed with FNV-1a (32-bit): XOR each char code into a running hash,
+	* then multiply by the FNV prime 0x01000193. Numbers are used directly (0 falls back
+	* to 0x12345678). `undefined` also falls back to 0x12345678.
+	*/
 	function hashSeedToUint32(seed) {
 		if (seed === void 0) return 305419896;
 		if (typeof seed === "number") return seed >>> 0 || 305419896;
@@ -77,6 +83,12 @@
 		}
 		return h >>> 0;
 	}
+	/**
+	* Mulberry32 — a fast, high-quality 32-bit PRNG.
+	* Returns a closure that yields uniformly distributed floats in [0, 1).
+	* State is a single 32-bit integer advanced each call by the Weyl constant 0x6d2b79f5,
+	* then mixed through a series of multiply-and-shift rounds.
+	*/
 	function mulberry32(seed) {
 		let t = seed >>> 0;
 		return function rand() {
@@ -87,6 +99,12 @@
 			return ((x ^ x >>> 14) >>> 0) / 4294967296;
 		};
 	}
+	/**
+	* Wrap a mulberry32 seed into a convenience RNG object with:
+	* - `next()` — float in [0, 1)
+	* - `int(min, max)` — inclusive integer in [min, max]; arguments are clamped so min ≤ max
+	* - `chance(p)` — true with probability p
+	*/
 	function makeRng$2(seedU32) {
 		const r = mulberry32(seedU32);
 		return {
@@ -105,6 +123,11 @@
 	function idx$1(x, y, w) {
 		return y * w + x;
 	}
+	/**
+	* Clear all cells within rect `r` to floor (solid=0).
+	* Out-of-bounds cells are silently skipped.
+	* When `keepOuterWalls` is true, the outermost row/column border is never cleared.
+	*/
 	function carveRect(solid, W, H, r, keepOuterWalls) {
 		for (let y = r.y; y <= r.y + r.h - 1; y++) for (let x = r.x; x <= r.x + r.w - 1; x++) {
 			if (!inBounds(x, y, W, H)) continue;
@@ -112,11 +135,23 @@
 			solid[idx$1(x, y, W)] = 0;
 		}
 	}
+	/**
+	* Clear a single cell at `p` to floor (solid=0).
+	* No-ops if `p` is out of bounds or if `keepOuterWalls` is true and the cell
+	* is on the outermost row or column.
+	*/
 	function carvePoint(solid, W, H, p, keepOuterWalls) {
 		if (!inBounds(p.x, p.y, W, H)) return;
 		if (keepOuterWalls && (p.x === 0 || p.y === 0 || p.x === W - 1 || p.y === H - 1)) return;
 		solid[idx$1(p.x, p.y, W)] = 0;
 	}
+	/**
+	* Carve a straight corridor from `a` to `b` with a square cross-section of
+	* `corridorWidth` cells. At each step a `corridorWidth × corridorWidth` square
+	* centred on the current position is cleared. Movement advances one cell per step
+	* along the dominant axis (Chebyshev walk without diagonals), so use two calls
+	* with a shared midpoint to produce L- or Z-shaped bends.
+	*/
 	function carveCorridor(solid, W, H, a, b, corridorWidth, keepOuterWalls) {
 		const w = Math.max(1, corridorWidth);
 		const dx = Math.sign(b.x - a.x);
@@ -143,6 +178,22 @@
 	function clampInt(v, lo, hi) {
 		return Math.max(lo, Math.min(hi, v));
 	}
+	/**
+	* Recursively partition `rect` using Binary Space Partitioning.
+	*
+	* Split axis selection (per node):
+	* - w/h > 1.25 → vertical split (cut along X)
+	* - w/h < 0.80 → horizontal split (cut along Y)
+	* - otherwise  → 50/50 random
+	*
+	* The split position is drawn uniformly from
+	* [start + splitPadding + minLeafSize, end − splitPadding − minLeafSize].
+	* If that range is empty the node becomes a leaf with no further splits.
+	* Recursion also stops when `depth >= maxDepth` AND the rect fits within `maxLeafSize`
+	* on both axes.
+	*
+	* Returns the root BspNode and the maximum depth actually reached.
+	*/
 	function buildBsp(rect, depth, opts, rng) {
 		const node = {
 			rect,
@@ -212,6 +263,10 @@
 			};
 		}
 	}
+	/**
+	* Call `fn` for every leaf node in a BSP tree (nodes with no children).
+	* Traversal is depth-first, left then right.
+	*/
 	function forEachLeaf(node, fn) {
 		if (!node.left && !node.right) {
 			fn(node);
@@ -226,12 +281,30 @@
 			y: rng.int(r.y, r.y + r.h - 1)
 		};
 	}
+	/**
+	* Write `idVal` into every in-bounds cell of rect `r` in the flat `regionId` array.
+	* Used to label all cells of a newly carved room with that room's region ID.
+	*/
 	function writeRegionRect(regionId, W, H, r, idVal) {
 		for (let y = r.y; y <= r.y + r.h - 1; y++) for (let x = r.x; x <= r.x + r.w - 1; x++) {
 			if (!inBounds(x, y, W, H)) continue;
 			regionId[idx$1(x, y, W)] = idVal;
 		}
 	}
+	/**
+	* Place one room rectangle inside each BSP leaf and carve it into `solid`.
+	*
+	* For each leaf the available area is the leaf rect shrunk by `roomPadding` on all sides.
+	* Room dimensions are drawn from [minRoomSize, maxRoomSize] clamped to the available area.
+	* When `rng.chance(roomFillLeafChance)` is true the room fills the entire available area.
+	* The room origin is placed at a random position that keeps it within the padded leaf.
+	*
+	* Side effects (all written in-place):
+	* - `solid`: room cells set to 0 (floor)
+	* - `regionId`: room cells labelled with an auto-incrementing ID (1–255, wraps at 256)
+	* - `floorType`: room cells set to 1 (default floor type; override via theme painting)
+	* - `leaf.room`, `leaf.roomId`, `leaf.rep` populated on every leaf node
+	*/
 	function createRooms(root, solid, regionId, floorType, W, H, opts, rng) {
 		let nextRoomId = 1;
 		forEachLeaf(root, (leaf) => {
@@ -268,6 +341,20 @@
 			}
 		});
 	}
+	/**
+	* Recursively connect BSP sibling subtrees with corridors, bottom-up.
+	*
+	* At each internal node the representative points of the left (L) and right (R)
+	* subtrees are connected:
+	* - If L and R share an X or Y coordinate, a single straight corridor is carved.
+	* - Otherwise a Z-bend is used: with 50/50 probability either
+	*   L→(R.x, L.y)→R  or  L→(L.x, R.y)→R  (two perpendicular straight segments).
+	*
+	* The adjacency graph receives a bidirectional edge between the two subtree room IDs.
+	*
+	* Returns the merged subtree's representative point and room ID (randomly chosen from
+	* L or R), which propagates upward for the next level's connection.
+	*/
 	function connectSiblings(node, solid, W, H, opts, rng, adjacency) {
 		if (!node.left && !node.right) {
 			if (!node.rep) node.rep = node.room ? rectCenter(node.room) : rectCenter(node.rect);
@@ -307,6 +394,12 @@
 			roomId: useLeft ? L.roomId : R.roomId
 		};
 	}
+	/**
+	* Build the public `rooms` Map from BSP leaf nodes and the room adjacency graph.
+	* Each leaf with a room gets a `RoomInfo` entry (type="room") whose `connections`
+	* array lists all room IDs connected to it via corridors.
+	* Corridor segment entries are appended separately by `assignCorridorRegions`.
+	*/
 	function buildRoomsMap(root, adjacency) {
 		const rooms = /* @__PURE__ */ new Map();
 		forEachLeaf(root, (leaf) => {
@@ -395,6 +488,19 @@
 			corridorRooms
 		};
 	}
+	/**
+	* Choose start and end room IDs from a room adjacency graph so they are
+	* maximally far apart, preferring dead-end rooms (rooms with exactly one neighbour).
+	*
+	* Algorithm:
+	* 1. Collect dead-end candidates (degree = 1). If none exist, use all rooms.
+	* 2. Run BFS-furthest from every candidate; the one that yields the longest
+	*    shortest-path distance to any other room becomes `endRoomId`.
+	* 3. Run BFS-furthest from `endRoomId`; the room reached last becomes `startRoomId`.
+	*
+	* Edge cases: returns `{ startRoomId: 1, endRoomId: 1 }` when the graph is empty;
+	* returns the sole room ID for both when there is only one room.
+	*/
 	function pickStartEndRooms$1(adjacency) {
 		const allRooms = Array.from(adjacency.keys());
 		if (allRooms.length === 0) return {
@@ -446,6 +552,12 @@
 			endRoomId
 		};
 	}
+	/**
+	* Multi-source BFS from all wall cells (solid !== 0).
+	* Each floor cell receives the Manhattan distance to its nearest wall cell.
+	* Values are clamped to [0, 255] and returned as a Uint8Array (same length as `solid`).
+	* Floor cells on maps with no reachable wall (degenerate input) get value 255.
+	*/
 	function computeDistanceToWall$1(solid, W, H) {
 		const dist = new Uint16Array(W * H);
 		const INF = 65535;
@@ -503,6 +615,13 @@
 		}
 		return out;
 	}
+	/**
+	* Wrap a Uint8Array as an R8 THREE.DataTexture (one byte per texel).
+	* The texture shares the buffer with `mask` — mutations to `mask` are visible
+	* after setting `tex.needsUpdate = true`.
+	* NearestFilter on both min/mag, ClampToEdge wrap, no mipmaps, no color-space
+	* conversion, flipY=false.
+	*/
 	function maskToDataTextureR8$1(mask, W, H, name) {
 		const tex = new three.DataTexture(mask, W, H, three.RedFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -516,6 +635,12 @@
 		tex.flipY = false;
 		return tex;
 	}
+	/**
+	* Wrap a Uint8Array as an RGBA8 THREE.DataTexture (4 bytes per texel).
+	* The texture shares the buffer with `mask`.
+	* NearestFilter on both min/mag, ClampToEdge wrap, no mipmaps, no color-space
+	* conversion, flipY=false.
+	*/
 	function maskToDataTextureRGBA$1(mask, W, H, name) {
 		const tex = new three.DataTexture(mask, W, H, three.RGBAFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -529,6 +654,30 @@
 		tex.flipY = false;
 		return tex;
 	}
+	/**
+	* Generate a BSP dungeon and return the full texture set as `BspDungeonOutputs`.
+	*
+	* Pipeline:
+	* 1. Hash `options.seed` to a 32-bit integer (FNV-1a for strings); seed a mulberry32 PRNG.
+	* 2. Recursively partition the map rect into a BSP tree (`buildBsp`). Split axis is chosen
+	*    by aspect ratio; position is randomised within [minLeafSize, maxLeafSize] padding.
+	* 3. Place one room per BSP leaf (`createRooms`); rooms are labelled 1..N in `regionId`
+	*    and carved into `solid`.
+	* 4. Connect sibling subtrees bottom-up with straight or Z-shaped corridors
+	*    (`connectSiblings`); the adjacency graph records all room-to-room connections.
+	* 5. Pick `startRoomId` / `endRoomId` via double-BFS on the room graph
+	*    (`pickStartEndRooms`): furthest dead-end pair preferred.
+	* 6. Flood-fill corridor floor cells into unique region IDs starting at `maxRoomId + 1`
+	*    (`assignCorridorRegions`); bake those IDs back into the `regionId` texture so every
+	*    floor cell has a non-zero region ID.
+	* 7. BFS-propagate `floorType` from room cells into unassigned corridor cells; then
+	*    propagate outward into wall cells for `wallType`.
+	* 8. Compute `distanceToWall` (multi-source BFS from all wall cells; clamped to [0, 255]).
+	* 9. Initialize remaining textures: `temperature` = 127 for floor cells, `ceilingType` = 1
+	*    for floor cells, height offsets = 128 (no offset), `colliderFlags` derived from solid.
+	*
+	* @throws if width or height ≤ 2, or if minLeafSize < 4.
+	*/
 	function generateBspDungeon(options) {
 		const opts = {
 			width: options.width,
@@ -699,6 +848,11 @@
 	}
 	//#endregion
 	//#region src/lib/dungeon/cellular.ts
+	/**
+	* Convert a seed to a 32-bit unsigned integer for use with mulberry32.
+	* Strings are hashed with FNV-1a (32-bit). Numbers are used directly.
+	* `undefined` or `0` falls back to 0x12345678.
+	*/
 	function hashSeed(seed) {
 		if (seed === void 0) return 305419896;
 		if (typeof seed === "number") return seed >>> 0 || 305419896;
@@ -709,6 +863,10 @@
 		}
 		return h >>> 0;
 	}
+	/**
+	* Create a mulberry32 PRNG from a 32-bit seed.
+	* Returns a bare `() => number` closure yielding floats uniformly in [0, 1).
+	*/
 	function makeRng$1(seedU32) {
 		let t = seedU32 >>> 0;
 		return () => {
@@ -722,6 +880,11 @@
 	function idx(x, y, W) {
 		return y * W + x;
 	}
+	/**
+	* Count wall neighbours of cell (x, y) in the Moore (8-direction) neighbourhood.
+	* Out-of-bounds positions are treated as walls, so the outer border of the grid
+	* always appears fully walled during cellular-automata smoothing passes.
+	*/
 	function countWallNeighbours(solid, x, y, W, H) {
 		let count = 0;
 		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -732,6 +895,12 @@
 		}
 		return count;
 	}
+	/**
+	* 4-connected BFS flood fill starting from cell index `startIdx`.
+	* Expands into neighbouring floor cells (solid=0) that have not yet been visited.
+	* Marks each visited cell in `visited` (caller-supplied Uint8Array) to prevent re-entry.
+	* Returns the flat indices of all cells in the connected component.
+	*/
 	function floodFill(solid, W, H, startIdx, visited) {
 		const region = [];
 		const queue = [startIdx];
@@ -755,6 +924,11 @@
 		}
 		return region;
 	}
+	/**
+	* Multi-source BFS from all wall cells (solid !== 0).
+	* Each floor cell receives the Manhattan distance to its nearest wall.
+	* Values are clamped to [0, 255] and returned as a Uint8Array (same length as `solid`).
+	*/
 	function computeDistanceToWall(solid, W, H) {
 		const dist = new Uint16Array(W * H).fill(65535);
 		const queue = new Int32Array(W * H);
@@ -799,6 +973,11 @@
 		}
 		return out;
 	}
+	/**
+	* Wrap a Uint8Array as an R8 THREE.DataTexture (one byte per texel).
+	* Shares the buffer with `mask`; set `tex.needsUpdate = true` after mutations.
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	*/
 	function maskToDataTextureR8(mask, W, H, name) {
 		const tex = new three.DataTexture(mask, W, H, three.RedFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -812,6 +991,11 @@
 		tex.flipY = false;
 		return tex;
 	}
+	/**
+	* Wrap a Uint8Array as an RGBA8 THREE.DataTexture (4 bytes per texel).
+	* Shares the buffer with `mask`; set `tex.needsUpdate = true` after mutations.
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	*/
 	function maskToDataTextureRGBA(mask, W, H, name) {
 		const tex = new three.DataTexture(mask, W, H, three.RGBAFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -826,10 +1010,22 @@
 		return tex;
 	}
 	/**
-	* Assign Voronoi room IDs by doing a multi-source BFS from the local maxima of
-	* the distanceToWall field. Each local maximum seeds one "room"; every reachable
-	* floor cell is claimed by the nearest seed. The regionId array (1..N, 0 = wall)
-	* is written in-place and the full room graph is returned.
+	* Assign Voronoi room IDs by multi-source BFS seeded from strict local maxima of
+	* the `distanceToWall` field.
+	*
+	* Seed selection: a floor cell is a seed if its `distanceToWall` value strictly exceeds
+	* all four 4-connected neighbours AND is ≥ MIN_SEED_DIST (2). If no seeds pass that
+	* threshold, the single cell with the highest `distanceToWall` is used as a fallback.
+	* Room count is capped at 254 to keep region IDs within an R8 texture (0=wall, 1..254=room).
+	*
+	* Voronoi expansion: all seeds are enqueued simultaneously and BFS claims each unvisited
+	* floor cell for the seed that reaches it first, producing contiguous Voronoi regions.
+	* Because the cellular dungeon has no explicit corridors, `firstCorridorRegionId = N + 1`
+	* and no corridor entries are added to the `rooms` map.
+	*
+	* Bounding rects and the adjacency graph (two regions are adjacent if they share a border
+	* cell) are computed in a single scan pass after expansion.
+	* `startRoomId` / `endRoomId` are then chosen via `pickStartEndRooms`.
 	*/
 	function buildVoronoiRooms(solid, dtw, W, H) {
 		const MIN_SEED_DIST = 2;
@@ -937,6 +1133,15 @@
 			endRoomId
 		};
 	}
+	/**
+	* Choose start and end room IDs from a room adjacency graph so they are maximally
+	* far apart, preferring dead-end rooms (degree = 1).
+	*
+	* Algorithm (identical to BSP):
+	* 1. Collect dead-end candidates (degree = 1); fall back to all rooms if none exist.
+	* 2. BFS-furthest from every candidate; the one yielding the longest path becomes `endRoomId`.
+	* 3. BFS-furthest from `endRoomId` gives `startRoomId`.
+	*/
 	function pickStartEndRooms(adjacency) {
 		const allRooms = Array.from(adjacency.keys());
 		if (allRooms.length === 0) return {
@@ -987,9 +1192,24 @@
 		};
 	}
 	/**
-	* Generate a cellular-automata cave dungeon.
-	* Unlike BSP, there is no explicit room graph; use regionId for flood-fill regions.
-	* Pass the output directly to generateContent() as it shares the same texture layout.
+	* Generate a cellular-automata cave dungeon and return the full texture set.
+	*
+	* Pipeline:
+	* 1. Seed the mulberry32 PRNG from `options.seed` (FNV-1a for strings).
+	* 2. Fill the grid randomly: each interior cell becomes wall with probability `fillProbability`.
+	*    Outer border is always wall when `keepOuterWalls` is true.
+	* 3. Smooth `iterations` times using Moore-neighbourhood rules:
+	*    - Floor cell: becomes wall if wall-neighbour count ≥ `birthThreshold`.
+	*    - Wall cell: stays wall if wall-neighbour count ≥ `survivalThreshold`; otherwise → floor.
+	* 4. Identify all 4-connected floor regions via flood fill; keep only the largest and
+	*    re-solidify all others (eliminates disconnected pockets).
+	* 5. Compute `distanceToWall` (multi-source BFS from all wall cells), then derive Voronoi
+	*    room IDs from its strict 4-connected local maxima (`buildVoronoiRooms`).
+	*    `startRoomId` / `endRoomId` are chosen via double-BFS on the room adjacency graph.
+	*
+	* Output is compatible with `generateContent`, `aStar8`, `computeFov`, and all rendering
+	* APIs. Unlike BSP, corridor entries are not added to `rooms`; `firstCorridorRegionId = N + 1`.
+	* @throws if width or height ≤ 2.
 	*/
 	function generateCellularDungeon(options) {
 		const W = options.width;
@@ -1070,6 +1290,11 @@
 	}
 	//#endregion
 	//#region src/lib/dungeon/tiled.ts
+	/**
+	* Create an R8 DataTexture from a Uint8Array (one byte per texel).
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	* Shares the buffer with `data`; set `tex.needsUpdate = true` after mutations.
+	*/
 	function r8Texture(data, W, H, name) {
 		const tex = new three.DataTexture(data, W, H, three.RedFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -1083,6 +1308,11 @@
 		tex.flipY = false;
 		return tex;
 	}
+	/**
+	* Create an RGBA DataTexture from a Uint8Array (4 bytes per texel).
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	* Shares the buffer with `data`; set `tex.needsUpdate = true` after mutations.
+	*/
 	function rgbaTexture(data, W, H, name) {
 		const tex = new three.DataTexture(data, W, H, three.RGBAFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -3953,26 +4183,53 @@ void main() {
 	//#region src/lib/rendering/billboardSprites.ts
 	var BILLBOARD_VERT = `
 varying vec2 vUv;
+varying float vFogDist;
+varying vec3 vViewPos;
+
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 eyePos = modelViewMatrix * vec4(position, 1.0);
+  vFogDist = length(eyePos.xyz);
+  vViewPos = eyePos.xyz;
+  gl_Position = projectionMatrix * eyePos;
 }
 `;
 	var BILLBOARD_FRAG = `
+#include <common>
+#include <lights_pars_begin>
+
 uniform sampler2D uAtlas;
 uniform float uUvX;
 uniform float uUvY;
 uniform float uUvW;
 uniform float uUvH;
 uniform float uOpacity;
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
 
 varying vec2 vUv;
+varying float vFogDist;
+varying vec3 vViewPos;
 
 void main() {
   vec2 atlasUv = vec2(uUvX + vUv.x * uUvW, uUvY + vUv.y * uUvH);
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
-  gl_FragColor = vec4(color.rgb, color.a * uOpacity);
+
+  vec3 lightAccum = ambientLightColor;
+  #if NUM_POINT_LIGHTS > 0
+    for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+      vec3 lVec = pointLights[i].position - vViewPos;
+      float atten = getDistanceAttenuation(
+        length(lVec), pointLights[i].distance, pointLights[i].decay);
+      lightAccum += pointLights[i].color * atten;
+    }
+  #endif
+  color.rgb *= lightAccum;
+
+  float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
+  gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a * uOpacity);
 }
 `;
 	var ANGLE_KEYS = [
@@ -3993,7 +4250,7 @@ void main() {
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
 	*/
-	function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize = 64) {
+	function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
 		const { spriteMap } = entity;
 		const group = new three.Group();
 		scene.add(group);
@@ -4020,21 +4277,26 @@ void main() {
 		}
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
 			const rect = getRect(layer.tile);
-			const uniforms = {
+			const appUniforms = {
 				uAtlas: { value: atlasTex },
 				uUvX: { value: rect.x },
 				uUvY: { value: rect.y },
 				uUvW: { value: rect.w },
 				uUvH: { value: rect.h },
-				uOpacity: { value: layer.opacity ?? 1 }
+				uOpacity: { value: layer.opacity ?? 1 },
+				uFogColor: { value: fog.color ?? new three.Color(0, 0, 0) },
+				uFogNear: { value: fog.near ?? 5 },
+				uFogFar: { value: fog.far ?? 24 }
 			};
+			const uniforms = three.UniformsUtils.merge([three.UniformsLib.lights, appUniforms]);
 			const mat = new three.ShaderMaterial({
 				vertexShader: BILLBOARD_VERT,
 				fragmentShader: BILLBOARD_FRAG,
 				uniforms,
 				transparent: true,
 				depthWrite: false,
-				side: three.DoubleSide
+				side: three.DoubleSide,
+				lights: true
 			});
 			const geo = new three.PlaneGeometry(1, 1);
 			const mesh = new three.Mesh(geo, mat);
@@ -4045,7 +4307,7 @@ void main() {
 			group.add(mesh);
 			return {
 				mesh,
-				uniforms,
+				uniforms: appUniforms,
 				baseLayer: layer,
 				layerIndex
 			};
@@ -5093,7 +5355,11 @@ void main() {
 						spriteMap: obj.spriteMap,
 						type: obj.type
 					};
-					objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver));
+					objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver, 64, {
+						color: fogColor,
+						near: fogNear,
+						far: fogFar
+					}));
 				}
 			}
 		}
@@ -5111,7 +5377,11 @@ void main() {
 				if (!e.alive) continue;
 				if (e.spriteMap) {
 					if (!billboardMap.has(e.id) && packedAtlas) {
-						const handle = createBillboard(e, packedAtlas, scene, resolver);
+						const handle = createBillboard(e, packedAtlas, scene, resolver, 64, {
+							color: fogColor,
+							near: fogNear,
+							far: fogFar
+						});
 						billboardMap.set(e.id, handle);
 					}
 				} else {
@@ -6284,20 +6554,27 @@ void main() {
 	}
 	//#endregion
 	//#region src/lib/dungeon/serialize.ts
+	/** Encode a Uint8Array to a base64 string suitable for JSON storage. */
 	function uint8ToBase64(data) {
 		let binary = "";
 		for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i]);
 		return btoa(binary);
 	}
+	/** Decode a base64 string produced by `uint8ToBase64` back to a Uint8Array. */
 	function base64ToUint8(str) {
 		const binary = atob(str);
 		const out = new Uint8Array(binary.length);
 		for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
 		return out;
 	}
+	/** Extract the raw pixel buffer from a DataTexture as a Uint8Array. */
 	function textureData(tex) {
 		return tex.image.data;
 	}
+	/**
+	* Reconstruct an R8 DataTexture from a raw byte array.
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	*/
 	function makeDataTexture(data, W, H, name) {
 		const tex = new three.DataTexture(data, W, H, three.RedFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -6311,6 +6588,10 @@ void main() {
 		tex.flipY = false;
 		return tex;
 	}
+	/**
+	* Reconstruct an RGBA DataTexture from a raw byte array.
+	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
+	*/
 	function makeDataTextureRGBA(data, W, H, name) {
 		const tex = new three.DataTexture(data, W, H, three.RGBAFormat, three.UnsignedByteType);
 		tex.name = name;
@@ -6416,6 +6697,11 @@ void main() {
 	}
 	//#endregion
 	//#region src/lib/dungeon/mapFile.ts
+	/**
+	* Strip non-JSON-serializable fields from DungeonRendererOptions before embedding in a map file.
+	* Removed: `packedAtlas` (binary atlas data), `tileNameResolver` (function),
+	* `onCellClick` and `onCellHover` (event callbacks). All remaining options are plain JSON.
+	*/
 	function stripNonSerializable(opts) {
 		const { packedAtlas: _pa, tileNameResolver: _tnr, onCellClick: _occ, onCellHover: _och, ...rest } = opts;
 		return rest;
@@ -6448,9 +6734,10 @@ void main() {
 	* Reconstruct a dungeon from a DungeonMapFile.
 	*
 	* The returned `dungeon` is ready to pass to buildDungeon / syncEntities.
-	* Note: surface-painter overlays are zeroed on import (not serialized) —
-	* call game.dungeon.paint() to reapply them.
-	* Re-supply packedAtlas and tileNameResolver when creating the renderer.
+	* If the file contained surface-painter overlays they are returned in `result.paintMap`
+	* as plain strings — re-apply them via `game.dungeon.paint(x, z, target)` after
+	* `game.generate()`. Re-supply `packedAtlas` and `tileNameResolver` when creating
+	* the renderer.
 	*/
 	function importDungeonMap(data) {
 		return {

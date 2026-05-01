@@ -1718,7 +1718,7 @@ export function createDungeonRenderer(
           spriteMap: obj.spriteMap,
           type: obj.type,
         };
-        objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver));
+        objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver, 64, { color: fogColor, near: fogNear, far: fogFar }));
       }
     }
   }
@@ -1750,6 +1750,8 @@ export function createDungeonRenderer(
             packedAtlas,
             scene,
             resolver,
+            64,
+            { color: fogColor, near: fogNear, far: fogFar },
           );
           billboardMap.set(e.id, handle);
         }

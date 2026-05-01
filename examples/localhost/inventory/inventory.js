@@ -5,7 +5,7 @@
 
 const {
   createGame,
-  createEnemy,
+  createEntity,
   attachSpawner,
   attachKeybindings,
   createDungeonRenderer,

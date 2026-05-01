@@ -74,27 +74,54 @@ export interface SpriteMap {
 
 const BILLBOARD_VERT = /* glsl */ `
 varying vec2 vUv;
+varying float vFogDist;
+varying vec3 vViewPos;
+
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 eyePos = modelViewMatrix * vec4(position, 1.0);
+  vFogDist = length(eyePos.xyz);
+  vViewPos = eyePos.xyz;
+  gl_Position = projectionMatrix * eyePos;
 }
 `;
 
 const BILLBOARD_FRAG = /* glsl */ `
+#include <common>
+#include <lights_pars_begin>
+
 uniform sampler2D uAtlas;
 uniform float uUvX;
 uniform float uUvY;
 uniform float uUvW;
 uniform float uUvH;
 uniform float uOpacity;
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
 
 varying vec2 vUv;
+varying float vFogDist;
+varying vec3 vViewPos;
 
 void main() {
   vec2 atlasUv = vec2(uUvX + vUv.x * uUvW, uUvY + vUv.y * uUvH);
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
-  gl_FragColor = vec4(color.rgb, color.a * uOpacity);
+
+  vec3 lightAccum = ambientLightColor;
+  #if NUM_POINT_LIGHTS > 0
+    for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+      vec3 lVec = pointLights[i].position - vViewPos;
+      float atten = getDistanceAttenuation(
+        length(lVec), pointLights[i].distance, pointLights[i].decay);
+      lightAccum += pointLights[i].color * atten;
+    }
+  #endif
+  color.rgb *= lightAccum;
+
+  float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
+  gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a * uOpacity);
 }
 `;
 
@@ -145,6 +172,12 @@ function selectAngleKey(entityFacing: number, cameraYaw: number): AngleKey {
 // Billboard factory
 // ---------------------------------------------------------------------------
 
+export interface BillboardFog {
+  color?: THREE.Color;
+  near?: number;
+  far?: number;
+}
+
 /**
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
@@ -155,6 +188,7 @@ export function createBillboard(
   scene: THREE.Scene,
   resolver?: (name: string) => number,
   expectedFrameSize: number = 64, // Expected tile size is 64 pixels by default.
+  fog: BillboardFog = {},
 ): BillboardHandle {
   const { spriteMap } = entity;
   const group = new THREE.Group();
@@ -180,14 +214,21 @@ export function createBillboard(
   const layerEntries: LayerMeshEntry[] = spriteMap.layers.map(
     (layer, layerIndex) => {
       const rect = getRect(layer.tile);
-      const uniforms = {
+      const appUniforms = {
         uAtlas: { value: atlasTex },
         uUvX: { value: rect.x },
         uUvY: { value: rect.y },
         uUvW: { value: rect.w },
         uUvH: { value: rect.h },
         uOpacity: { value: layer.opacity ?? 1 },
+        uFogColor: { value: fog.color ?? new THREE.Color(0, 0, 0) },
+        uFogNear: { value: fog.near ?? 5 },
+        uFogFar: { value: fog.far ?? 24 },
       };
+      const uniforms = THREE.UniformsUtils.merge([
+        THREE.UniformsLib.lights,
+        appUniforms,
+      ]);
 
       const mat = new THREE.ShaderMaterial({
         vertexShader: BILLBOARD_VERT,
@@ -196,6 +237,7 @@ export function createBillboard(
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
+        lights: true,
       });
 
       const geo = new THREE.PlaneGeometry(1, 1);
@@ -211,7 +253,7 @@ export function createBillboard(
       mesh.scale.set(s, s, 1);
 
       group.add(mesh);
-      return { mesh, uniforms, baseLayer: layer, layerIndex };
+      return { mesh, uniforms: appUniforms, baseLayer: layer, layerIndex };
     },
   );
 

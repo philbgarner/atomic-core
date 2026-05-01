@@ -13,7 +13,7 @@
 
 const {
   createGame,
-  createEnemy,
+  createEntity,
   attachSpawner,
   attachKeybindings,
   createDungeonRenderer,
@@ -158,9 +158,11 @@ attachSpawner(game, {
     const def = TYPES[spawned % TYPES.length];
     spawned++;
 
-    const e = createEnemy({
+    const e = createEntity({
+      kind: "enemy",
+      faction: "enemy",
       type: def.type,
-      sprite: def.type,
+      spriteName: def.type,
       x,
       z: y,
       hp: 8,

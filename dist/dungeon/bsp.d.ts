@@ -166,6 +166,30 @@ export declare function buildFullRegionIds(regionIdData: Uint8Array, solidData: 
     fullRegionIds: Uint8Array;
     corridorRegionIds: number[];
 };
+/**
+ * Generate a BSP dungeon and return the full texture set as `BspDungeonOutputs`.
+ *
+ * Pipeline:
+ * 1. Hash `options.seed` to a 32-bit integer (FNV-1a for strings); seed a mulberry32 PRNG.
+ * 2. Recursively partition the map rect into a BSP tree (`buildBsp`). Split axis is chosen
+ *    by aspect ratio; position is randomised within [minLeafSize, maxLeafSize] padding.
+ * 3. Place one room per BSP leaf (`createRooms`); rooms are labelled 1..N in `regionId`
+ *    and carved into `solid`.
+ * 4. Connect sibling subtrees bottom-up with straight or Z-shaped corridors
+ *    (`connectSiblings`); the adjacency graph records all room-to-room connections.
+ * 5. Pick `startRoomId` / `endRoomId` via double-BFS on the room graph
+ *    (`pickStartEndRooms`): furthest dead-end pair preferred.
+ * 6. Flood-fill corridor floor cells into unique region IDs starting at `maxRoomId + 1`
+ *    (`assignCorridorRegions`); bake those IDs back into the `regionId` texture so every
+ *    floor cell has a non-zero region ID.
+ * 7. BFS-propagate `floorType` from room cells into unassigned corridor cells; then
+ *    propagate outward into wall cells for `wallType`.
+ * 8. Compute `distanceToWall` (multi-source BFS from all wall cells; clamped to [0, 255]).
+ * 9. Initialize remaining textures: `temperature` = 127 for floor cells, `ceilingType` = 1
+ *    for floor cells, height offsets = 128 (no offset), `colliderFlags` derived from solid.
+ *
+ * @throws if width or height ≤ 2, or if minLeafSize < 4.
+ */
 export declare function generateBspDungeon(options: BspDungeonOptions): BspDungeonOutputs;
 /**
  * Write floor skirt overlay tile IDs for a single cell.

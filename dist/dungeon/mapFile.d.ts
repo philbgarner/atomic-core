@@ -105,9 +105,10 @@ export declare function dungeonMapToJson(dungeon: BspDungeonOutputs, options: Ex
  * Reconstruct a dungeon from a DungeonMapFile.
  *
  * The returned `dungeon` is ready to pass to buildDungeon / syncEntities.
- * Note: surface-painter overlays are zeroed on import (not serialized) —
- * call game.dungeon.paint() to reapply them.
- * Re-supply packedAtlas and tileNameResolver when creating the renderer.
+ * If the file contained surface-painter overlays they are returned in `result.paintMap`
+ * as plain strings — re-apply them via `game.dungeon.paint(x, z, target)` after
+ * `game.generate()`. Re-supply `packedAtlas` and `tileNameResolver` when creating
+ * the renderer.
  */
 export declare function importDungeonMap(data: DungeonMapFile): ImportResult;
 /**

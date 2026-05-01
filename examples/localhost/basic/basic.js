@@ -4,7 +4,7 @@
 
 const {
   createGame,
-  createEnemy,
+  createEntity,
   attachSpawner,
   attachKeybindings,
   createDungeonRenderer,
@@ -102,9 +102,11 @@ attachSpawner(game, {
     if (roomId < 2) return null;
     if (Math.random() > 0.55) return null;
     spawned++;
-    const e = createEnemy({
+    const e = createEntity({
+      kind: "enemy",
+      faction: "enemy",
       type: "goblin",
-      sprite: "g",
+      spriteName: "g",
       x,
       z: y,
       hp: 8,

@@ -60,11 +60,17 @@ export interface BillboardHandle {
     /** Remove meshes from scene and dispose GPU resources. */
     dispose(): void;
 }
+export interface BillboardFog {
+    color?: THREE.Color;
+    near?: number;
+    far?: number;
+}
 /**
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
  */
 export declare function createBillboard(entity: EntityBase & {
     spriteMap: SpriteMap;
-}, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number): BillboardHandle;
+}, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number, // Expected tile size is 64 pixels by default.
+fog?: BillboardFog): BillboardHandle;
 //# sourceMappingURL=billboardSprites.d.ts.map

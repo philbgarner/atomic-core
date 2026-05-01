@@ -12,7 +12,7 @@
 
 const {
   createGame,
-  createEnemy,
+  createEntity,
   attachSpawner,
   attachKeybindings,
   attachMinimap,
@@ -325,9 +325,11 @@ async function startGame(
         if (roomId < 2) return null;
         if (Math.random() > 0.75) return null;
         spawned++;
-        const e = createEnemy({
+        const e = createEntity({
+          kind: "enemy",
+          faction: "enemy",
           type: "goblin",
-          sprite: "g",
+          spriteName: "g",
           x,
           z: y,
           hp: 8,
@@ -337,7 +339,6 @@ async function startGame(
           speed: 6,
           danger: 1,
           xp: 10,
-          faction: "enemy",
           spriteMap: {
             frameSize: { w: 64, h: 64 },
             layers: [
