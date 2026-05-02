@@ -4,14 +4,14 @@
 
 > **PackedAtlas** = `object`
 
-Defined in: [rendering/textureLoader.ts:57](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/rendering/textureLoader.ts#L57)
+Defined in: [rendering/textureLoader.ts:57](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/textureLoader.ts#L57)
 
 ## Properties
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="sprites"></a> `sprites` | `Map`\<`string`, [`PackedSprite`](PackedSprite.md)\> | Full name → sprite map for direct lookups. | [rendering/textureLoader.ts:61](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/rendering/textureLoader.ts#L61) |
-| <a id="texture"></a> `texture` | `HTMLCanvasElement` \| `OffscreenCanvas` | The baked output texture (OffscreenCanvas when available, else HTMLCanvasElement). | [rendering/textureLoader.ts:59](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/rendering/textureLoader.ts#L59) |
+| <a id="sprites"></a> `sprites` | `Map`\<`string`, [`PackedSprite`](PackedSprite.md)\> | Full name → sprite map for direct lookups. | [rendering/textureLoader.ts:61](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/textureLoader.ts#L61) |
+| <a id="texture"></a> `texture` | `HTMLCanvasElement` \| `OffscreenCanvas` | The baked output texture (OffscreenCanvas when available, else HTMLCanvasElement). | [rendering/textureLoader.ts:59](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/textureLoader.ts#L59) |
 
 ## Methods
 
@@ -19,7 +19,7 @@ Defined in: [rendering/textureLoader.ts:57](https://github.com/philbgarner/atomi
 
 > **getById**(`id`): [`PackedSprite`](PackedSprite.md) \| `undefined`
 
-Defined in: [rendering/textureLoader.ts:64](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/rendering/textureLoader.ts#L64)
+Defined in: [rendering/textureLoader.ts:64](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/textureLoader.ts#L64)
 
 Look up by insertion-order index (same as tileId).
 
@@ -39,7 +39,7 @@ Look up by insertion-order index (same as tileId).
 
 > **getByName**(`name`): [`PackedSprite`](PackedSprite.md) \| `undefined`
 
-Defined in: [rendering/textureLoader.ts:62](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/rendering/textureLoader.ts#L62)
+Defined in: [rendering/textureLoader.ts:62](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/textureLoader.ts#L62)
 
 #### Parameters
 

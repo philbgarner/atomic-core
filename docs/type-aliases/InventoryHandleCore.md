@@ -4,7 +4,7 @@
 
 > **InventoryHandleCore** = `object`
 
-Defined in: [ui/inventoryDialog.ts:146](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L146)
+Defined in: [ui/inventoryDialog.ts:146](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L146)
 
 Core handle — always present regardless of customLayout.
 
@@ -14,7 +14,7 @@ Core handle — always present regardless of customLayout.
 
 > **close**(): `void`
 
-Defined in: [ui/inventoryDialog.ts:147](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L147)
+Defined in: [ui/inventoryDialog.ts:147](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L147)
 
 #### Returns
 
@@ -26,7 +26,7 @@ Defined in: [ui/inventoryDialog.ts:147](https://github.com/philbgarner/atomic-co
 
 > **getElement**(): `HTMLDialogElement`
 
-Defined in: [ui/inventoryDialog.ts:149](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L149)
+Defined in: [ui/inventoryDialog.ts:149](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L149)
 
 #### Returns
 
@@ -38,7 +38,7 @@ Defined in: [ui/inventoryDialog.ts:149](https://github.com/philbgarner/atomic-co
 
 > **isOpen**(): `boolean`
 
-Defined in: [ui/inventoryDialog.ts:148](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L148)
+Defined in: [ui/inventoryDialog.ts:148](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L148)
 
 #### Returns
 
@@ -50,7 +50,7 @@ Defined in: [ui/inventoryDialog.ts:148](https://github.com/philbgarner/atomic-co
 
 > **off**(`event`, `cb`): `void`
 
-Defined in: [ui/inventoryDialog.ts:151](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L151)
+Defined in: [ui/inventoryDialog.ts:151](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L151)
 
 #### Parameters
 
@@ -69,7 +69,7 @@ Defined in: [ui/inventoryDialog.ts:151](https://github.com/philbgarner/atomic-co
 
 > **on**(`event`, `cb`): `void`
 
-Defined in: [ui/inventoryDialog.ts:150](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L150)
+Defined in: [ui/inventoryDialog.ts:150](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L150)
 
 #### Parameters
 

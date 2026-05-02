@@ -4,7 +4,7 @@
 
 > **importDungeonMap**(`data`): [`ImportResult`](../type-aliases/ImportResult.md)
 
-Defined in: [dungeon/mapFile.ts:168](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L168)
+Defined in: [dungeon/mapFile.ts:168](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L168)
 
 Reconstruct a dungeon from a DungeonMapFile.
 

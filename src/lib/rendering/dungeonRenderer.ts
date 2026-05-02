@@ -505,6 +505,7 @@ function buildInstancedMesh(
   cellZ?: Float32Array,
   aoCorners?: Float32Array,
   faceNormals?: Float32Array,
+  rowIndexes?: number[],
 ): THREE.InstancedMesh {
   const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -543,6 +544,13 @@ function buildInstancedMesh(
       cellFaceArr[i * 4 + 3] = faceNormals ? (faceNormals[i * 2+1] ?? 0) : 0;
     }
     geo.setAttribute("aCellFace", new THREE.InstancedBufferAttribute(cellFaceArr, 4));
+
+    // aRowIndex (float, 1 slot): per-panel row index for uBaseOverride lookup.
+    const rowArr = new Float32Array(n);
+    if (rowIndexes) {
+      for (let i = 0; i < n; i++) rowArr[i] = rowIndexes[i] ?? 0;
+    }
+    geo.setAttribute("aRowIndex", new THREE.InstancedBufferAttribute(rowArr, 1));
   }
 
   const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
@@ -720,6 +728,10 @@ export function createDungeonRenderer(
   let overlayFloor: OverlaySurface = defSurf;
   let overlayWall:  OverlaySurface = defSurf;
   let overlayCeil:  OverlaySurface = defSurf;
+  let overrideCeilSkirt:  OverlaySurface = defSurf;
+  let overrideFloorSkirt: OverlaySurface = defSurf;
+  let overrideSkyPanels:  OverlaySurface = defSurf;
+  let overrideCeilPanels: OverlaySurface = defSurf;
 
   function makeOverlayTex(data: Uint8Array, width: number, height: number): THREE.DataTexture {
     const t = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -730,13 +742,17 @@ export function createDungeonRenderer(
     return t;
   }
 
-  /** Rebuild all three per-surface overlay textures from the current paintMap. */
+  /** Rebuild all per-surface overlay and base-override textures from the current paintMap. */
   function rebuildOverlayTexture(width: number, height: number): void {
     if (!resolver) return;
     const n = width * height * 4;
-    const fd = new Uint8Array(n);
-    const wd = new Uint8Array(n);
-    const cd = new Uint8Array(n);
+    const fd  = new Uint8Array(n);
+    const wd  = new Uint8Array(n);
+    const cd  = new Uint8Array(n);
+    const csd = new Uint8Array(n);
+    const fsd = new Uint8Array(n);
+    const spd = new Uint8Array(n);
+    const cpd = new Uint8Array(n);
 
     for (const [key, paint] of game.dungeon.paintMap) {
       const comma = key.indexOf(',');
@@ -749,24 +765,47 @@ export function createDungeonRenderer(
         for (let i = 0; i < Math.min(layers.length, 4); i++)
           arr[idx + i] = resolver!(layers[i]!) & 0xFF;
       };
+      const writeNullable = (arr: Uint8Array, layers: (string | null)[] | undefined) => {
+        if (!layers) return;
+        for (let i = 0; i < Math.min(layers.length, 4); i++) {
+          const name = layers[i];
+          arr[idx + i] = (name != null) ? (resolver!(name) & 0xFF) : 0;
+        }
+      };
       write(fd, paint.floor);
       write(wd, paint.wall);
       write(cd, paint.ceil);
+      writeNullable(csd, paint.ceilSkirtBase);
+      writeNullable(fsd, paint.floorSkirtBase);
+      writeNullable(spd, paint.skyPanels);
+      writeNullable(cpd, paint.ceilingPanels);
     }
 
-    if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
-    if (overlayWall  !== defSurf) overlayWall.tex.dispose();
-    if (overlayCeil  !== defSurf) overlayCeil.tex.dispose();
+    if (overlayFloor      !== defSurf) overlayFloor.tex.dispose();
+    if (overlayWall       !== defSurf) overlayWall.tex.dispose();
+    if (overlayCeil       !== defSurf) overlayCeil.tex.dispose();
+    if (overrideCeilSkirt  !== defSurf) overrideCeilSkirt.tex.dispose();
+    if (overrideFloorSkirt !== defSurf) overrideFloorSkirt.tex.dispose();
+    if (overrideSkyPanels  !== defSurf) overrideSkyPanels.tex.dispose();
+    if (overrideCeilPanels !== defSurf) overrideCeilPanels.tex.dispose();
 
-    overlayFloor = { tex: makeOverlayTex(fd, width, height), data: fd };
-    overlayWall  = { tex: makeOverlayTex(wd, width, height), data: wd };
-    overlayCeil  = { tex: makeOverlayTex(cd, width, height), data: cd };
+    overlayFloor      = { tex: makeOverlayTex(fd,  width, height), data: fd  };
+    overlayWall       = { tex: makeOverlayTex(wd,  width, height), data: wd  };
+    overlayCeil       = { tex: makeOverlayTex(cd,  width, height), data: cd  };
+    overrideCeilSkirt  = { tex: makeOverlayTex(csd, width, height), data: csd };
+    overrideFloorSkirt = { tex: makeOverlayTex(fsd, width, height), data: fsd };
+    overrideSkyPanels  = { tex: makeOverlayTex(spd, width, height), data: spd };
+    overrideCeilPanels = { tex: makeOverlayTex(cpd, width, height), data: cpd };
   }
 
-  /** Update one cell in-place across all three overlay textures. */
+  /** Update one cell in-place across all overlay and base-override textures. */
   function updateOverlayCell(
     x: number, z: number,
-    paint: { floor?: string[]; wall?: string[]; ceil?: string[] },
+    paint: {
+      floor?: string[]; wall?: string[]; ceil?: string[];
+      ceilSkirtBase?: (string | null)[]; floorSkirtBase?: (string | null)[];
+      skyPanels?: (string | null)[]; ceilingPanels?: (string | null)[];
+    },
   ): void {
     if (!resolver) return;
     const outputs = game.dungeon.outputs;
@@ -781,9 +820,22 @@ export function createDungeonRenderer(
         surf.data[idx + i] = resolver!(layers[i]!) & 0xFF;
       surf.tex.needsUpdate = true;
     };
+    const writeNullable = (surf: OverlaySurface, layers: (string | null)[] | undefined) => {
+      if (layers === undefined) return;
+      surf.data[idx] = surf.data[idx+1] = surf.data[idx+2] = surf.data[idx+3] = 0;
+      for (let i = 0; i < Math.min(layers.length, 4); i++) {
+        const name = layers[i];
+        surf.data[idx + i] = (name != null) ? (resolver!(name) & 0xFF) : 0;
+      }
+      surf.tex.needsUpdate = true;
+    };
     write(overlayFloor, paint.floor);
     write(overlayWall,  paint.wall);
     write(overlayCeil,  paint.ceil);
+    writeNullable(overrideCeilSkirt,  paint.ceilSkirtBase);
+    writeNullable(overrideFloorSkirt, paint.floorSkirtBase);
+    writeNullable(overrideSkyPanels,  paint.skyPanels);
+    writeNullable(overrideCeilPanels, paint.ceilingPanels);
   }
 
   function setSkirtLookupUniform(mat: THREE.Material, tex: THREE.DataTexture): void {
@@ -799,6 +851,18 @@ export function createDungeonRenderer(
     setSkirtLookupUniform(ceilEdgeMat,       outputs.textures.ceilSkirtType);
     setSkirtLookupUniform(floorWallSkirtMat, outputs.textures.floorSkirtType);
     setSkirtLookupUniform(ceilWallSkirtMat,  outputs.textures.ceilSkirtType);
+  }
+
+  function syncBaseOverrideUniforms(): void {
+    function set(mat: THREE.Material, tex: THREE.DataTexture) {
+      if (!(mat instanceof THREE.ShaderMaterial)) return;
+      const u = mat.uniforms;
+      if (u['uBaseOverride']) u['uBaseOverride'].value = tex;
+    }
+    set(ceilWallSkirtMat,  overrideCeilSkirt.tex);
+    set(floorWallSkirtMat, overrideFloorSkirt.tex);
+    set(skyPanelMat,       overrideSkyPanels.tex);
+    set(ceilingPanelMat,   overrideCeilPanels.tex);
   }
 
   /** Push per-surface overlay textures into their respective atlas materials. */
@@ -819,6 +883,8 @@ export function createDungeonRenderer(
     set(ceilEdgeMat,       overlayCeil.tex);
     set(floorWallSkirtMat, overlayWall.tex);
     set(ceilWallSkirtMat,  overlayWall.tex);
+    set(skyPanelMat,       overlayWall.tex);
+    set(ceilingPanelMat,   overlayWall.tex);
   }
 
   function makeAtlasMaterial(surfaceLight = 1.0): THREE.ShaderMaterial {
@@ -881,6 +947,12 @@ export function createDungeonRenderer(
   const ceilWallSkirtMat = packedAtlas
     ? makeAtlasMaterial(-1.0)
     : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
+  const skyPanelMat = packedAtlas
+    ? makeAtlasMaterial(-1.0)
+    : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
+  const ceilingPanelMat = packedAtlas
+    ? makeAtlasMaterial(-1.0)
+    : new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 
   // ── Dungeon geometry ──────────────────────────────────────────────────────
   let floorMesh: THREE.InstancedMesh | null = null;
@@ -890,6 +962,8 @@ export function createDungeonRenderer(
   let ceilEdgeMesh: THREE.InstancedMesh | null = null;
   let floorWallSkirtMesh: THREE.InstancedMesh | null = null;
   let ceilWallSkirtMesh: THREE.InstancedMesh | null = null;
+  let skyPanelMesh: THREE.InstancedMesh | null = null;
+  let ceilingPanelMesh: THREE.InstancedMesh | null = null;
   let dungeonBuilt = false;
 
   // Parallel cell-index arrays: entry i gives the grid cell for instance i.
@@ -902,6 +976,8 @@ export function createDungeonRenderer(
   let ceilEdgeCellMap: CellRef[] = [];
   let floorWallSkirtCellMap: CellRef[] = [];
   let ceilWallSkirtCellMap: CellRef[] = [];
+  let skyPanelCellMap: CellRef[] = [];
+  let ceilingPanelCellMap: CellRef[] = [];
   // Fast lookup: InstancedMesh → its cell array.
   const meshToCellMap = new Map<THREE.InstancedMesh, CellRef[]>();
 
@@ -1191,6 +1267,8 @@ export function createDungeonRenderer(
     const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data as
       | Uint8Array
       | undefined;
+    const skyPanelCountData = outputs.textures.skyPanelCount?.image.data as Uint8Array | undefined;
+    const ceilingPanelCountData = outputs.textures.ceilingPanelCount?.image.data as Uint8Array | undefined;
 
     // Helper: resolve a FaceTileSpec from a DirectionFaceMap for a given direction,
     // falling back to a plain tile ID with no rotation.
@@ -1209,6 +1287,8 @@ export function createDungeonRenderer(
     ceilEdgeCellMap = [];
     floorWallSkirtCellMap = [];
     ceilWallSkirtCellMap = [];
+    skyPanelCellMap = [];
+    ceilingPanelCellMap = [];
 
     const floors: THREE.Matrix4[] = [];
     const ceils: THREE.Matrix4[] = [];
@@ -1237,10 +1317,22 @@ export function createDungeonRenderer(
     const floorWallSkirtRects: UvRect[] = [];
     const floorWallSkirtRots: number[] = [];
     const floorWallSkirtHeightScales: number[] = [];
+    const floorWallSkirtRowIndexes: number[] = [];
     const ceilWallSkirtEdges: THREE.Matrix4[] = [];
     const ceilWallSkirtRects: UvRect[] = [];
     const ceilWallSkirtRots: number[] = [];
     const ceilWallSkirtHeightScales: number[] = [];
+    const ceilWallSkirtRowIndexes: number[] = [];
+    const skyPanelEdges: THREE.Matrix4[] = [];
+    const skyPanelRects: UvRect[] = [];
+    const skyPanelRots: number[] = [];
+    const skyPanelHeightScales: number[] = [];
+    const skyPanelRowIndexes: number[] = [];
+    const ceilPanelEdges: THREE.Matrix4[] = [];
+    const ceilPanelRects: UvRect[] = [];
+    const ceilPanelRots: number[] = [];
+    const ceilPanelHeightScales: number[] = [];
+    const ceilPanelRowIndexes: number[] = [];
 
     function isSolid(cx: number, cz: number) {
       if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
@@ -1463,6 +1555,7 @@ export function createDungeonRenderer(
               floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
               floorWallSkirtRots.push(s.rotation ?? 0);
               floorWallSkirtHeightScales.push(1.0);
+              floorWallSkirtRowIndexes.push(i);
               floorWallSkirtCellMap.push({ cx, cz });
             }
             if (rem > 0.001) {
@@ -1471,6 +1564,7 @@ export function createDungeonRenderer(
               floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
               floorWallSkirtRots.push(s.rotation ?? 0);
               floorWallSkirtHeightScales.push(rem / tileSize);
+              floorWallSkirtRowIndexes.push(fullPanels);
               floorWallSkirtCellMap.push({ cx, cz });
             }
           }
@@ -1540,6 +1634,7 @@ export function createDungeonRenderer(
                 ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
                 ceilWallSkirtRots.push(s.rotation ?? 0);
                 ceilWallSkirtHeightScales.push(1.0);
+                ceilWallSkirtRowIndexes.push(i);
                 ceilWallSkirtCellMap.push({ cx, cz });
               }
               if (rem > 0.001) {
@@ -1548,6 +1643,7 @@ export function createDungeonRenderer(
                 ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
                 ceilWallSkirtRots.push(s.rotation ?? 0);
                 ceilWallSkirtHeightScales.push(rem / tileSize);
+                ceilWallSkirtRowIndexes.push(fullPanels);
                 ceilWallSkirtCellMap.push({ cx, cz });
               }
             }
@@ -1556,6 +1652,44 @@ export function createDungeonRenderer(
             if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
             if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
           }
+        }
+
+        // Sky panels — stacked above ceilingH on wall faces of cells with skyPanelCount > 0.
+        const skyCount = skyPanelCountData ? (skyPanelCountData[idx] ?? 0) : 0;
+        if (skyCount > 0) {
+          function emitSkyPanels(mx: number, mz: number, ry: number) {
+            for (let i = 0; i < skyCount; i++) {
+              skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+              skyPanelRects.push(getUvRect(wallId));
+              skyPanelRots.push(0);
+              skyPanelHeightScales.push(1.0);
+              skyPanelRowIndexes.push(i);
+              skyPanelCellMap.push({ cx, cz });
+            }
+          }
+          if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+          if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+          if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+          if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+        }
+
+        // Ceiling panels — stacked below ceilingH on wall faces of cells with ceilingPanelCount > 0.
+        const ceilPanelCount = ceilingPanelCountData ? (ceilingPanelCountData[idx] ?? 0) : 0;
+        if (ceilPanelCount > 0) {
+          function emitCeilPanels(mx: number, mz: number, ry: number) {
+            for (let i = 0; i < ceilPanelCount; i++) {
+              ceilPanelEdges.push(makeFaceMatrix(mx, ceilingH - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+              ceilPanelRects.push(getUvRect(wallId));
+              ceilPanelRots.push(0);
+              ceilPanelHeightScales.push(1.0);
+              ceilPanelRowIndexes.push(i);
+              ceilingPanelCellMap.push({ cx, cz });
+            }
+          }
+          if (isSolid(cx, cz - 1)) emitCeilPanels(wx, cz * tileSize, 0);
+          if (isSolid(cx, cz + 1)) emitCeilPanels(wx, (cz + 1) * tileSize, Math.PI);
+          if (isSolid(cx - 1, cz)) emitCeilPanels(cx * tileSize, wz, HALF_PI);
+          if (isSolid(cx + 1, cz)) emitCeilPanels((cx + 1) * tileSize, wz, -HALF_PI);
         }
       }
     }
@@ -1620,6 +1754,7 @@ export function createDungeonRenderer(
       floorWallSkirtMesh = buildInstancedMesh(
         floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas,
         undefined, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ,
+        undefined, undefined, floorWallSkirtRowIndexes,
       );
       scene.add(floorWallSkirtMesh);
       meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
@@ -1629,15 +1764,37 @@ export function createDungeonRenderer(
       ceilWallSkirtMesh = buildInstancedMesh(
         ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas,
         undefined, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ,
+        undefined, undefined, ceilWallSkirtRowIndexes,
       );
       scene.add(ceilWallSkirtMesh);
       meshToCellMap.set(ceilWallSkirtMesh, ceilWallSkirtCellMap);
+    }
+    if (skyPanelEdges.length > 0) {
+      const [spCX, spCZ] = cellArrays(skyPanelCellMap);
+      skyPanelMesh = buildInstancedMesh(
+        skyPanelEdges, skyPanelRects, skyPanelMat, !!packedAtlas,
+        undefined, skyPanelRots, skyPanelHeightScales, spCX, spCZ,
+        undefined, undefined, skyPanelRowIndexes,
+      );
+      scene.add(skyPanelMesh);
+      meshToCellMap.set(skyPanelMesh, skyPanelCellMap);
+    }
+    if (ceilPanelEdges.length > 0) {
+      const [cpCX, cpCZ] = cellArrays(ceilingPanelCellMap);
+      ceilingPanelMesh = buildInstancedMesh(
+        ceilPanelEdges, ceilPanelRects, ceilingPanelMat, !!packedAtlas,
+        undefined, ceilPanelRots, ceilPanelHeightScales, cpCX, cpCZ,
+        undefined, undefined, ceilPanelRowIndexes,
+      );
+      scene.add(ceilingPanelMesh);
+      meshToCellMap.set(ceilingPanelMesh, ceilingPanelCellMap);
     }
 
     // Build / sync the surface-painter overlay texture now that the dungeon is ready.
     rebuildOverlayTexture(width, height);
     syncOverlayUniforms(width, height);
     syncSkirtLookupUniforms();
+    syncBaseOverrideUniforms();
 
     // Apply any layers registered before the dungeon was generated.
     for (const entry of layerEntries) {
@@ -1878,7 +2035,7 @@ export function createDungeonRenderer(
     _mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(_mouseNdc, camera);
 
-    const pickable = [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh, floorWallSkirtMesh, ceilWallSkirtMesh].filter(
+    const pickable = [floorMesh, ceilMesh, wallMesh, floorEdgeMesh, ceilEdgeMesh, floorWallSkirtMesh, ceilWallSkirtMesh, skyPanelMesh, ceilingPanelMesh].filter(
       (m): m is THREE.InstancedMesh => m !== null,
     );
     if (pickable.length === 0) return null;
@@ -1931,7 +2088,12 @@ export function createDungeonRenderer(
   }
 
   // ── Surface painter — dynamic cell-paint events ───────────────────────────
-  function onCellPaint(e: { x: number; z: number; floor?: string[]; wall?: string[]; ceil?: string[] }) {
+  function onCellPaint(e: {
+    x: number; z: number;
+    floor?: string[]; wall?: string[]; ceil?: string[];
+    ceilSkirtBase?: (string | null)[]; floorSkirtBase?: (string | null)[];
+    skyPanels?: (string | null)[]; ceilingPanels?: (string | null)[];
+  }) {
     updateOverlayCell(e.x, e.z, e);
   }
   game.events.on("cell-paint", onCellPaint);
@@ -2082,13 +2244,15 @@ export function createDungeonRenderer(
         ceilEdgeMesh,
         floorWallSkirtMesh,
         ceilWallSkirtMesh,
+        skyPanelMesh,
+        ceilingPanelMesh,
       ]) {
         if (mesh) {
           scene.remove(mesh);
           mesh.geometry.dispose();
         }
       }
-      floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = null;
+      floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = skyPanelMesh = ceilingPanelMesh = null;
       meshToCellMap.clear();
       // Remove and dispose layer meshes — they will be rebuilt by buildDungeon.
       for (const entry of layerEntries) {
@@ -2098,10 +2262,14 @@ export function createDungeonRenderer(
           entry.holder.mesh = null;
         }
       }
-      // Reset overlay textures so they are rebuilt for the new dungeon dimensions.
-      if (overlayFloor !== defSurf) { overlayFloor.tex.dispose(); overlayFloor = defSurf; }
-      if (overlayWall  !== defSurf) { overlayWall.tex.dispose();  overlayWall  = defSurf; }
-      if (overlayCeil  !== defSurf) { overlayCeil.tex.dispose();  overlayCeil  = defSurf; }
+      // Reset overlay and base-override textures so they are rebuilt for the new dungeon dimensions.
+      if (overlayFloor       !== defSurf) { overlayFloor.tex.dispose();       overlayFloor       = defSurf; }
+      if (overlayWall        !== defSurf) { overlayWall.tex.dispose();        overlayWall        = defSurf; }
+      if (overlayCeil        !== defSurf) { overlayCeil.tex.dispose();        overlayCeil        = defSurf; }
+      if (overrideCeilSkirt  !== defSurf) { overrideCeilSkirt.tex.dispose();  overrideCeilSkirt  = defSurf; }
+      if (overrideFloorSkirt !== defSurf) { overrideFloorSkirt.tex.dispose(); overrideFloorSkirt = defSurf; }
+      if (overrideSkyPanels  !== defSurf) { overrideSkyPanels.tex.dispose();  overrideSkyPanels  = defSurf; }
+      if (overrideCeilPanels !== defSurf) { overrideCeilPanels.tex.dispose(); overrideCeilPanels = defSurf; }
       dungeonBuilt = false;
       buildDungeon();
     },
@@ -2131,9 +2299,13 @@ export function createDungeonRenderer(
       for (const handle of objectBillboardMap.values()) handle.dispose();
       sharedAtlasTex?.dispose();
       tileUvLookupTex?.dispose();
-      if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
-      if (overlayWall  !== defSurf) overlayWall.tex.dispose();
-      if (overlayCeil  !== defSurf) overlayCeil.tex.dispose();
+      if (overlayFloor       !== defSurf) overlayFloor.tex.dispose();
+      if (overlayWall        !== defSurf) overlayWall.tex.dispose();
+      if (overlayCeil        !== defSurf) overlayCeil.tex.dispose();
+      if (overrideCeilSkirt  !== defSurf) overrideCeilSkirt.tex.dispose();
+      if (overrideFloorSkirt !== defSurf) overrideFloorSkirt.tex.dispose();
+      if (overrideSkyPanels  !== defSurf) overrideSkyPanels.tex.dispose();
+      if (overrideCeilPanels !== defSurf) overrideCeilPanels.tex.dispose();
       _defaultOverlayTex.dispose();
       for (const light of managedLights) light.removeFromParent();
       managedLights.clear();

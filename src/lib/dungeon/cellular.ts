@@ -569,6 +569,8 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
       colliderFlags:   maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
       floorSkirtType:  maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
       ceilSkirtType:   maskToDataTextureRGBA(ceilSkirtType,  W, H, "cellular_ceil_skirt_type"),
+      skyPanelCount:   maskToDataTextureR8(new Uint8Array(W * H), W, H, "cellular_sky_panel_count"),
+      ceilingPanelCount: maskToDataTextureR8(new Uint8Array(W * H), W, H, "cellular_ceiling_panel_count"),
     },
   };
 }

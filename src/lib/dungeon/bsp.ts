@@ -90,6 +90,20 @@ export type DungeonOutputs = {
      * All non-zero slots are composited on top of the skirt base tile in the fragment shader.
      */
     ceilSkirtType: THREE.DataTexture;
+    /**
+     * Per-cell sky panel count (R8). Value = number of upward-facing vertical panels
+     * to emit above the wall for this cell (0–4). Use setSkyPanelCount() to write.
+     * Intended for open-sky cells (ceilingHeightOffset === 0); panels appear on all
+     * wall faces (adjacent to solid neighbours) going upward from y = ceilingHeight.
+     */
+    skyPanelCount?: THREE.DataTexture;
+    /**
+     * Per-cell ceiling panel count (R8). Value = number of downward-facing vertical
+     * panels to emit below the ceiling for this cell (0–4). Use setCeilingPanelCount().
+     * Panels appear on all wall faces (adjacent to solid neighbours) hanging down
+     * from y = ceilingHeight.
+     */
+    ceilingPanelCount?: THREE.DataTexture;
   };
 };
 
@@ -1058,6 +1072,8 @@ export function generateBspDungeon(
   const ceilingOverlays = new Uint8Array(4 * W * H);
   const floorSkirtType = new Uint8Array(4 * W * H);
   const ceilSkirtType = new Uint8Array(4 * W * H);
+  const skyPanelCount = new Uint8Array(W * H);
+  const ceilingPanelCount = new Uint8Array(W * H);
   const floorHeightOffset = new Uint8Array(W * H);
   floorHeightOffset.fill(128);
   const ceilingHeightOffset = new Uint8Array(W * H);
@@ -1216,6 +1232,8 @@ export function generateBspDungeon(
       ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays"),
       floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "bsp_dungeon_floor_skirt_type"),
       ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "bsp_dungeon_ceil_skirt_type"),
+      skyPanelCount: maskToDataTextureR8(skyPanelCount, W, H, "bsp_dungeon_sky_panel_count"),
+      ceilingPanelCount: maskToDataTextureR8(ceilingPanelCount, W, H, "bsp_dungeon_ceiling_panel_count"),
       floorHeightOffset: maskToDataTextureR8(floorHeightOffset, W, H, "bsp_dungeon_floor_height_offset"),
       ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffset, W, H, "bsp_dungeon_ceiling_height_offset"),
       colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "bsp_dungeon_collider_flags"),
@@ -1263,4 +1281,43 @@ export function setCeilSkirtTiles(
     if (tiles[i] !== undefined) data[base + i] = tiles[i]!;
   }
   outputs.textures.ceilSkirtType.needsUpdate = true;
+}
+
+/**
+ * Set the number of sky panels (upward-facing vertical quads above the wall) for
+ * a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+ * going up from y = ceilingHeight; row 0 is immediately above the wall.
+ *
+ * Intended for open-sky cells (ceilingHeightOffset === 0) so the panels extend
+ * visibly through the sky opening. Count is clamped to [0, 4].
+ */
+export function setSkyPanelCount(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  count: number,
+): void {
+  if (!outputs.textures.skyPanelCount) return;
+  const data = outputs.textures.skyPanelCount.image.data as Uint8Array;
+  data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
+  outputs.textures.skyPanelCount.needsUpdate = true;
+}
+
+/**
+ * Set the number of ceiling panels (downward-facing vertical quads below the ceiling)
+ * for a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+ * hanging down from y = ceilingHeight; row 0 is immediately below the ceiling.
+ *
+ * Count is clamped to [0, 4].
+ */
+export function setCeilingPanelCount(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  count: number,
+): void {
+  if (!outputs.textures.ceilingPanelCount) return;
+  const data = outputs.textures.ceilingPanelCount.image.data as Uint8Array;
+  data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
+  outputs.textures.ceilingPanelCount.needsUpdate = true;
 }

@@ -4,7 +4,7 @@
 
 > **attachSurfacePainter**(`game`, `opts`): `void`
 
-Defined in: [api/createGame.ts:1542](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/api/createGame.ts#L1542)
+Defined in: [api/createGame.ts:1565](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/api/createGame.ts#L1565)
 
 Register a surface painter callback. Called per floor tile during `generate()`.
 

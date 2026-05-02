@@ -61,6 +61,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
     - [Directional Surface Lighting](#directional-surface-lighting)
     - [Skybox](#skybox)
     - [Per-direction Tile Specs](#per-direction-tile-specs)
+    - [Sky Panels and Ceiling Panels](#sky-panels-and-ceiling-panels)
     - [Layer System](#layer-system)
     - [Surface Painting](#surface-painting)
     - [Layer System vs. Surface Painting](#layer-system-vs-surface-painting-1)
@@ -94,7 +95,8 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Hidden passage traversal
 - Callback-driven enemy spawning
 - Stationary decoration entities (props, furniture, fixtures)
-- Atlas surface painting - apply tile layers to walls, floors, and ceilings per-tile
+- Atlas surface painting - apply tile layers to walls, floors, and ceilings per-tile; per-row base-tile overrides for skirt rows, sky panels, and ceiling panels via `SurfacePaintTarget`
+- Sky panels and ceiling panels — `setSkyPanelCount()` / `setCeilingPanelCount()` emit stacked vertical quads above walls on open-sky cells or below the ceiling; up to 4 rows per cell, each row independently tiled
 - Configurable keybindings
 - **Inventory dialog UI** - `showInventory()` renders a two-column RPG inventory screen (character profile, item grid, equipment paper-doll, stat bars, indicators, action buttons) with full drag-and-drop support; pass `customLayout: true` for a bare `<dialog>` you control
 - Mission / quest system — `game.missions.add()` registers evaluator-driven missions that auto-complete each turn, emit `mission-complete` events, and optionally broadcast completions to multiplayer peers
@@ -431,7 +433,7 @@ atlasImg.src = './atlas.png'
 
 ### Surface painting callback
 
-Register a callback to paint atlas tile layers onto tiles per position. Return an ordered array of atlas tile IDs to composite over the base tile, or `null` to leave it unchanged.
+Register a callback to paint atlas tile layers onto tiles per position. Return a `SurfacePaintTarget` object to apply overlays or base-tile overrides to that cell, or `null` to leave it unchanged.
 
 ```js
 AtomicCore.attachSurfacePainter(game, {
@@ -440,7 +442,8 @@ AtomicCore.attachSurfacePainter(game, {
     if (!room) return null
 
     if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
-      return ['wet-overlay']
+      // Composite overlay tiles on top of the base tile
+      return { floor: ['wet-overlay'], wall: ['wet-wall'] }
     }
 
     return null
@@ -1725,6 +1728,47 @@ var renderer = AtomicCore.createDungeonRenderer(el, game, {
 
 ---
 
+#### Sky Panels and Ceiling Panels
+
+Two additional panel types can be attached to wall faces:
+
+- **Sky panels** — vertical quads stacked *above* the wall top on open-sky cells (cells whose ceiling value is the open-sky sentinel). Each panel occupies one tile-height row.
+- **Ceiling panels** — vertical quads stacked *below* the ceiling on any cell.
+
+Set the number of rows (0–4, clamped) on a per-cell basis after dungeon generation:
+
+```js
+import { setSkyPanelCount, setCeilingPanelCount } from 'atomic-core'
+
+// After game.generate():
+setSkyPanelCount(game.dungeon.outputs, cx, cz, 3)      // 3 rows of sky panels at cell (cx, cz)
+setCeilingPanelCount(game.dungeon.outputs, cx, cz, 2)  // 2 rows of ceiling panels
+```
+
+By default every panel row uses the same base tile as the surrounding wall. To give each row its own tile, use the `SurfacePaintTarget` fields `skyPanels` and `ceilingPanels` (index 0 = the row closest to the anchor — wall top for sky panels, ceiling face for ceiling panels; `null` inherits the default base tile):
+
+```js
+game.dungeon.paint(cx, cz, {
+  skyPanels:     ['sky-trim-bottom', 'sky-trim-mid', null],   // row 0, 1, 2
+  ceilingPanels: ['ceil-trim', null],                          // row 0, 1
+})
+```
+
+The same approach works for the existing wall-adjacent skirt rows via `ceilSkirtBase` (row 0 = closest to wall top) and `floorSkirtBase` (row 0 = closest to wall bottom):
+
+```js
+game.dungeon.paint(cx, cz, {
+  ceilSkirtBase:  ['stone-cap', null],   // override only the bottom skirt row
+  floorSkirtBase: ['mud-trim', null],
+})
+```
+
+Panel counts are serialized with the dungeon — both `serializeDungeon()` / `deserializeDungeon()` and `rehydrateDungeon()` preserve `skyPanelCount` and `ceilingPanelCount` textures. Per-row tile overrides are stored in the paint map and are also serialized.
+
+After changing panel counts at runtime, call `renderer.rebuild()` to rebuild geometry.
+
+---
+
 #### Layer System
 
 The renderer supports stacking additional instanced meshes on top of any surface via `renderer.addLayer(spec)`. This is the primary way to add details such as decals, trim, glows, or overlays without a custom renderer.
@@ -1763,6 +1807,20 @@ handle.rebuild()
 
 Each tile position can have an ordered stack of atlas tile IDs composited over the base generated tile. Use `attachSurfacePainter` to drive painting from a per-tile callback, or paint imperatively via `game.dungeon.paint()`.
 
+`game.dungeon.paint(x, z, target)` accepts a `SurfacePaintTarget` object:
+
+| Field | Type | Description |
+|---|---|---|
+| `floor` | `string[]` | Up to 4 overlay tile names composited over the floor base tile |
+| `wall` | `string[]` | Up to 4 overlay tile names for wall faces |
+| `ceil` | `string[]` | Up to 4 overlay tile names for the ceiling face |
+| `ceilSkirtBase` | `(string \| null)[]` | Per-row base tile for ceiling-adjacent wall skirt rows; index 0 = row nearest the wall top; `null` inherits default |
+| `floorSkirtBase` | `(string \| null)[]` | Per-row base tile for floor-adjacent wall skirt rows; index 0 = row nearest the wall bottom; `null` inherits default |
+| `skyPanels` | `(string \| null)[]` | Per-row base tile for sky panels above the wall top (open-sky cells); index 0 = bottom-most row; `null` inherits default |
+| `ceilingPanels` | `(string \| null)[]` | Per-row base tile for ceiling panels below the ceiling; index 0 = top-most row (nearest the ceiling); `null` inherits default |
+
+All fields are optional — omit any you don't need.
+
 ```js
 AtomicCore.attachSurfacePainter(game, {
   onPaint: function({ dungeon, roomId, x, y }) {
@@ -1771,7 +1829,7 @@ AtomicCore.attachSurfacePainter(game, {
 
     // Puddle near room centre
     if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
-      return ['wet-overlay']
+      return { floor: ['wet-overlay'], wall: ['wet-wall'] }
     }
 
     return null
@@ -1779,8 +1837,13 @@ AtomicCore.attachSurfacePainter(game, {
 })
 
 // Imperative painting (replaces any previous paint at that position)
-game.dungeon.paint(x, z, ['moss-overlay', 'crack-overlay'])
-game.dungeon.unpaint(x, z)
+game.dungeon.paint(x, z, {
+  floor: ['moss-overlay', 'crack-overlay'],
+  // override the base tile on each skirt row instead of compositing
+  ceilSkirtBase: ['stone-cap', null],
+  floorSkirtBase: ['mud-trim', null],
+})
+game.dungeon.unpaint(x, z)   // clears all surfaces including skirt/panel overrides
 ```
 
 ---
@@ -1935,7 +1998,7 @@ All settings are passed directly to `AtomicCore.createGame()` or the relevant `a
 | `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
 | `attachSpawner` | `onSpawn` - callback receiving `{ dungeon, roomId, x, y }` |
 | `attachDecorator` | `onDecorate` - callback receiving `{ dungeon, roomId, x, y }` |
-| `attachSurfacePainter` | `onPaint` - callback receiving `{ dungeon, roomId, x, y }`, returns ordered array of atlas tile name strings |
+| `attachSurfacePainter` | `onPaint` - callback receiving `{ dungeon, roomId, x, y }`, returns `SurfacePaintTarget` (`{ floor?, wall?, ceil?, ceilSkirtBase?, floorSkirtBase?, skyPanels?, ceilingPanels? }`) or `null` |
 | `attachKeybindings` | `bindings`, `onAction` |
 
 ---

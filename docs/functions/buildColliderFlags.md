@@ -4,7 +4,7 @@
 
 > **buildColliderFlags**(`solidMask`): `Uint8Array`
 
-Defined in: [dungeon/colliderFlags.ts:35](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/colliderFlags.ts#L35)
+Defined in: [dungeon/colliderFlags.ts:35](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/colliderFlags.ts#L35)
 
 Build a colliderFlags Uint8Array from a solid mask of the same length.
 This is the default derivation used by all dungeon generators.

@@ -22,8 +22,8 @@ import * as THREE from "three";
  * WebGL attribute slot budget: 16 total.
  *   Built-ins used by Three.js InstancedMesh:
  *     position (1) + uv (1) + instanceMatrix/mat4 (4) = 6
- *   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) = 4
- *   Total used: 10 / 16 — 6 slots remain for future attributes.
+ *   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) = 5
+ *   Total used: 11 / 16 — 5 slots remain for future attributes.
  *   Each vec2/vec3/vec4 attribute occupies exactly 1 WebGL slot regardless of component count.
  */
 
@@ -72,6 +72,12 @@ attribute vec4 aAoCorners;
 //         Floor/ceiling carry (0,0) and use uSurfaceLight directly.
 attribute vec4 aCellFace;
 
+// Per-instance row index for skirt and panel geometry (1 slot).
+// 0 = row closest to the anchor point (wall top for sky panels and ceil skirts,
+// wall bottom for floor skirts, ceiling for ceiling panels). Unused faces get 0.
+// Used by the fragment shader to select the base override for that row.
+attribute float aRowIndex;
+
 // ── Uniforms ──────────────────────────────────────────────────────────────────
 // Width and height of the dungeon grid in cells. Used to normalise aCellFace.xy
 // into [0,1] UV space for the overlay lookup texture.
@@ -106,6 +112,7 @@ varying float vFogDist;     // Eye-space distance used for linear fog
 varying float vAo;          // Interpolated AO value for this fragment [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
+varying float vRowIndex;    // Row index forwarded to fragment for per-row base override
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -163,6 +170,9 @@ void main() {
     vFacingLight = uSurfaceLight;
   }
 
+  // ── 9. Row index pass-through ──────────────────────────────────────────────
+  vRowIndex = aRowIndex;
+
   gl_Position = projectionMatrix * eyePos;
 }
 `;
@@ -218,6 +228,12 @@ uniform float     uTileUvCount;
 // Defaults to a 1×1 zero texture (no-op) when skirt overrides are not in use.
 uniform sampler2D uSkirtLookup;
 
+// Per-cell per-row base texture override (W×H RGBA DataTexture).
+//   Each RGBA channel = tile ID for rows 0–3. Non-zero: use that tile as the
+//   base instead of the geometry's own aUvRect. Defaults to a 1×1 zero texture
+//   (no-op) for surfaces that don't use per-row base overrides.
+uniform sampler2D uBaseOverride;
+
 // ── Varyings (from vertex shader) ─────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
 varying vec2  vTileOrigin;  // Top-left of the atlas tile rect (for clamping)
@@ -228,6 +244,7 @@ varying float vFogDist;     // Eye-space distance for fog
 varying float vAo;          // Interpolated AO corner value [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
+varying float vRowIndex;    // Row index for per-row base override lookup
 
 // Look up tile ID's UV rect from the 1D tileUvLookup, then sample the atlas
 // at vLocalUv within that rect. Used by the overlay composite passes.
@@ -245,14 +262,29 @@ vec4 sampleOverlayTile(float id) {
 }
 
 void main() {
-  // ── 1. Base tile sample ────────────────────────────────────────────────────
-  // Clamp to the tile's texel-inset bounds to prevent bleed from adjacent tiles.
-  vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
-  vec2 uvMax   = vTileOrigin + vTileSize  - uTexelSize * 0.5;
-  vec2 atlasUv = clamp(vAtlasUv, uvMin, uvMax);
+  // ── 1. Base tile sample (with optional per-row override) ───────────────────
+  // Check uBaseOverride for a per-row base tile ID at this cell.
+  // RGBA channels correspond to row indices 0–3. Non-zero replaces the default
+  // base tile (aUvRect). uBaseOverride defaults to a 1×1 zero texture (no-op).
+  vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
+  int  rowIdx    = int(vRowIndex + 0.5);
+  float baseTileId = 0.0;
+  if      (rowIdx == 0) baseTileId = floor(baseSlots.r * 255.0 + 0.5);
+  else if (rowIdx == 1) baseTileId = floor(baseSlots.g * 255.0 + 0.5);
+  else if (rowIdx == 2) baseTileId = floor(baseSlots.b * 255.0 + 0.5);
+  else                  baseTileId = floor(baseSlots.a * 255.0 + 0.5);
 
-  vec4 color = texture2D(uAtlas, atlasUv);
-  if (color.a < 0.01) discard;
+  vec4 color;
+  if (baseTileId > 0.5) {
+    color = sampleOverlayTile(baseTileId);
+    if (color.a < 0.01) discard;
+  } else {
+    vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
+    vec2 uvMax   = vTileOrigin + vTileSize  - uTexelSize * 0.5;
+    vec2 atlasUv = clamp(vAtlasUv, uvMin, uvMax);
+    color = texture2D(uAtlas, atlasUv);
+    if (color.a < 0.01) discard;
+  }
 
   // ── 2. Surface-painter overlays (4 slots, RGBA-packed) ────────────────────
   // Each channel of the lookup texel is a tile ID (0 = no overlay for that slot).
@@ -392,6 +424,12 @@ export function makeBasicAtlasUniforms(params: {
   overlayLookup?: THREE.Texture;
   /** W×H Uint8 RGBA DataTexture for per-cell skirt tile overrides. */
   skirtLookup?: THREE.Texture;
+  /**
+   * W×H Uint8 RGBA DataTexture for per-cell per-row base texture overrides.
+   * RGBA channels = tile IDs for rows 0–3 (0 = use the geometry's own aUvRect).
+   * Used by wall-adjacent skirts, sky panels, and ceiling panels.
+   */
+  baseOverride?: THREE.Texture;
   /** Dungeon grid dimensions (width, height) in cells. */
   dungeonSize?: THREE.Vector2;
   /** AO darkening strength in [0,1]. 0 (default) = disabled. */
@@ -438,6 +476,7 @@ export function makeBasicAtlasUniforms(params: {
     uTileUvCount:    { value: params.tileUvCount ?? 1 },
     uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },
     uSkirtLookup:    { value: params.skirtLookup ?? defaultTex },
+    uBaseOverride:   { value: params.baseOverride ?? defaultTex },
     uDungeonSize:    { value: params.dungeonSize ?? new THREE.Vector2(1, 1) },
   };
 }

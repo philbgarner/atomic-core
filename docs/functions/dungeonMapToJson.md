@@ -4,7 +4,7 @@
 
 > **dungeonMapToJson**(`dungeon`, `options`): `string`
 
-Defined in: [dungeon/mapFile.ts:152](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L152)
+Defined in: [dungeon/mapFile.ts:152](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L152)
 
 Serialize a dungeon and its settings to a JSON string.
 

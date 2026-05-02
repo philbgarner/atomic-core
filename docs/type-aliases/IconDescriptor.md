@@ -4,7 +4,7 @@
 
 > **IconDescriptor** = `string` \| \{ `rot?`: `number`; `url`: `string`; \} \| \{ `atlasCanvas`: `HTMLCanvasElement`; `rot?`: `number`; `sh`: `number`; `sw`: `number`; `sx`: `number`; `sy`: `number`; \}
 
-Defined in: [ui/inventoryDialog.ts:73](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/ui/inventoryDialog.ts#L73)
+Defined in: [ui/inventoryDialog.ts:73](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L73)
 
 Describes how to render an item icon.
 - `string` — plain image URL.

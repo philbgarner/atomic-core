@@ -4,12 +4,12 @@
 
 > **SpawnChooserContext** = `object`
 
-Defined in: [api/createGame.ts:174](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/api/createGame.ts#L174)
+Defined in: [api/createGame.ts:177](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/api/createGame.ts#L177)
 
 ## Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="endroom"></a> `endRoom` | `PublicRoom` | [api/createGame.ts:177](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/api/createGame.ts#L177) |
-| <a id="rooms"></a> `rooms` | `PublicRoom`[] | [api/createGame.ts:175](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/api/createGame.ts#L175) |
-| <a id="startroom"></a> `startRoom` | `PublicRoom` | [api/createGame.ts:176](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/api/createGame.ts#L176) |
+| <a id="endroom"></a> `endRoom` | `PublicRoom` | [api/createGame.ts:180](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/api/createGame.ts#L180) |
+| <a id="rooms"></a> `rooms` | `PublicRoom`[] | [api/createGame.ts:178](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/api/createGame.ts#L178) |
+| <a id="startroom"></a> `startRoom` | `PublicRoom` | [api/createGame.ts:179](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/api/createGame.ts#L179) |

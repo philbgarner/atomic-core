@@ -316,6 +316,14 @@ export type SurfacePaintTarget = {
   wall?: string[];
   /** Tile names to overlay on the ceiling face of this cell. Up to 4. */
   ceil?: string[];
+  /** Base tile name per ceiling-skirt row. Index 0 = row closest to the wall top. Null entries inherit the default base. */
+  ceilSkirtBase?: (string | null)[];
+  /** Base tile name per floor-skirt row. Index 0 = row closest to the wall bottom. Null entries inherit the default base. */
+  floorSkirtBase?: (string | null)[];
+  /** Tile names for sky panels above the wall (open-sky cells). Index 0 = immediately above the wall top. Null entries use default. */
+  skyPanels?: (string | null)[];
+  /** Tile names for ceiling panels hanging below the ceiling. Index 0 = immediately below the ceiling. Null entries use default. */
+  ceilingPanels?: (string | null)[];
 };
 
 type SurfacePainterCallback = (ctx: {
@@ -733,7 +741,7 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
     unpaint(x: number, z: number) {
       internal.paintMap.delete(`${x},${z}`);
       writePaintToOverlayTexture(internal, x, z);
-      internal.events.emit('cell-paint', { x, z, floor: [], wall: [], ceil: [] });
+      internal.events.emit('cell-paint', { x, z, floor: [], wall: [], ceil: [], ceilSkirtBase: [], floorSkirtBase: [], skyPanels: [], ceilingPanels: [] });
     },
 
     get paintMap(): ReadonlyMap<string, SurfacePaintTarget> {
@@ -1097,7 +1105,7 @@ function runGenerate(
           : 0;
 
         const layers = internal.surfacePainterCb({ dungeon: dungeonHandle, roomId, x, y });
-        if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length)) {
+        if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length || layers.ceilSkirtBase?.length || layers.floorSkirtBase?.length || layers.skyPanels?.length || layers.ceilingPanels?.length)) {
           dungeonHandle.paint(x, y, layers);
         }
       }

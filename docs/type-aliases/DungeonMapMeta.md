@@ -4,7 +4,7 @@
 
 > **DungeonMapMeta** = `object`
 
-Defined in: [dungeon/mapFile.ts:18](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L18)
+Defined in: [dungeon/mapFile.ts:18](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L18)
 
 Optional author-supplied metadata embedded in the map file.
 
@@ -12,7 +12,7 @@ Optional author-supplied metadata embedded in the map file.
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="author"></a> `author?` | `string` | [dungeon/mapFile.ts:21](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L21) |
-| <a id="description"></a> `description?` | `string` | [dungeon/mapFile.ts:20](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L20) |
-| <a id="tags"></a> `tags?` | `string`[] | [dungeon/mapFile.ts:22](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L22) |
-| <a id="title"></a> `title?` | `string` | [dungeon/mapFile.ts:19](https://github.com/philbgarner/atomic-core/blob/1bb7352f63a0c3e8eeda04e7cdd7e1472e67e7bf/src/lib/dungeon/mapFile.ts#L19) |
+| <a id="author"></a> `author?` | `string` | [dungeon/mapFile.ts:21](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L21) |
+| <a id="description"></a> `description?` | `string` | [dungeon/mapFile.ts:20](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L20) |
+| <a id="tags"></a> `tags?` | `string`[] | [dungeon/mapFile.ts:22](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L22) |
+| <a id="title"></a> `title?` | `string` | [dungeon/mapFile.ts:19](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/mapFile.ts#L19) |

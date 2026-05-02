@@ -37,6 +37,10 @@ export type SerializedDungeon = {
   floorHeightOffset?: string;
   /** Base64-encoded R8 Uint8Array matching textures.ceilingHeightOffset. Optional for backwards compatibility. */
   ceilingHeightOffset?: string;
+  /** Base64-encoded R8 Uint8Array matching textures.skyPanelCount. Optional for backwards compatibility. */
+  skyPanelCount?: string;
+  /** Base64-encoded R8 Uint8Array matching textures.ceilingPanelCount. Optional for backwards compatibility. */
+  ceilingPanelCount?: string;
   /**
    * Per-cell surface-painter tile-name overlays, keyed by "x,z".
    * Values match SurfacePaintTarget: { floor?, wall?, ceil? } each an array of tile name strings.
@@ -159,6 +163,12 @@ export function serializeDungeon(
   if (dungeon.textures.ceilingHeightOffset?.image.data) {
     out.ceilingHeightOffset = uint8ToBase64(dungeon.textures.ceilingHeightOffset.image.data as Uint8Array);
   }
+  if (dungeon.textures.skyPanelCount?.image.data) {
+    out.skyPanelCount = uint8ToBase64(dungeon.textures.skyPanelCount.image.data as Uint8Array);
+  }
+  if (dungeon.textures.ceilingPanelCount?.image.data) {
+    out.ceilingPanelCount = uint8ToBase64(dungeon.textures.ceilingPanelCount.image.data as Uint8Array);
+  }
   if (paintMap && paintMap.size > 0) {
     out.paintMap = Object.fromEntries(paintMap);
   }
@@ -235,6 +245,12 @@ export function deserializeDungeon(data: SerializedDungeon): BspDungeonOutputs {
       ...(data.ceilingHeightOffset !== undefined
         ? { ceilingHeightOffset: makeDataTexture(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") }
         : {}),
+      ...(data.skyPanelCount !== undefined
+        ? { skyPanelCount: makeDataTexture(base64ToUint8(data.skyPanelCount), W, H, "bsp_dungeon_sky_panel_count") }
+        : {}),
+      ...(data.ceilingPanelCount !== undefined
+        ? { ceilingPanelCount: makeDataTexture(base64ToUint8(data.ceilingPanelCount), W, H, "bsp_dungeon_ceiling_panel_count") }
+        : {}),
     },
   };
 }
@@ -283,6 +299,14 @@ export function rehydrateDungeon(
   if (data.ceilingHeightOffset && fresh.textures.ceilingHeightOffset) {
     (fresh.textures.ceilingHeightOffset.image.data as Uint8Array).set(base64ToUint8(data.ceilingHeightOffset));
     fresh.textures.ceilingHeightOffset.needsUpdate = true;
+  }
+  if (data.skyPanelCount && fresh.textures.skyPanelCount) {
+    (fresh.textures.skyPanelCount.image.data as Uint8Array).set(base64ToUint8(data.skyPanelCount));
+    fresh.textures.skyPanelCount.needsUpdate = true;
+  }
+  if (data.ceilingPanelCount && fresh.textures.ceilingPanelCount) {
+    (fresh.textures.ceilingPanelCount.image.data as Uint8Array).set(base64ToUint8(data.ceilingPanelCount));
+    fresh.textures.ceilingPanelCount.needsUpdate = true;
   }
 
   if (data.rooms) {
