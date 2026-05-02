@@ -92,6 +92,10 @@ export interface GameEventMap {
         floor?: string[];
         wall?: string[];
         ceil?: string[];
+        ceilSkirtBase?: (string | null)[];
+        floorSkirtBase?: (string | null)[];
+        skyPanels?: (string | null)[];
+        ceilingPanels?: (string | null)[];
     };
 }
 type Handler<T> = T extends void ? () => void : (payload: T) => void;

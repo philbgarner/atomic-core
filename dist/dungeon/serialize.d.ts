@@ -25,6 +25,10 @@ export type SerializedDungeon = {
     floorHeightOffset?: string;
     /** Base64-encoded R8 Uint8Array matching textures.ceilingHeightOffset. Optional for backwards compatibility. */
     ceilingHeightOffset?: string;
+    /** Base64-encoded R8 Uint8Array matching textures.skyPanelCount. Optional for backwards compatibility. */
+    skyPanelCount?: string;
+    /** Base64-encoded R8 Uint8Array matching textures.ceilingPanelCount. Optional for backwards compatibility. */
+    ceilingPanelCount?: string;
     /**
      * Per-cell surface-painter tile-name overlays, keyed by "x,z".
      * Values match SurfacePaintTarget: { floor?, wall?, ceil? } each an array of tile name strings.

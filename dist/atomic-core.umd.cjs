@@ -712,6 +712,8 @@
 		const ceilingOverlays = new Uint8Array(4 * W * H);
 		const floorSkirtType = new Uint8Array(4 * W * H);
 		const ceilSkirtType = new Uint8Array(4 * W * H);
+		const skyPanelCount = new Uint8Array(W * H);
+		const ceilingPanelCount = new Uint8Array(W * H);
 		const floorHeightOffset = new Uint8Array(W * H);
 		floorHeightOffset.fill(128);
 		const ceilingHeightOffset = new Uint8Array(W * H);
@@ -818,6 +820,8 @@
 				ceilingOverlays: maskToDataTextureRGBA$1(ceilingOverlays, W, H, "bsp_dungeon_ceiling_overlays"),
 				floorSkirtType: maskToDataTextureRGBA$1(floorSkirtType, W, H, "bsp_dungeon_floor_skirt_type"),
 				ceilSkirtType: maskToDataTextureRGBA$1(ceilSkirtType, W, H, "bsp_dungeon_ceil_skirt_type"),
+				skyPanelCount: maskToDataTextureR8$1(skyPanelCount, W, H, "bsp_dungeon_sky_panel_count"),
+				ceilingPanelCount: maskToDataTextureR8$1(ceilingPanelCount, W, H, "bsp_dungeon_ceiling_panel_count"),
 				floorHeightOffset: maskToDataTextureR8$1(floorHeightOffset, W, H, "bsp_dungeon_floor_height_offset"),
 				ceilingHeightOffset: maskToDataTextureR8$1(ceilingHeightOffset, W, H, "bsp_dungeon_ceiling_height_offset"),
 				colliderFlags: maskToDataTextureR8$1(colliderFlagsArr, W, H, "bsp_dungeon_collider_flags")
@@ -845,6 +849,33 @@
 		const base = (cz * outputs.width + cx) * 4;
 		for (let i = 0; i < 4 && i < tiles.length; i++) if (tiles[i] !== void 0) data[base + i] = tiles[i];
 		outputs.textures.ceilSkirtType.needsUpdate = true;
+	}
+	/**
+	* Set the number of sky panels (upward-facing vertical quads above the wall) for
+	* a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+	* going up from y = ceilingHeight; row 0 is immediately above the wall.
+	*
+	* Intended for open-sky cells (ceilingHeightOffset === 0) so the panels extend
+	* visibly through the sky opening. Count is clamped to [0, 4].
+	*/
+	function setSkyPanelCount(outputs, cx, cz, count) {
+		if (!outputs.textures.skyPanelCount) return;
+		const data = outputs.textures.skyPanelCount.image.data;
+		data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
+		outputs.textures.skyPanelCount.needsUpdate = true;
+	}
+	/**
+	* Set the number of ceiling panels (downward-facing vertical quads below the ceiling)
+	* for a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+	* hanging down from y = ceilingHeight; row 0 is immediately below the ceiling.
+	*
+	* Count is clamped to [0, 4].
+	*/
+	function setCeilingPanelCount(outputs, cx, cz, count) {
+		if (!outputs.textures.ceilingPanelCount) return;
+		const data = outputs.textures.ceilingPanelCount.image.data;
+		data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
+		outputs.textures.ceilingPanelCount.needsUpdate = true;
 	}
 	//#endregion
 	//#region src/lib/dungeon/cellular.ts
@@ -1284,7 +1315,9 @@
 				ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "cellular_ceiling_overlays"),
 				colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
 				floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
-				ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "cellular_ceil_skirt_type")
+				ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "cellular_ceil_skirt_type"),
+				skyPanelCount: maskToDataTextureR8(new Uint8Array(W * H), W, H, "cellular_sky_panel_count"),
+				ceilingPanelCount: maskToDataTextureR8(new Uint8Array(W * H), W, H, "cellular_ceiling_panel_count")
 			}
 		};
 	}
@@ -2829,7 +2862,11 @@
 					z,
 					floor: [],
 					wall: [],
-					ceil: []
+					ceil: [],
+					ceilSkirtBase: [],
+					floorSkirtBase: [],
+					skyPanels: [],
+					ceilingPanels: []
 				});
 			},
 			get paintMap() {
@@ -3122,7 +3159,7 @@
 					x,
 					y
 				});
-				if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length)) dungeonHandle.paint(x, y, layers);
+				if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length || layers.ceilSkirtBase?.length || layers.floorSkirtBase?.length || layers.skyPanels?.length || layers.ceilingPanels?.length)) dungeonHandle.paint(x, y, layers);
 			}
 		}
 		if (internal.turnState) {
@@ -3592,8 +3629,8 @@
 	* WebGL attribute slot budget: 16 total.
 	*   Built-ins used by Three.js InstancedMesh:
 	*     position (1) + uv (1) + instanceMatrix/mat4 (4) = 6
-	*   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) = 4
-	*   Total used: 10 / 16 — 6 slots remain for future attributes.
+	*   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) = 5
+	*   Total used: 11 / 16 — 5 slots remain for future attributes.
 	*   Each vec2/vec3/vec4 attribute occupies exactly 1 WebGL slot regardless of component count.
 	*/
 	/**
@@ -3641,6 +3678,12 @@ attribute vec4 aAoCorners;
 //         Floor/ceiling carry (0,0) and use uSurfaceLight directly.
 attribute vec4 aCellFace;
 
+// Per-instance row index for skirt and panel geometry (1 slot).
+// 0 = row closest to the anchor point (wall top for sky panels and ceil skirts,
+// wall bottom for floor skirts, ceiling for ceiling panels). Unused faces get 0.
+// Used by the fragment shader to select the base override for that row.
+attribute float aRowIndex;
+
 // ── Uniforms ──────────────────────────────────────────────────────────────────
 // Width and height of the dungeon grid in cells. Used to normalise aCellFace.xy
 // into [0,1] UV space for the overlay lookup texture.
@@ -3675,6 +3718,7 @@ varying float vFogDist;     // Eye-space distance used for linear fog
 varying float vAo;          // Interpolated AO value for this fragment [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
+varying float vRowIndex;    // Row index forwarded to fragment for per-row base override
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -3732,6 +3776,9 @@ void main() {
     vFacingLight = uSurfaceLight;
   }
 
+  // ── 9. Row index pass-through ──────────────────────────────────────────────
+  vRowIndex = aRowIndex;
+
   gl_Position = projectionMatrix * eyePos;
 }
 `;
@@ -3786,6 +3833,12 @@ uniform float     uTileUvCount;
 // Defaults to a 1×1 zero texture (no-op) when skirt overrides are not in use.
 uniform sampler2D uSkirtLookup;
 
+// Per-cell per-row base texture override (W×H RGBA DataTexture).
+//   Each RGBA channel = tile ID for rows 0–3. Non-zero: use that tile as the
+//   base instead of the geometry's own aUvRect. Defaults to a 1×1 zero texture
+//   (no-op) for surfaces that don't use per-row base overrides.
+uniform sampler2D uBaseOverride;
+
 // ── Varyings (from vertex shader) ─────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
 varying vec2  vTileOrigin;  // Top-left of the atlas tile rect (for clamping)
@@ -3796,6 +3849,7 @@ varying float vFogDist;     // Eye-space distance for fog
 varying float vAo;          // Interpolated AO corner value [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
+varying float vRowIndex;    // Row index for per-row base override lookup
 
 // Look up tile ID's UV rect from the 1D tileUvLookup, then sample the atlas
 // at vLocalUv within that rect. Used by the overlay composite passes.
@@ -3813,14 +3867,29 @@ vec4 sampleOverlayTile(float id) {
 }
 
 void main() {
-  // ── 1. Base tile sample ────────────────────────────────────────────────────
-  // Clamp to the tile's texel-inset bounds to prevent bleed from adjacent tiles.
-  vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
-  vec2 uvMax   = vTileOrigin + vTileSize  - uTexelSize * 0.5;
-  vec2 atlasUv = clamp(vAtlasUv, uvMin, uvMax);
+  // ── 1. Base tile sample (with optional per-row override) ───────────────────
+  // Check uBaseOverride for a per-row base tile ID at this cell.
+  // RGBA channels correspond to row indices 0–3. Non-zero replaces the default
+  // base tile (aUvRect). uBaseOverride defaults to a 1×1 zero texture (no-op).
+  vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
+  int  rowIdx    = int(vRowIndex + 0.5);
+  float baseTileId = 0.0;
+  if      (rowIdx == 0) baseTileId = floor(baseSlots.r * 255.0 + 0.5);
+  else if (rowIdx == 1) baseTileId = floor(baseSlots.g * 255.0 + 0.5);
+  else if (rowIdx == 2) baseTileId = floor(baseSlots.b * 255.0 + 0.5);
+  else                  baseTileId = floor(baseSlots.a * 255.0 + 0.5);
 
-  vec4 color = texture2D(uAtlas, atlasUv);
-  if (color.a < 0.01) discard;
+  vec4 color;
+  if (baseTileId > 0.5) {
+    color = sampleOverlayTile(baseTileId);
+    if (color.a < 0.01) discard;
+  } else {
+    vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
+    vec2 uvMax   = vTileOrigin + vTileSize  - uTexelSize * 0.5;
+    vec2 atlasUv = clamp(vAtlasUv, uvMin, uvMax);
+    color = texture2D(uAtlas, atlasUv);
+    if (color.a < 0.01) discard;
+  }
 
   // ── 2. Surface-painter overlays (4 slots, RGBA-packed) ────────────────────
   // Each channel of the lookup texel is a tile ID (0 = no overlay for that slot).
@@ -3923,6 +3992,7 @@ void main() {
 			uTileUvCount: { value: params.tileUvCount ?? 1 },
 			uOverlayLookup: { value: params.overlayLookup ?? defaultTex },
 			uSkirtLookup: { value: params.skirtLookup ?? defaultTex },
+			uBaseOverride: { value: params.baseOverride ?? defaultTex },
 			uDungeonSize: { value: params.dungeonSize ?? new three.Vector2(1, 1) }
 		};
 	}
@@ -4500,7 +4570,7 @@ void main() {
 	* Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 	* and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 	*/
-	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners, faceNormals) {
+	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners, faceNormals, rowIndexes) {
 		const geo = new three.PlaneGeometry(1, 1);
 		if (useAtlas) {
 			const n = matrices.length;
@@ -4529,6 +4599,9 @@ void main() {
 				cellFaceArr[i * 4 + 3] = faceNormals ? faceNormals[i * 2 + 1] ?? 0 : 0;
 			}
 			geo.setAttribute("aCellFace", new three.InstancedBufferAttribute(cellFaceArr, 4));
+			const rowArr = new Float32Array(n);
+			if (rowIndexes) for (let i = 0; i < n; i++) rowArr[i] = rowIndexes[i] ?? 0;
+			geo.setAttribute("aRowIndex", new three.InstancedBufferAttribute(rowArr, 1));
 		}
 		const mesh = new three.InstancedMesh(geo, material, matrices.length);
 		matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -4667,6 +4740,10 @@ void main() {
 		let overlayFloor = defSurf;
 		let overlayWall = defSurf;
 		let overlayCeil = defSurf;
+		let overrideCeilSkirt = defSurf;
+		let overrideFloorSkirt = defSurf;
+		let overrideSkyPanels = defSurf;
+		let overrideCeilPanels = defSurf;
 		function makeOverlayTex(data, width, height) {
 			const t = new three.DataTexture(data, width, height, three.RGBAFormat, three.UnsignedByteType);
 			t.magFilter = three.NearestFilter;
@@ -4675,13 +4752,17 @@ void main() {
 			t.needsUpdate = true;
 			return t;
 		}
-		/** Rebuild all three per-surface overlay textures from the current paintMap. */
+		/** Rebuild all per-surface overlay and base-override textures from the current paintMap. */
 		function rebuildOverlayTexture(width, height) {
 			if (!resolver) return;
 			const n = width * height * 4;
 			const fd = new Uint8Array(n);
 			const wd = new Uint8Array(n);
 			const cd = new Uint8Array(n);
+			const csd = new Uint8Array(n);
+			const fsd = new Uint8Array(n);
+			const spd = new Uint8Array(n);
+			const cpd = new Uint8Array(n);
 			for (const [key, paint] of game.dungeon.paintMap) {
 				const comma = key.indexOf(",");
 				const x = parseInt(key.slice(0, comma), 10);
@@ -4692,13 +4773,28 @@ void main() {
 					if (!layers) return;
 					for (let i = 0; i < Math.min(layers.length, 4); i++) arr[idx + i] = resolver(layers[i]) & 255;
 				};
+				const writeNullable = (arr, layers) => {
+					if (!layers) return;
+					for (let i = 0; i < Math.min(layers.length, 4); i++) {
+						const name = layers[i];
+						arr[idx + i] = name != null ? resolver(name) & 255 : 0;
+					}
+				};
 				write(fd, paint.floor);
 				write(wd, paint.wall);
 				write(cd, paint.ceil);
+				writeNullable(csd, paint.ceilSkirtBase);
+				writeNullable(fsd, paint.floorSkirtBase);
+				writeNullable(spd, paint.skyPanels);
+				writeNullable(cpd, paint.ceilingPanels);
 			}
 			if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
 			if (overlayWall !== defSurf) overlayWall.tex.dispose();
 			if (overlayCeil !== defSurf) overlayCeil.tex.dispose();
+			if (overrideCeilSkirt !== defSurf) overrideCeilSkirt.tex.dispose();
+			if (overrideFloorSkirt !== defSurf) overrideFloorSkirt.tex.dispose();
+			if (overrideSkyPanels !== defSurf) overrideSkyPanels.tex.dispose();
+			if (overrideCeilPanels !== defSurf) overrideCeilPanels.tex.dispose();
 			overlayFloor = {
 				tex: makeOverlayTex(fd, width, height),
 				data: fd
@@ -4711,8 +4807,24 @@ void main() {
 				tex: makeOverlayTex(cd, width, height),
 				data: cd
 			};
+			overrideCeilSkirt = {
+				tex: makeOverlayTex(csd, width, height),
+				data: csd
+			};
+			overrideFloorSkirt = {
+				tex: makeOverlayTex(fsd, width, height),
+				data: fsd
+			};
+			overrideSkyPanels = {
+				tex: makeOverlayTex(spd, width, height),
+				data: spd
+			};
+			overrideCeilPanels = {
+				tex: makeOverlayTex(cpd, width, height),
+				data: cpd
+			};
 		}
-		/** Update one cell in-place across all three overlay textures. */
+		/** Update one cell in-place across all overlay and base-override textures. */
 		function updateOverlayCell(x, z, paint) {
 			if (!resolver) return;
 			const outputs = game.dungeon.outputs;
@@ -4726,9 +4838,22 @@ void main() {
 				for (let i = 0; i < Math.min(layers.length, 4); i++) surf.data[idx + i] = resolver(layers[i]) & 255;
 				surf.tex.needsUpdate = true;
 			};
+			const writeNullable = (surf, layers) => {
+				if (layers === void 0) return;
+				surf.data[idx] = surf.data[idx + 1] = surf.data[idx + 2] = surf.data[idx + 3] = 0;
+				for (let i = 0; i < Math.min(layers.length, 4); i++) {
+					const name = layers[i];
+					surf.data[idx + i] = name != null ? resolver(name) & 255 : 0;
+				}
+				surf.tex.needsUpdate = true;
+			};
 			write(overlayFloor, paint.floor);
 			write(overlayWall, paint.wall);
 			write(overlayCeil, paint.ceil);
+			writeNullable(overrideCeilSkirt, paint.ceilSkirtBase);
+			writeNullable(overrideFloorSkirt, paint.floorSkirtBase);
+			writeNullable(overrideSkyPanels, paint.skyPanels);
+			writeNullable(overrideCeilPanels, paint.ceilingPanels);
 		}
 		function setSkirtLookupUniform(mat, tex) {
 			if (!(mat instanceof three.ShaderMaterial)) return;
@@ -4742,6 +4867,17 @@ void main() {
 			setSkirtLookupUniform(ceilEdgeMat, outputs.textures.ceilSkirtType);
 			setSkirtLookupUniform(floorWallSkirtMat, outputs.textures.floorSkirtType);
 			setSkirtLookupUniform(ceilWallSkirtMat, outputs.textures.ceilSkirtType);
+		}
+		function syncBaseOverrideUniforms() {
+			function set(mat, tex) {
+				if (!(mat instanceof three.ShaderMaterial)) return;
+				const u = mat.uniforms;
+				if (u["uBaseOverride"]) u["uBaseOverride"].value = tex;
+			}
+			set(ceilWallSkirtMat, overrideCeilSkirt.tex);
+			set(floorWallSkirtMat, overrideFloorSkirt.tex);
+			set(skyPanelMat, overrideSkyPanels.tex);
+			set(ceilingPanelMat, overrideCeilPanels.tex);
 		}
 		/** Push per-surface overlay textures into their respective atlas materials. */
 		function syncOverlayUniforms(width, height) {
@@ -4761,6 +4897,8 @@ void main() {
 			set(ceilEdgeMat, overlayCeil.tex);
 			set(floorWallSkirtMat, overlayWall.tex);
 			set(ceilWallSkirtMat, overlayWall.tex);
+			set(skyPanelMat, overlayWall.tex);
+			set(ceilingPanelMat, overlayWall.tex);
 		}
 		function makeAtlasMaterial(surfaceLight = 1) {
 			const canvas = packedAtlas.texture;
@@ -4805,6 +4943,8 @@ void main() {
 		});
 		const floorWallSkirtMat = packedAtlas ? makeAtlasMaterial(-1) : new three.MeshStandardMaterial({ color: 7037040 });
 		const ceilWallSkirtMat = packedAtlas ? makeAtlasMaterial(-1) : new three.MeshStandardMaterial({ color: 7037040 });
+		const skyPanelMat = packedAtlas ? makeAtlasMaterial(-1) : new three.MeshStandardMaterial({ color: 7037040 });
+		const ceilingPanelMat = packedAtlas ? makeAtlasMaterial(-1) : new three.MeshStandardMaterial({ color: 7037040 });
 		let floorMesh = null;
 		let ceilMesh = null;
 		let wallMesh = null;
@@ -4812,6 +4952,8 @@ void main() {
 		let ceilEdgeMesh = null;
 		let floorWallSkirtMesh = null;
 		let ceilWallSkirtMesh = null;
+		let skyPanelMesh = null;
+		let ceilingPanelMesh = null;
 		let dungeonBuilt = false;
 		let floorCellMap = [];
 		let ceilCellMap = [];
@@ -4820,6 +4962,8 @@ void main() {
 		let ceilEdgeCellMap = [];
 		let floorWallSkirtCellMap = [];
 		let ceilWallSkirtCellMap = [];
+		let skyPanelCellMap = [];
+		let ceilingPanelCellMap = [];
 		const meshToCellMap = /* @__PURE__ */ new Map();
 		const managedLights = /* @__PURE__ */ new Set();
 		const layerEntries = [];
@@ -4949,6 +5093,8 @@ void main() {
 			const offsetStep = tileSize * (options.offsetFactor ?? .5);
 			const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 			const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
+			const skyPanelCountData = outputs.textures.skyPanelCount?.image.data;
+			const ceilingPanelCountData = outputs.textures.ceilingPanelCount?.image.data;
 			function spec(map, dir, fallbackId) {
 				return map?.[dir] ?? {
 					tile: fallbackId,
@@ -4962,6 +5108,8 @@ void main() {
 			ceilEdgeCellMap = [];
 			floorWallSkirtCellMap = [];
 			ceilWallSkirtCellMap = [];
+			skyPanelCellMap = [];
+			ceilingPanelCellMap = [];
 			const floors = [];
 			const ceils = [];
 			const walls = [];
@@ -4987,10 +5135,22 @@ void main() {
 			const floorWallSkirtRects = [];
 			const floorWallSkirtRots = [];
 			const floorWallSkirtHeightScales = [];
+			const floorWallSkirtRowIndexes = [];
 			const ceilWallSkirtEdges = [];
 			const ceilWallSkirtRects = [];
 			const ceilWallSkirtRots = [];
 			const ceilWallSkirtHeightScales = [];
+			const ceilWallSkirtRowIndexes = [];
+			const skyPanelEdges = [];
+			const skyPanelRects = [];
+			const skyPanelRots = [];
+			const skyPanelHeightScales = [];
+			const skyPanelRowIndexes = [];
+			const ceilPanelEdges = [];
+			const ceilPanelRects = [];
+			const ceilPanelRots = [];
+			const ceilPanelHeightScales = [];
+			const ceilPanelRowIndexes = [];
 			function isSolid(cx, cz) {
 				if (cx < 0 || cz < 0 || cx >= width || cz >= height) return true;
 				return (solid[cz * width + cx] ?? 0) > 0;
@@ -5169,6 +5329,7 @@ void main() {
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							floorWallSkirtHeightScales.push(1);
+							floorWallSkirtRowIndexes.push(i);
 							floorWallSkirtCellMap.push({
 								cx,
 								cz
@@ -5180,6 +5341,7 @@ void main() {
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							floorWallSkirtHeightScales.push(rem / tileSize);
+							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({
 								cx,
 								cz
@@ -5241,6 +5403,7 @@ void main() {
 								ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 								ceilWallSkirtRots.push(s.rotation ?? 0);
 								ceilWallSkirtHeightScales.push(1);
+								ceilWallSkirtRowIndexes.push(i);
 								ceilWallSkirtCellMap.push({
 									cx,
 									cz
@@ -5252,6 +5415,7 @@ void main() {
 								ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 								ceilWallSkirtRots.push(s.rotation ?? 0);
 								ceilWallSkirtHeightScales.push(rem / tileSize);
+								ceilWallSkirtRowIndexes.push(fullPanels);
 								ceilWallSkirtCellMap.push({
 									cx,
 									cz
@@ -5263,6 +5427,46 @@ void main() {
 						if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
 						if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
 					}
+				}
+				const skyCount = skyPanelCountData ? skyPanelCountData[idx] ?? 0 : 0;
+				if (skyCount > 0) {
+					function emitSkyPanels(mx, mz, ry) {
+						for (let i = 0; i < skyCount; i++) {
+							skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+							skyPanelRects.push(getUvRect(wallId));
+							skyPanelRots.push(0);
+							skyPanelHeightScales.push(1);
+							skyPanelRowIndexes.push(i);
+							skyPanelCellMap.push({
+								cx,
+								cz
+							});
+						}
+					}
+					if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+					if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+					if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+					if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+				}
+				const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
+				if (ceilPanelCount > 0) {
+					function emitCeilPanels(mx, mz, ry) {
+						for (let i = 0; i < ceilPanelCount; i++) {
+							ceilPanelEdges.push(makeFaceMatrix(mx, ceilingH - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+							ceilPanelRects.push(getUvRect(wallId));
+							ceilPanelRots.push(0);
+							ceilPanelHeightScales.push(1);
+							ceilPanelRowIndexes.push(i);
+							ceilingPanelCellMap.push({
+								cx,
+								cz
+							});
+						}
+					}
+					if (isSolid(cx, cz - 1)) emitCeilPanels(wx, cz * tileSize, 0);
+					if (isSolid(cx, cz + 1)) emitCeilPanels(wx, (cz + 1) * tileSize, Math.PI);
+					if (isSolid(cx - 1, cz)) emitCeilPanels(cx * tileSize, wz, HALF_PI);
+					if (isSolid(cx + 1, cz)) emitCeilPanels((cx + 1) * tileSize, wz, -HALF_PI);
 				}
 			}
 			meshToCellMap.clear();
@@ -5297,19 +5501,32 @@ void main() {
 			meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 			if (floorWallSkirtEdges.length > 0) {
 				const [fwsCX, fwsCZ] = cellArrays(floorWallSkirtCellMap);
-				floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ);
+				floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, void 0, void 0, floorWallSkirtRowIndexes);
 				scene.add(floorWallSkirtMesh);
 				meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
 			}
 			if (ceilWallSkirtEdges.length > 0) {
 				const [cwsCX, cwsCZ] = cellArrays(ceilWallSkirtCellMap);
-				ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ);
+				ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ, void 0, void 0, ceilWallSkirtRowIndexes);
 				scene.add(ceilWallSkirtMesh);
 				meshToCellMap.set(ceilWallSkirtMesh, ceilWallSkirtCellMap);
+			}
+			if (skyPanelEdges.length > 0) {
+				const [spCX, spCZ] = cellArrays(skyPanelCellMap);
+				skyPanelMesh = buildInstancedMesh(skyPanelEdges, skyPanelRects, skyPanelMat, !!packedAtlas, void 0, skyPanelRots, skyPanelHeightScales, spCX, spCZ, void 0, void 0, skyPanelRowIndexes);
+				scene.add(skyPanelMesh);
+				meshToCellMap.set(skyPanelMesh, skyPanelCellMap);
+			}
+			if (ceilPanelEdges.length > 0) {
+				const [cpCX, cpCZ] = cellArrays(ceilingPanelCellMap);
+				ceilingPanelMesh = buildInstancedMesh(ceilPanelEdges, ceilPanelRects, ceilingPanelMat, !!packedAtlas, void 0, ceilPanelRots, ceilPanelHeightScales, cpCX, cpCZ, void 0, void 0, ceilPanelRowIndexes);
+				scene.add(ceilingPanelMesh);
+				meshToCellMap.set(ceilingPanelMesh, ceilingPanelCellMap);
 			}
 			rebuildOverlayTexture(width, height);
 			syncOverlayUniforms(width, height);
 			syncSkirtLookupUniforms();
+			syncBaseOverrideUniforms();
 			for (const entry of layerEntries) if (!entry.holder.mesh) {
 				entry.holder.mesh = buildLayerMesh(entry.spec);
 				if (entry.holder.mesh) scene.add(entry.holder.mesh);
@@ -5489,7 +5706,9 @@ void main() {
 				floorEdgeMesh,
 				ceilEdgeMesh,
 				floorWallSkirtMesh,
-				ceilWallSkirtMesh
+				ceilWallSkirtMesh,
+				skyPanelMesh,
+				ceilingPanelMesh
 			].filter((m) => m !== null);
 			if (pickable.length === 0) return null;
 			const hit = raycaster.intersectObjects(pickable, false)[0];
@@ -5669,12 +5888,14 @@ void main() {
 					floorEdgeMesh,
 					ceilEdgeMesh,
 					floorWallSkirtMesh,
-					ceilWallSkirtMesh
+					ceilWallSkirtMesh,
+					skyPanelMesh,
+					ceilingPanelMesh
 				]) if (mesh) {
 					scene.remove(mesh);
 					mesh.geometry.dispose();
 				}
-				floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = null;
+				floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = skyPanelMesh = ceilingPanelMesh = null;
 				meshToCellMap.clear();
 				for (const entry of layerEntries) if (entry.holder.mesh) {
 					scene.remove(entry.holder.mesh);
@@ -5692,6 +5913,22 @@ void main() {
 				if (overlayCeil !== defSurf) {
 					overlayCeil.tex.dispose();
 					overlayCeil = defSurf;
+				}
+				if (overrideCeilSkirt !== defSurf) {
+					overrideCeilSkirt.tex.dispose();
+					overrideCeilSkirt = defSurf;
+				}
+				if (overrideFloorSkirt !== defSurf) {
+					overrideFloorSkirt.tex.dispose();
+					overrideFloorSkirt = defSurf;
+				}
+				if (overrideSkyPanels !== defSurf) {
+					overrideSkyPanels.tex.dispose();
+					overrideSkyPanels = defSurf;
+				}
+				if (overrideCeilPanels !== defSurf) {
+					overrideCeilPanels.tex.dispose();
+					overrideCeilPanels = defSurf;
 				}
 				dungeonBuilt = false;
 				buildDungeon();
@@ -5725,6 +5962,10 @@ void main() {
 				if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
 				if (overlayWall !== defSurf) overlayWall.tex.dispose();
 				if (overlayCeil !== defSurf) overlayCeil.tex.dispose();
+				if (overrideCeilSkirt !== defSurf) overrideCeilSkirt.tex.dispose();
+				if (overrideFloorSkirt !== defSurf) overrideFloorSkirt.tex.dispose();
+				if (overrideSkyPanels !== defSurf) overrideSkyPanels.tex.dispose();
+				if (overrideCeilPanels !== defSurf) overrideCeilPanels.tex.dispose();
 				_defaultOverlayTex.dispose();
 				for (const light of managedLights) light.removeFromParent();
 				managedLights.clear();
@@ -6639,6 +6880,8 @@ void main() {
 		};
 		if (dungeon.textures.floorHeightOffset?.image.data) out.floorHeightOffset = uint8ToBase64(dungeon.textures.floorHeightOffset.image.data);
 		if (dungeon.textures.ceilingHeightOffset?.image.data) out.ceilingHeightOffset = uint8ToBase64(dungeon.textures.ceilingHeightOffset.image.data);
+		if (dungeon.textures.skyPanelCount?.image.data) out.skyPanelCount = uint8ToBase64(dungeon.textures.skyPanelCount.image.data);
+		if (dungeon.textures.ceilingPanelCount?.image.data) out.ceilingPanelCount = uint8ToBase64(dungeon.textures.ceilingPanelCount.image.data);
 		if (paintMap && paintMap.size > 0) out.paintMap = Object.fromEntries(paintMap);
 		if (dungeon.rooms && dungeon.rooms.size > 0) {
 			const roomsObj = {};
@@ -6699,7 +6942,9 @@ void main() {
 				floorSkirtType: makeDataTextureRGBA(data.floorSkirtType ? base64ToUint8(data.floorSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_floor_skirt_type"),
 				ceilSkirtType: makeDataTextureRGBA(data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceil_skirt_type"),
 				...data.floorHeightOffset !== void 0 ? { floorHeightOffset: makeDataTexture(base64ToUint8(data.floorHeightOffset), W, H, "bsp_dungeon_floor_height_offset") } : {},
-				...data.ceilingHeightOffset !== void 0 ? { ceilingHeightOffset: makeDataTexture(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") } : {}
+				...data.ceilingHeightOffset !== void 0 ? { ceilingHeightOffset: makeDataTexture(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") } : {},
+				...data.skyPanelCount !== void 0 ? { skyPanelCount: makeDataTexture(base64ToUint8(data.skyPanelCount), W, H, "bsp_dungeon_sky_panel_count") } : {},
+				...data.ceilingPanelCount !== void 0 ? { ceilingPanelCount: makeDataTexture(base64ToUint8(data.ceilingPanelCount), W, H, "bsp_dungeon_ceiling_panel_count") } : {}
 			}
 		};
 	}
@@ -6723,7 +6968,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "0.8.5",
+			version: "0.5.6",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,
@@ -6802,7 +7047,9 @@ void main() {
 	exports.resolveSprite = resolveSprite;
 	exports.resolveTheme = resolveTheme;
 	exports.setCeilSkirtTiles = setCeilSkirtTiles;
+	exports.setCeilingPanelCount = setCeilingPanelCount;
 	exports.setFloorSkirtTiles = setFloorSkirtTiles;
+	exports.setSkyPanelCount = setSkyPanelCount;
 	exports.showInventory = showInventory;
 	exports.spriteToUvRect = spriteToUvRect;
 	exports.toFaceRotation = toFaceRotation;

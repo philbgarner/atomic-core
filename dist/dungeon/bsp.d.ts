@@ -91,6 +91,20 @@ export type DungeonOutputs = {
          * All non-zero slots are composited on top of the skirt base tile in the fragment shader.
          */
         ceilSkirtType: THREE.DataTexture;
+        /**
+         * Per-cell sky panel count (R8). Value = number of upward-facing vertical panels
+         * to emit above the wall for this cell (0–4). Use setSkyPanelCount() to write.
+         * Intended for open-sky cells (ceilingHeightOffset === 0); panels appear on all
+         * wall faces (adjacent to solid neighbours) going upward from y = ceilingHeight.
+         */
+        skyPanelCount?: THREE.DataTexture;
+        /**
+         * Per-cell ceiling panel count (R8). Value = number of downward-facing vertical
+         * panels to emit below the ceiling for this cell (0–4). Use setCeilingPanelCount().
+         * Panels appear on all wall faces (adjacent to solid neighbours) hanging down
+         * from y = ceilingHeight.
+         */
+        ceilingPanelCount?: THREE.DataTexture;
     };
 };
 export type RoomRect = {
@@ -203,4 +217,21 @@ export declare function setFloorSkirtTiles(outputs: DungeonOutputs, cx: number, 
  * Missing entries are left unchanged; pass 0 to clear a slot.
  */
 export declare function setCeilSkirtTiles(outputs: DungeonOutputs, cx: number, cz: number, tiles: number[]): void;
+/**
+ * Set the number of sky panels (upward-facing vertical quads above the wall) for
+ * a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+ * going up from y = ceilingHeight; row 0 is immediately above the wall.
+ *
+ * Intended for open-sky cells (ceilingHeightOffset === 0) so the panels extend
+ * visibly through the sky opening. Count is clamped to [0, 4].
+ */
+export declare function setSkyPanelCount(outputs: DungeonOutputs, cx: number, cz: number, count: number): void;
+/**
+ * Set the number of ceiling panels (downward-facing vertical quads below the ceiling)
+ * for a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)
+ * hanging down from y = ceilingHeight; row 0 is immediately below the ceiling.
+ *
+ * Count is clamped to [0, 4].
+ */
+export declare function setCeilingPanelCount(outputs: DungeonOutputs, cx: number, cz: number, count: number): void;
 //# sourceMappingURL=bsp.d.ts.map

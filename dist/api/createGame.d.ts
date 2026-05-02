@@ -242,6 +242,14 @@ export type SurfacePaintTarget = {
     wall?: string[];
     /** Tile names to overlay on the ceiling face of this cell. Up to 4. */
     ceil?: string[];
+    /** Base tile name per ceiling-skirt row. Index 0 = row closest to the wall top. Null entries inherit the default base. */
+    ceilSkirtBase?: (string | null)[];
+    /** Base tile name per floor-skirt row. Index 0 = row closest to the wall bottom. Null entries inherit the default base. */
+    floorSkirtBase?: (string | null)[];
+    /** Tile names for sky panels above the wall (open-sky cells). Index 0 = immediately above the wall top. Null entries use default. */
+    skyPanels?: (string | null)[];
+    /** Tile names for ceiling panels hanging below the ceiling. Index 0 = immediately below the ceiling. Null entries use default. */
+    ceilingPanels?: (string | null)[];
 };
 type SurfacePainterCallback = (ctx: {
     dungeon: DungeonHandle;
