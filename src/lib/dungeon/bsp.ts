@@ -67,7 +67,8 @@ export type DungeonOutputs = {
      * sentinels use the minimum raw value because the encodings run in opposite directions.
      * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
      * All floor cells default to 128. Wall cells are 128.
-     * Not present for cellular/tiled dungeon outputs.
+     * Present in cellular outputs (vaulted ceiling via distanceToWall + Perlin noise).
+     * Not present for tiled dungeon outputs.
      */
     ceilingHeightOffset?: THREE.DataTexture;
     /**

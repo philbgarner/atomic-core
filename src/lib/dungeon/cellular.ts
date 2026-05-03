@@ -33,6 +33,51 @@ export type CellularOptions = {
   survivalThreshold?: number;
 
   keepOuterWalls?: boolean;
+
+  /**
+   * Raise the ceiling toward room centers, producing a vaulted cave effect.
+   * Uses `distanceToWall` (normalized) plus Perlin noise for organic variation.
+   * Default: true
+   */
+  vaultedCeiling?: boolean;
+  /**
+   * Maximum ceiling raise (in offset steps) at the deepest room center.
+   * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
+   * Default: 3
+   */
+  vaultMaxSteps?: number;
+  /**
+   * Perlin noise spatial frequency (cycles per cell) for ceiling perturbation.
+   * Lower values give broader, smoother waves; higher values give tighter bumps.
+   * Default: 0.08
+   */
+  noiseFrequency?: number;
+  /**
+   * Amplitude of the Perlin noise ceiling perturbation in offset steps.
+   * This is added to (or subtracted from) the vault raise before rounding.
+   * Default: 2
+   */
+  noiseSteps?: number;
+  /**
+   * Overall multiplier applied to the combined ceiling raise (DTW + noise).
+   * Values > 1 produce taller vaults; values < 1 produce lower, flatter ceilings.
+   * Default: 1
+   */
+  vaultHeightScale?: number;
+  /**
+   * Weight of the distance-to-wall term in the ceiling raise formula.
+   * 0 = no DTW contribution (ceiling height comes entirely from Perlin noise);
+   * 1 = full DTW contribution. Both this and `noiseWeight` at 0 → flat ceiling.
+   * Default: 1
+   */
+  distanceToWallWeight?: number;
+  /**
+   * Weight of the Perlin noise term in the ceiling raise formula.
+   * 0 = no noise contribution (ceiling height comes entirely from distance-to-wall);
+   * 1 = full noise contribution. Both this and `distanceToWallWeight` at 0 → flat ceiling.
+   * Default: 1
+   */
+  noiseWeight?: number;
 };
 
 export type CellularDungeonOutputs = RoomedDungeonOutputs & {
@@ -54,6 +99,15 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
     wallOverlays: THREE.DataTexture;
     ceilingType: THREE.DataTexture;
     ceilingOverlays: THREE.DataTexture;
+    /**
+     * Per-cell ceiling height offset (R8). Encoding: 128 = no offset, 127 = +1 step up
+     * (ceiling raised), 129 = +1 step down (ceiling lowered), 0 = open sky.
+     * When `vaultedCeiling` is enabled, values are derived from `distanceToWall`
+     * (weighted by `distanceToWallWeight`, scaled to `vaultMaxSteps`) combined with
+     * Perlin noise (weighted by `noiseWeight`, amplitude `noiseSteps`), then scaled
+     * by `vaultHeightScale`. Setting both weights to 0 produces a flat ceiling.
+     */
+    ceilingHeightOffset: THREE.DataTexture;
     colliderFlags: THREE.DataTexture;
     floorSkirtType: THREE.DataTexture;
     ceilSkirtType: THREE.DataTexture;
@@ -92,6 +146,47 @@ function makeRng(seedU32: number) {
     x = Math.imul(x ^ (x >>> 15), x | 1);
     x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Seeded 2D Perlin noise using a Fisher-Yates shuffled permutation table.
+ * Returns a closure `(x, y) => number` with output approximately in [-0.7, 0.7].
+ * The permutation table is derived from the given 32-bit seed via `makeRng`.
+ */
+function makePerlin2D(seed: number): (x: number, y: number) => number {
+  const rng = makeRng(seed);
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = p[i]!; p[i] = p[j]!; p[j] = tmp;
+  }
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255]!;
+
+  function fade(t: number) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a: number, b: number, t: number) { return a + t * (b - a); }
+  function grad(h: number, x: number, y: number): number {
+    return ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+  }
+
+  return function(x: number, y: number): number {
+    const xi = Math.floor(x) & 255;
+    const yi = Math.floor(y) & 255;
+    const xf = x - Math.floor(x);
+    const yf = y - Math.floor(y);
+    const u = fade(xf);
+    const v = fade(yf);
+    const aa = perm[perm[xi]!     + yi    ]!;
+    const ab = perm[perm[xi]!     + yi + 1]!;
+    const ba = perm[perm[xi + 1]! + yi    ]!;
+    const bb = perm[perm[xi + 1]! + yi + 1]!;
+    return lerp(
+      lerp(grad(aa, xf,     yf    ), grad(ba, xf - 1, yf    ), u),
+      lerp(grad(ab, xf,     yf - 1), grad(bb, xf - 1, yf - 1), u),
+      v,
+    );
   };
 }
 
@@ -467,6 +562,13 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
   const birthThreshold    = options.birthThreshold    ?? 5;
   const survivalThreshold = options.survivalThreshold ?? 4;
   const keepOuterWalls    = options.keepOuterWalls    ?? true;
+  const vaultedCeiling      = options.vaultedCeiling      ?? true;
+  const vaultMaxSteps       = options.vaultMaxSteps       ?? 3;
+  const noiseFrequency      = options.noiseFrequency      ?? 0.08;
+  const noiseSteps          = options.noiseSteps          ?? 2;
+  const vaultHeightScale    = options.vaultHeightScale    ?? 1;
+  const distanceToWallWeight = options.distanceToWallWeight ?? 1;
+  const noiseWeight          = options.noiseWeight          ?? 1;
 
   const seedU32 = hashSeed(options.seed);
   const rand = makeRng(seedU32);
@@ -526,6 +628,34 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
   const { regionIdArr, rooms, firstCorridorRegionId, startRoomId, endRoomId } =
     buildVoronoiRooms(solid, distanceToWall, W, H);
 
+  // Vaulted ceiling: raise ceiling proportional to distanceToWall, perturbed by Perlin noise.
+  // Encoding: 128 = no offset; value < 128 raises the ceiling (128 - n = n steps up).
+  const ceilingHeightOffsetArr = new Uint8Array(W * H);
+  ceilingHeightOffsetArr.fill(128);
+  if (vaultedCeiling) {
+    let maxDtw = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (solid[i] === 0 && distanceToWall[i]! > maxDtw) maxDtw = distanceToWall[i]!;
+    }
+    if (maxDtw > 0) {
+      const perlin = makePerlin2D(seedU32 ^ 0xdeadbeef);
+      for (let cy = 0; cy < H; cy++) {
+        for (let cx = 0; cx < W; cx++) {
+          const i = idx(cx, cy, W);
+          if (solid[i] !== 0) continue;
+          const normalizedDtw = distanceToWall[i]! / maxDtw;
+          const noise = perlin(cx * noiseFrequency, cy * noiseFrequency);
+          const raise = Math.max(0, vaultHeightScale * (
+            normalizedDtw * vaultMaxSteps * distanceToWallWeight +
+            noise * noiseSteps * noiseWeight
+          ));
+          // 0 = open sky sentinel; keep minimum raw value at 2 to avoid that
+          ceilingHeightOffsetArr[i] = Math.max(2, Math.min(128, 128 - Math.round(raise)));
+        }
+      }
+    }
+  }
+
   const hazards = new Uint8Array(W * H);
   const colliderFlagsArr = buildColliderFlags(solid);
   const temperature = new Uint8Array(W * H);
@@ -564,9 +694,10 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
       overlays:        maskToDataTextureRGBA(overlays,      W, H, "cellular_overlays"),
       wallType:        maskToDataTextureR8(wallType,        W, H, "cellular_wall_type"),
       wallOverlays:    maskToDataTextureRGBA(wallOverlays,  W, H, "cellular_wall_overlays"),
-      ceilingType:     maskToDataTextureR8(ceilingType,     W, H, "cellular_ceiling_type"),
-      ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "cellular_ceiling_overlays"),
-      colliderFlags:   maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
+      ceilingType:          maskToDataTextureR8(ceilingType,           W, H, "cellular_ceiling_type"),
+      ceilingOverlays:      maskToDataTextureRGBA(ceilingOverlays,     W, H, "cellular_ceiling_overlays"),
+      ceilingHeightOffset:  maskToDataTextureR8(ceilingHeightOffsetArr, W, H, "cellular_ceiling_height_offset"),
+      colliderFlags:        maskToDataTextureR8(colliderFlagsArr,       W, H, "cellular_collider_flags"),
       floorSkirtType:  maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
       ceilSkirtType:   maskToDataTextureRGBA(ceilSkirtType,  W, H, "cellular_ceil_skirt_type"),
       skyPanelCount:   maskToDataTextureR8(new Uint8Array(W * H), W, H, "cellular_sky_panel_count"),
