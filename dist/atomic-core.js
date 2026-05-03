@@ -5619,10 +5619,10 @@ function createDungeonRenderer(element, game, options = {}) {
 						});
 					}
 				}
-				if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-				if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-				if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-				if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+				if (isSolid(cx, cz - 1) || isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+				if (isSolid(cx, cz + 1) || isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+				if (isSolid(cx - 1, cz) || isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+				if (isSolid(cx + 1, cz) || isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
 			}
 			const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
 			if (ceilPanelCount > 0) {
@@ -7170,7 +7170,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.9.0",
+		version: "0.9.1",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
