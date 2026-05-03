@@ -4817,6 +4817,8 @@ function createDungeonRenderer(element, game, options = {}) {
 	const fogFar = options.fogFar ?? 24;
 	const fogHex = options.fogColor ?? "#000000";
 	const lerpFactor = options.lerpFactor ?? .18;
+	const offsetStep = tileSize * (options.offsetFactor ?? .5);
+	let snapToFloor = options.snapCameraToFloor ?? false;
 	const fogColor = new THREE.Color(fogHex);
 	const packedAtlas = options.packedAtlas;
 	const resolver = options.tileNameResolver;
@@ -5152,7 +5154,6 @@ function createDungeonRenderer(element, game, options = {}) {
 		const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 		const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
 		const wallMidY = ceilingH / 2;
-		const offsetStep = tileSize * (options.offsetFactor ?? .5);
 		const matrices = [];
 		const uvRects = [];
 		const rotations = [];
@@ -5266,7 +5267,6 @@ function createDungeonRenderer(element, game, options = {}) {
 		const { width, height } = outputs;
 		const solid = outputs.textures.solid.image.data;
 		const wallMidY = ceilingH / 2;
-		const offsetStep = tileSize * (options.offsetFactor ?? .5);
 		const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 		const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
 		const skyPanelCountData = outputs.textures.skyPanelCount?.image.data;
@@ -5805,17 +5805,29 @@ function createDungeonRenderer(element, game, options = {}) {
 	}
 	let currentEntities = [];
 	let tgtX = 0, tgtZ = 0, tgtYaw = 0;
+	let tgtY = ceilingH * eyeHeightFactor;
 	let curX = 0, curZ = 0, curYaw = 0;
+	let curY = ceilingH * eyeHeightFactor;
 	let initialized = false;
 	const onTurn = () => {
 		buildDungeon();
 		tgtX = (game.player.x + .5) * tileSize;
 		tgtZ = (game.player.z + .5) * tileSize;
 		tgtYaw = game.player.facing;
+		if (snapToFloor) {
+			const outputs = game.dungeon.outputs;
+			const floorOffData = outputs?.textures.floorHeightOffset?.image.data;
+			if (floorOffData && outputs) {
+				const floorVal = floorOffData[game.player.z * outputs.width + game.player.x] ?? 128;
+				const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
+				tgtY = ceilingH * eyeHeightFactor + floorOffset;
+			} else tgtY = ceilingH * eyeHeightFactor;
+		} else tgtY = ceilingH * eyeHeightFactor;
 		if (!initialized) {
 			curX = tgtX;
 			curZ = tgtZ;
 			curYaw = tgtYaw;
+			curY = tgtY;
 			initialized = true;
 		}
 	};
@@ -5829,12 +5841,13 @@ function createDungeonRenderer(element, game, options = {}) {
 		if (initialized) {
 			const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
 			curX += (tgtX - curX) * k;
+			curY += (tgtY - curY) * k;
 			curZ += (tgtZ - curZ) * k;
 			let dy = tgtYaw - curYaw;
 			if (dy > Math.PI) dy -= 2 * Math.PI;
 			if (dy < -Math.PI) dy += 2 * Math.PI;
 			curYaw += dy * k;
-			camera.position.set(curX, ceilingH * eyeHeightFactor, curZ);
+			camera.position.set(curX, curY, curZ);
 			camera.rotation.set(0, curYaw, 0, "YXZ");
 			const cfx = -Math.sin(curYaw);
 			const cfz = -Math.cos(curYaw);
@@ -6054,6 +6067,19 @@ function createDungeonRenderer(element, game, options = {}) {
 			if (opts.wallMin !== void 0 || opts.wallMax !== void 0) for (const mat of atlasMaterials) {
 				if (opts.wallMin !== void 0) mat.uniforms["uWallLightMin"].value = opts.wallMin;
 				if (opts.wallMax !== void 0) mat.uniforms["uWallLightMax"].value = opts.wallMax;
+			}
+		},
+		setSnapCameraToFloor(enabled) {
+			snapToFloor = enabled;
+			tgtY = ceilingH * eyeHeightFactor;
+			if (enabled && initialized) {
+				const outputs = game.dungeon.outputs;
+				const floorOffData = outputs?.textures.floorHeightOffset?.image.data;
+				if (floorOffData && outputs) {
+					const floorVal = floorOffData[game.player.z * outputs.width + game.player.x] ?? 128;
+					const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
+					tgtY = ceilingH * eyeHeightFactor + floorOffset;
+				}
 			}
 		},
 		rebuild() {
@@ -7144,7 +7170,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.8.9",
+		version: "0.9.0",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,

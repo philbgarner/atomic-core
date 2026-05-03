@@ -99,6 +99,13 @@ export type DungeonRendererOptions = {
      */
     eyeHeightFactor?: number;
     /**
+     * When true, the camera Y position tracks the floor height offset at the
+     * player's current cell (in addition to the normal eyeHeightFactor offset).
+     * Transitions are smoothed by the same lerpFactor used for X/Z movement.
+     * Default: false.
+     */
+    snapCameraToFloor?: boolean;
+    /**
      * Per-entity-type (or per-kind) visual overrides for the cube renderer.
      * Keys are matched against `entity.type` first, then `entity.kind`.
      * Unmatched entities use built-in defaults (0.35×0.55×0.35 tileSize fractions, red).
@@ -341,6 +348,13 @@ export type DungeonRenderer = {
         wallMin?: number;
         wallMax?: number;
     }): void;
+    /**
+     * Enable or disable floor-height camera tracking at runtime without
+     * rebuilding the renderer. When enabled, the camera Y lerps to
+     * `ceilingHeight * eyeHeightFactor + floorOffset` at the player's cell.
+     * Takes effect immediately on the next rendered frame.
+     */
+    setSnapCameraToFloor(enabled: boolean): void;
     /**
      * Attach or replace the skybox cube map at runtime.
      * Pass `null` to remove the skybox and revert to the plain fog colour.
