@@ -1019,6 +1019,116 @@ function computeDistanceToWall(solid, W, H) {
 	return out;
 }
 /**
+* Subdivide each voronoi room region into `numSubSeeds` sub-regions by selecting
+* evenly-spaced cells from each region's cell list as sub-seeds, then running a
+* voronoi BFS expansion restricted to each parent region. Returns per-cell distance
+* to the nearest sub-region boundary (including the outer room/wall boundary).
+* Values are clamped to [0, 255]. Floor cells that could not be reached return 0.
+*
+* This distance field peaks at each sub-seed (interior "low point") and falls to zero
+* at all edges, producing cave-floor depression masks when applied inverted.
+*/
+function computeDistanceToSubRegionEdge(solid, regionIdArr, W, H, numSubSeeds) {
+	const DX = [
+		1,
+		-1,
+		0,
+		0
+	];
+	const DY = [
+		0,
+		0,
+		1,
+		-1
+	];
+	const regionCells = /* @__PURE__ */ new Map();
+	for (let i = 0; i < W * H; i++) {
+		const rid = regionIdArr[i];
+		if (rid === 0 || solid[i] !== 0) continue;
+		let cells = regionCells.get(rid);
+		if (cells === void 0) {
+			cells = [];
+			regionCells.set(rid, cells);
+		}
+		cells.push(i);
+	}
+	const subRegionId = new Uint32Array(W * H);
+	const voroQueue = new Int32Array(W * H);
+	let qh = 0, qt = 0;
+	let globalSubId = 1;
+	for (const [, cells] of regionCells) {
+		const n = cells.length;
+		const ns = Math.min(numSubSeeds, n);
+		for (let s = 0; s < ns; s++) {
+			const cellIdx = cells[Math.floor(s * n / ns)];
+			subRegionId[cellIdx] = globalSubId++;
+			voroQueue[qt++] = cellIdx;
+		}
+	}
+	while (qh < qt) {
+		const i = voroQueue[qh++];
+		const x = i % W, y = i / W | 0;
+		const srid = subRegionId[i];
+		const rid = regionIdArr[i];
+		for (let d = 0; d < 4; d++) {
+			const nx = x + DX[d], ny = y + DY[d];
+			if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+			const ni = idx(nx, ny, W);
+			if (solid[ni] !== 0 || regionIdArr[ni] !== rid || subRegionId[ni] !== 0) continue;
+			subRegionId[ni] = srid;
+			voroQueue[qt++] = ni;
+		}
+	}
+	const distU16 = new Uint16Array(W * H).fill(65535);
+	const bfsQueue = new Int32Array(W * H);
+	qh = 0;
+	qt = 0;
+	for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+		const i = idx(x, y, W);
+		if (solid[i] !== 0) {
+			distU16[i] = 0;
+			continue;
+		}
+		const srid = subRegionId[i];
+		let isBoundary = false;
+		for (let d = 0; d < 4 && !isBoundary; d++) {
+			const nx = x + DX[d], ny = y + DY[d];
+			if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
+				isBoundary = true;
+				break;
+			}
+			const ni = idx(nx, ny, W);
+			if (solid[ni] !== 0 || subRegionId[ni] !== srid) isBoundary = true;
+		}
+		if (isBoundary) {
+			distU16[i] = 0;
+			bfsQueue[qt++] = i;
+		}
+	}
+	while (qh < qt) {
+		const i = bfsQueue[qh++];
+		const x = i % W, y = i / W | 0;
+		const srid = subRegionId[i];
+		const next = distU16[i] + 1;
+		for (let d = 0; d < 4; d++) {
+			const nx = x + DX[d], ny = y + DY[d];
+			if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+			const ni = idx(nx, ny, W);
+			if (solid[ni] !== 0 || subRegionId[ni] !== srid) continue;
+			if (next < distU16[ni]) {
+				distU16[ni] = next;
+				bfsQueue[qt++] = ni;
+			}
+		}
+	}
+	const out = new Uint8Array(W * H);
+	for (let i = 0; i < W * H; i++) {
+		const d = distU16[i];
+		out[i] = d === 65535 ? 0 : d > 255 ? 255 : d;
+	}
+	return out;
+}
+/**
 * Wrap a Uint8Array as an R8 THREE.DataTexture (one byte per texel).
 * Shares the buffer with `mask`; set `tex.needsUpdate = true` after mutations.
 * NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
@@ -1272,6 +1382,14 @@ function generateCellularDungeon(options) {
 	const vaultHeightScale = options.vaultHeightScale ?? 1;
 	const distanceToWallWeight = options.distanceToWallWeight ?? 1;
 	const noiseWeight = options.noiseWeight ?? 1;
+	const vaultedFloor = options.vaultedFloor ?? false;
+	const floorSubSeeds = options.floorSubSeeds ?? 2;
+	const floorMaxSteps = options.floorMaxSteps ?? 3;
+	const floorNoiseFrequency = options.floorNoiseFrequency ?? .08;
+	const floorNoiseSteps = options.floorNoiseSteps ?? 2;
+	const floorHeightScale = options.floorHeightScale ?? 1;
+	const floorDistanceToEdgeWeight = options.floorDistanceToEdgeWeight ?? 1;
+	const floorNoiseWeight = options.floorNoiseWeight ?? 1;
 	const seedU32 = hashSeed(options.seed);
 	const rand = makeRng$1(seedU32);
 	let solid = new Uint8Array(W * H);
@@ -1317,6 +1435,24 @@ function generateCellularDungeon(options) {
 			}
 		}
 	}
+	const floorHeightOffsetArr = new Uint8Array(W * H);
+	floorHeightOffsetArr.fill(128);
+	if (vaultedFloor) {
+		const distToSubEdge = computeDistanceToSubRegionEdge(solid, regionIdArr, W, H, floorSubSeeds);
+		let maxDtse = 0;
+		for (let i = 0; i < W * H; i++) if (solid[i] === 0 && distToSubEdge[i] > maxDtse) maxDtse = distToSubEdge[i];
+		if (maxDtse > 0) {
+			const perlin = makePerlin2D(seedU32 ^ 3405691582);
+			for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
+				const i = idx(cx, cy, W);
+				if (solid[i] !== 0) continue;
+				const normalizedDtse = distToSubEdge[i] / maxDtse;
+				const noise = perlin(cx * floorNoiseFrequency, cy * floorNoiseFrequency);
+				const drop = Math.max(0, floorHeightScale * (normalizedDtse * floorMaxSteps * floorDistanceToEdgeWeight + noise * floorNoiseSteps * floorNoiseWeight));
+				floorHeightOffsetArr[i] = Math.max(1, Math.min(127, 128 - Math.round(drop)));
+			}
+		}
+	}
 	const hazards = new Uint8Array(W * H);
 	const colliderFlagsArr = buildColliderFlags(solid);
 	const temperature = new Uint8Array(W * H);
@@ -1352,6 +1488,7 @@ function generateCellularDungeon(options) {
 			ceilingType: maskToDataTextureR8(ceilingType, W, H, "cellular_ceiling_type"),
 			ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "cellular_ceiling_overlays"),
 			ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffsetArr, W, H, "cellular_ceiling_height_offset"),
+			floorHeightOffset: maskToDataTextureR8(floorHeightOffsetArr, W, H, "cellular_floor_height_offset"),
 			colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
 			floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
 			ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "cellular_ceil_skirt_type"),
@@ -7007,7 +7144,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.8.8",
+		version: "0.8.9",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,

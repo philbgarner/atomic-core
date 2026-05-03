@@ -63,6 +63,54 @@ export type CellularOptions = {
      * Default: 1
      */
     noiseWeight?: number;
+    /**
+     * Depress the floor toward the interior of each room's sub-voronoi regions,
+     * creating organic cave-floor depressions. Each room is split into `floorSubSeeds`
+     * sub-regions; the floor dips deepest at sub-region centers and rises to neutral at
+     * room/sub-region boundaries. Mixed with Perlin noise for organic variation.
+     * Default: false
+     */
+    vaultedFloor?: boolean;
+    /**
+     * Number of sub-seed points used to subdivide each room's voronoi region.
+     * More seeds create more distinct depressions per room.
+     * Default: 2
+     */
+    floorSubSeeds?: number;
+    /**
+     * Maximum floor depression (in offset steps) at the deepest sub-region center.
+     * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
+     * Default: 3
+     */
+    floorMaxSteps?: number;
+    /**
+     * Perlin noise spatial frequency for floor perturbation.
+     * Default: 0.08
+     */
+    floorNoiseFrequency?: number;
+    /**
+     * Amplitude of the Perlin noise floor perturbation in offset steps.
+     * Default: 2
+     */
+    floorNoiseSteps?: number;
+    /**
+     * Overall multiplier applied to the combined floor depression (distance + noise).
+     * Values > 1 produce deeper depressions; values < 1 produce shallower floors.
+     * Default: 1
+     */
+    floorHeightScale?: number;
+    /**
+     * Weight of the sub-region distance term in the floor depression formula.
+     * 0 = no distance contribution; 1 = full contribution.
+     * Default: 1
+     */
+    floorDistanceToEdgeWeight?: number;
+    /**
+     * Weight of the Perlin noise term in the floor depression formula.
+     * 0 = no noise contribution; 1 = full contribution.
+     * Default: 1
+     */
+    floorNoiseWeight?: number;
 };
 export type CellularDungeonOutputs = RoomedDungeonOutputs & {
     textures: {
@@ -92,6 +140,14 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
          * by `vaultHeightScale`. Setting both weights to 0 produces a flat ceiling.
          */
         ceilingHeightOffset: THREE.DataTexture;
+        /**
+         * Per-cell floor height offset (R8). Encoding: 128 = no offset, >128 = floor raised,
+         * <128 = floor lowered, 0 = pit marker.
+         * When `vaultedFloor` is enabled, each room's voronoi region is subdivided by
+         * `floorSubSeeds` internal points; the floor is depressed toward those centers
+         * (using sub-region distance-to-edge), mixed with Perlin noise.
+         */
+        floorHeightOffset: THREE.DataTexture;
         colliderFlags: THREE.DataTexture;
         floorSkirtType: THREE.DataTexture;
         ceilSkirtType: THREE.DataTexture;
