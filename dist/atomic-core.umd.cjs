@@ -908,6 +908,46 @@
 			return ((x ^ x >>> 14) >>> 0) / 4294967296;
 		};
 	}
+	/**
+	* Seeded 2D Perlin noise using a Fisher-Yates shuffled permutation table.
+	* Returns a closure `(x, y) => number` with output approximately in [-0.7, 0.7].
+	* The permutation table is derived from the given 32-bit seed via `makeRng`.
+	*/
+	function makePerlin2D(seed) {
+		const rng = makeRng$1(seed);
+		const p = new Uint8Array(256);
+		for (let i = 0; i < 256; i++) p[i] = i;
+		for (let i = 255; i > 0; i--) {
+			const j = Math.floor(rng() * (i + 1));
+			const tmp = p[i];
+			p[i] = p[j];
+			p[j] = tmp;
+		}
+		const perm = new Uint8Array(512);
+		for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+		function fade(t) {
+			return t * t * t * (t * (t * 6 - 15) + 10);
+		}
+		function lerp(a, b, t) {
+			return a + t * (b - a);
+		}
+		function grad(h, x, y) {
+			return (h & 1 ? -x : x) + (h & 2 ? -y : y);
+		}
+		return function(x, y) {
+			const xi = Math.floor(x) & 255;
+			const yi = Math.floor(y) & 255;
+			const xf = x - Math.floor(x);
+			const yf = y - Math.floor(y);
+			const u = fade(xf);
+			const v = fade(yf);
+			const aa = perm[perm[xi] + yi];
+			const ab = perm[perm[xi] + yi + 1];
+			const ba = perm[perm[xi + 1] + yi];
+			const bb = perm[perm[xi + 1] + yi + 1];
+			return lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u), lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v);
+		};
+	}
 	function idx(x, y, W) {
 		return y * W + x;
 	}
@@ -1251,6 +1291,10 @@
 		const birthThreshold = options.birthThreshold ?? 5;
 		const survivalThreshold = options.survivalThreshold ?? 4;
 		const keepOuterWalls = options.keepOuterWalls ?? true;
+		const vaultedCeiling = options.vaultedCeiling ?? true;
+		const vaultMaxSteps = options.vaultMaxSteps ?? 3;
+		const noiseFrequency = options.noiseFrequency ?? .08;
+		const noiseSteps = options.noiseSteps ?? 2;
 		const seedU32 = hashSeed(options.seed);
 		const rand = makeRng$1(seedU32);
 		let solid = new Uint8Array(W * H);
@@ -1279,6 +1323,23 @@
 		for (const i of largestRegion) solid[i] = 0;
 		const distanceToWall = computeDistanceToWall(solid, W, H);
 		const { regionIdArr, rooms, firstCorridorRegionId, startRoomId, endRoomId } = buildVoronoiRooms(solid, distanceToWall, W, H);
+		const ceilingHeightOffsetArr = new Uint8Array(W * H);
+		ceilingHeightOffsetArr.fill(128);
+		if (vaultedCeiling) {
+			let maxDtw = 0;
+			for (let i = 0; i < W * H; i++) if (solid[i] === 0 && distanceToWall[i] > maxDtw) maxDtw = distanceToWall[i];
+			if (maxDtw > 0) {
+				const perlin = makePerlin2D(seedU32 ^ 3735928559);
+				for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
+					const i = idx(cx, cy, W);
+					if (solid[i] !== 0) continue;
+					const normalizedDtw = distanceToWall[i] / maxDtw;
+					const noise = perlin(cx * noiseFrequency, cy * noiseFrequency);
+					const raise = Math.max(0, normalizedDtw * vaultMaxSteps + noise * noiseSteps);
+					ceilingHeightOffsetArr[i] = Math.max(2, Math.min(128, 128 - Math.round(raise)));
+				}
+			}
+		}
 		const hazards = new Uint8Array(W * H);
 		const colliderFlagsArr = buildColliderFlags(solid);
 		const temperature = new Uint8Array(W * H);
@@ -1313,6 +1374,7 @@
 				wallOverlays: maskToDataTextureRGBA(wallOverlays, W, H, "cellular_wall_overlays"),
 				ceilingType: maskToDataTextureR8(ceilingType, W, H, "cellular_ceiling_type"),
 				ceilingOverlays: maskToDataTextureRGBA(ceilingOverlays, W, H, "cellular_ceiling_overlays"),
+				ceilingHeightOffset: maskToDataTextureR8(ceilingHeightOffsetArr, W, H, "cellular_ceiling_height_offset"),
 				colliderFlags: maskToDataTextureR8(colliderFlagsArr, W, H, "cellular_collider_flags"),
 				floorSkirtType: maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
 				ceilSkirtType: maskToDataTextureRGBA(ceilSkirtType, W, H, "cellular_ceil_skirt_type"),
@@ -6968,7 +7030,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "0.8.6",
+			version: "0.8.7",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,

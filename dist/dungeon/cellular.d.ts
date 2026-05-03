@@ -19,6 +19,30 @@ export type CellularOptions = {
      */
     survivalThreshold?: number;
     keepOuterWalls?: boolean;
+    /**
+     * Raise the ceiling toward room centers, producing a vaulted cave effect.
+     * Uses `distanceToWall` (normalized) plus Perlin noise for organic variation.
+     * Default: true
+     */
+    vaultedCeiling?: boolean;
+    /**
+     * Maximum ceiling raise (in offset steps) at the deepest room center.
+     * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
+     * Default: 3
+     */
+    vaultMaxSteps?: number;
+    /**
+     * Perlin noise spatial frequency (cycles per cell) for ceiling perturbation.
+     * Lower values give broader, smoother waves; higher values give tighter bumps.
+     * Default: 0.08
+     */
+    noiseFrequency?: number;
+    /**
+     * Amplitude of the Perlin noise ceiling perturbation in offset steps.
+     * This is added to (or subtracted from) the vault raise before rounding.
+     * Default: 2
+     */
+    noiseSteps?: number;
 };
 export type CellularDungeonOutputs = RoomedDungeonOutputs & {
     textures: {
@@ -39,6 +63,13 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
         wallOverlays: THREE.DataTexture;
         ceilingType: THREE.DataTexture;
         ceilingOverlays: THREE.DataTexture;
+        /**
+         * Per-cell ceiling height offset (R8). Encoding: 128 = no offset, 127 = +1 step up
+         * (ceiling raised), 129 = +1 step down (ceiling lowered), 0 = open sky.
+         * When `vaultedCeiling` is enabled, values are derived from `distanceToWall`
+         * normalized to `vaultMaxSteps` and perturbed by Perlin noise of amplitude `noiseSteps`.
+         */
+        ceilingHeightOffset: THREE.DataTexture;
         colliderFlags: THREE.DataTexture;
         floorSkirtType: THREE.DataTexture;
         ceilSkirtType: THREE.DataTexture;
