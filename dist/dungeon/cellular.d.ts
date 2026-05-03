@@ -43,6 +43,26 @@ export type CellularOptions = {
      * Default: 2
      */
     noiseSteps?: number;
+    /**
+     * Overall multiplier applied to the combined ceiling raise (DTW + noise).
+     * Values > 1 produce taller vaults; values < 1 produce lower, flatter ceilings.
+     * Default: 1
+     */
+    vaultHeightScale?: number;
+    /**
+     * Weight of the distance-to-wall term in the ceiling raise formula.
+     * 0 = no DTW contribution (ceiling height comes entirely from Perlin noise);
+     * 1 = full DTW contribution. Both this and `noiseWeight` at 0 → flat ceiling.
+     * Default: 1
+     */
+    distanceToWallWeight?: number;
+    /**
+     * Weight of the Perlin noise term in the ceiling raise formula.
+     * 0 = no noise contribution (ceiling height comes entirely from distance-to-wall);
+     * 1 = full noise contribution. Both this and `distanceToWallWeight` at 0 → flat ceiling.
+     * Default: 1
+     */
+    noiseWeight?: number;
 };
 export type CellularDungeonOutputs = RoomedDungeonOutputs & {
     textures: {
@@ -67,7 +87,9 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
          * Per-cell ceiling height offset (R8). Encoding: 128 = no offset, 127 = +1 step up
          * (ceiling raised), 129 = +1 step down (ceiling lowered), 0 = open sky.
          * When `vaultedCeiling` is enabled, values are derived from `distanceToWall`
-         * normalized to `vaultMaxSteps` and perturbed by Perlin noise of amplitude `noiseSteps`.
+         * (weighted by `distanceToWallWeight`, scaled to `vaultMaxSteps`) combined with
+         * Perlin noise (weighted by `noiseWeight`, amplitude `noiseSteps`), then scaled
+         * by `vaultHeightScale`. Setting both weights to 0 produces a flat ceiling.
          */
         ceilingHeightOffset: THREE.DataTexture;
         colliderFlags: THREE.DataTexture;

@@ -1269,6 +1269,9 @@ function generateCellularDungeon(options) {
 	const vaultMaxSteps = options.vaultMaxSteps ?? 3;
 	const noiseFrequency = options.noiseFrequency ?? .08;
 	const noiseSteps = options.noiseSteps ?? 2;
+	const vaultHeightScale = options.vaultHeightScale ?? 1;
+	const distanceToWallWeight = options.distanceToWallWeight ?? 1;
+	const noiseWeight = options.noiseWeight ?? 1;
 	const seedU32 = hashSeed(options.seed);
 	const rand = makeRng$1(seedU32);
 	let solid = new Uint8Array(W * H);
@@ -1309,7 +1312,7 @@ function generateCellularDungeon(options) {
 				if (solid[i] !== 0) continue;
 				const normalizedDtw = distanceToWall[i] / maxDtw;
 				const noise = perlin(cx * noiseFrequency, cy * noiseFrequency);
-				const raise = Math.max(0, normalizedDtw * vaultMaxSteps + noise * noiseSteps);
+				const raise = Math.max(0, vaultHeightScale * (normalizedDtw * vaultMaxSteps * distanceToWallWeight + noise * noiseSteps * noiseWeight));
 				ceilingHeightOffsetArr[i] = Math.max(2, Math.min(128, 128 - Math.round(raise)));
 			}
 		}
@@ -7004,7 +7007,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.8.7",
+		version: "0.8.8",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
