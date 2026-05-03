@@ -5645,10 +5645,17 @@ void main() {
 							});
 						}
 					}
-					if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-					if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-					if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-					if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					if (isOpenSky) {
+						if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+						if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+						if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+						if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					} else {
+						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					}
 				}
 				const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
 				if (ceilPanelCount > 0) {
@@ -7196,7 +7203,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "0.9.2",
+			version: "0.9.3",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,
