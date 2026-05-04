@@ -4,7 +4,7 @@
 
 > **LayerHandle** = `object`
 
-Defined in: [rendering/dungeonRenderer.ts:238](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/dungeonRenderer.ts#L238)
+Defined in: [rendering/dungeonRenderer.ts:245](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/rendering/dungeonRenderer.ts#L245)
 
 ## Methods
 
@@ -12,7 +12,7 @@ Defined in: [rendering/dungeonRenderer.ts:238](https://github.com/philbgarner/at
 
 > **remove**(): `void`
 
-Defined in: [rendering/dungeonRenderer.ts:240](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/rendering/dungeonRenderer.ts#L240)
+Defined in: [rendering/dungeonRenderer.ts:247](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/rendering/dungeonRenderer.ts#L247)
 
 Remove this layer from the scene and release its geometry.
 

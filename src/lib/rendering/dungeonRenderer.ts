@@ -116,6 +116,13 @@ export type DungeonRendererOptions = {
    */
   eyeHeightFactor?: number;
   /**
+   * When true, the camera Y position tracks the floor height offset at the
+   * player's current cell (in addition to the normal eyeHeightFactor offset).
+   * Transitions are smoothed by the same lerpFactor used for X/Z movement.
+   * Default: false.
+   */
+  snapCameraToFloor?: boolean;
+  /**
    * Per-entity-type (or per-kind) visual overrides for the cube renderer.
    * Keys are matched against `entity.type` first, then `entity.kind`.
    * Unmatched entities use built-in defaults (0.35×0.55×0.35 tileSize fractions, red).
@@ -380,6 +387,13 @@ export type DungeonRenderer = {
     wallMax?: number;
   }): void;
   /**
+   * Enable or disable floor-height camera tracking at runtime without
+   * rebuilding the renderer. When enabled, the camera Y lerps to
+   * `ceilingHeight * eyeHeightFactor + floorOffset` at the player's cell.
+   * Takes effect immediately on the next rendered frame.
+   */
+  setSnapCameraToFloor(enabled: boolean): void;
+  /**
    * Attach or replace the skybox cube map at runtime.
    * Pass `null` to remove the skybox and revert to the plain fog colour.
    * Resolves after all six face images have loaded (instant when a pre-loaded
@@ -600,6 +614,8 @@ export function createDungeonRenderer(
   const fogFar = options.fogFar ?? 24;
   const fogHex = options.fogColor ?? "#000000";
   const lerpFactor = options.lerpFactor ?? 0.18;
+  const offsetStep = tileSize * (options.offsetFactor ?? 0.5);
+  let snapToFloor = options.snapCameraToFloor ?? false;
   const fogColor = new THREE.Color(fogHex);
   const packedAtlas = options.packedAtlas;
   const resolver = options.tileNameResolver;
@@ -1005,7 +1021,6 @@ export function createDungeonRenderer(
       | Uint8Array
       | undefined;
     const wallMidY = ceilingH / 2;
-    const offsetStep = tileSize * (options.offsetFactor ?? 0.5);
 
     const matrices: THREE.Matrix4[] = [];
     const uvRects: UvRect[] = [];
@@ -1257,8 +1272,6 @@ export function createDungeonRenderer(
     const { width, height } = outputs;
     const solid = outputs.textures.solid.image.data as Uint8Array;
     const wallMidY = ceilingH / 2;
-    const offsetFactor = options.offsetFactor ?? 0.5;
-    const offsetStep = tileSize * offsetFactor;
 
     // Height offset texture data (value 128 = no offset; 0 = pit for floor).
     const floorOffData = outputs.textures.floorHeightOffset?.image.data as
@@ -1654,7 +1667,7 @@ export function createDungeonRenderer(
           }
         }
 
-        // Sky panels — stacked above ceilingH on wall faces of cells with skyPanelCount > 0.
+        // Sky panels: open-sky cells emit toward solid walls; non-sky cells emit toward open-sky neighbours.
         const skyCount = skyPanelCountData ? (skyPanelCountData[idx] ?? 0) : 0;
         if (skyCount > 0) {
           function emitSkyPanels(mx: number, mz: number, ry: number) {
@@ -1667,10 +1680,17 @@ export function createDungeonRenderer(
               skyPanelCellMap.push({ cx, cz });
             }
           }
-          if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-          if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-          if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-          if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+          if (isOpenSky) {
+            if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+            if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+            if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+            if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+          } else {
+            if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+            if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+            if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+            if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+          }
         }
 
         // Ceiling panels — stacked below ceilingH on wall faces of cells with ceilingPanelCount > 0.
@@ -1940,9 +1960,11 @@ export function createDungeonRenderer(
   let tgtX = 0,
     tgtZ = 0,
     tgtYaw = 0;
+  let tgtY = ceilingH * eyeHeightFactor;
   let curX = 0,
     curZ = 0,
     curYaw = 0;
+  let curY = ceilingH * eyeHeightFactor;
   let initialized = false;
 
   const onTurn = () => {
@@ -1950,10 +1972,28 @@ export function createDungeonRenderer(
     tgtX = (game.player.x + 0.5) * tileSize;
     tgtZ = (game.player.z + 0.5) * tileSize;
     tgtYaw = game.player.facing;
+
+    if (snapToFloor) {
+      const outputs = game.dungeon.outputs;
+      const floorOffData = outputs?.textures.floorHeightOffset?.image.data as Uint8Array | undefined;
+      if (floorOffData && outputs) {
+        const idx = game.player.z * outputs.width + game.player.x;
+        const floorVal = floorOffData[idx] ?? 128;
+        // floorVal === 0 means pit — treat as neutral for camera purposes
+        const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
+        tgtY = ceilingH * eyeHeightFactor + floorOffset;
+      } else {
+        tgtY = ceilingH * eyeHeightFactor;
+      }
+    } else {
+      tgtY = ceilingH * eyeHeightFactor;
+    }
+
     if (!initialized) {
       curX = tgtX;
       curZ = tgtZ;
       curYaw = tgtYaw;
+      curY = tgtY;
       initialized = true;
     }
   };
@@ -1972,6 +2012,7 @@ export function createDungeonRenderer(
     if (initialized) {
       const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
       curX += (tgtX - curX) * k;
+      curY += (tgtY - curY) * k;
       curZ += (tgtZ - curZ) * k;
 
       let dy = tgtYaw - curYaw;
@@ -1979,7 +2020,7 @@ export function createDungeonRenderer(
       if (dy < -Math.PI) dy += 2 * Math.PI;
       curYaw += dy * k;
 
-      camera.position.set(curX, ceilingH * eyeHeightFactor, curZ);
+      camera.position.set(curX, curY, curZ);
       camera.rotation.set(0, curYaw, 0, "YXZ");
 
       // Update camera forward direction for directional surface lighting.
@@ -2231,6 +2272,20 @@ export function createDungeonRenderer(
             (mat.uniforms["uWallLightMin"] as { value: number }).value = opts.wallMin;
           if (opts.wallMax !== undefined)
             (mat.uniforms["uWallLightMax"] as { value: number }).value = opts.wallMax;
+        }
+      }
+    },
+    setSnapCameraToFloor(enabled: boolean) {
+      snapToFloor = enabled;
+      tgtY = ceilingH * eyeHeightFactor;
+      if (enabled && initialized) {
+        const outputs = game.dungeon.outputs;
+        const floorOffData = outputs?.textures.floorHeightOffset?.image.data as Uint8Array | undefined;
+        if (floorOffData && outputs) {
+          const idx = game.player.z * outputs.width + game.player.x;
+          const floorVal = floorOffData[idx] ?? 128;
+          const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
+          tgtY = ceilingH * eyeHeightFactor + floorOffset;
         }
       }
     },

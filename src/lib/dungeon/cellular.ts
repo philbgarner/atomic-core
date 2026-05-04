@@ -78,6 +78,55 @@ export type CellularOptions = {
    * Default: 1
    */
   noiseWeight?: number;
+
+  /**
+   * Depress the floor toward the interior of each room's sub-voronoi regions,
+   * creating organic cave-floor depressions. Each room is split into `floorSubSeeds`
+   * sub-regions; the floor dips deepest at sub-region centers and rises to neutral at
+   * room/sub-region boundaries. Mixed with Perlin noise for organic variation.
+   * Default: false
+   */
+  vaultedFloor?: boolean;
+  /**
+   * Number of sub-seed points used to subdivide each room's voronoi region.
+   * More seeds create more distinct depressions per room.
+   * Default: 2
+   */
+  floorSubSeeds?: number;
+  /**
+   * Maximum floor depression (in offset steps) at the deepest sub-region center.
+   * One step = mapCellGeometrySize * offsetFactor (default: tileSize * 0.5).
+   * Default: 3
+   */
+  floorMaxSteps?: number;
+  /**
+   * Perlin noise spatial frequency for floor perturbation.
+   * Default: 0.08
+   */
+  floorNoiseFrequency?: number;
+  /**
+   * Amplitude of the Perlin noise floor perturbation in offset steps.
+   * Default: 2
+   */
+  floorNoiseSteps?: number;
+  /**
+   * Overall multiplier applied to the combined floor depression (distance + noise).
+   * Values > 1 produce deeper depressions; values < 1 produce shallower floors.
+   * Default: 1
+   */
+  floorHeightScale?: number;
+  /**
+   * Weight of the sub-region distance term in the floor depression formula.
+   * 0 = no distance contribution; 1 = full contribution.
+   * Default: 1
+   */
+  floorDistanceToEdgeWeight?: number;
+  /**
+   * Weight of the Perlin noise term in the floor depression formula.
+   * 0 = no noise contribution; 1 = full contribution.
+   * Default: 1
+   */
+  floorNoiseWeight?: number;
 };
 
 export type CellularDungeonOutputs = RoomedDungeonOutputs & {
@@ -108,6 +157,14 @@ export type CellularDungeonOutputs = RoomedDungeonOutputs & {
      * by `vaultHeightScale`. Setting both weights to 0 produces a flat ceiling.
      */
     ceilingHeightOffset: THREE.DataTexture;
+    /**
+     * Per-cell floor height offset (R8). Encoding: 128 = no offset, >128 = floor raised,
+     * <128 = floor lowered, 0 = pit marker.
+     * When `vaultedFloor` is enabled, each room's voronoi region is subdivided by
+     * `floorSubSeeds` internal points; the floor is depressed toward those centers
+     * (using sub-region distance-to-edge), mixed with Perlin noise.
+     */
+    floorHeightOffset: THREE.DataTexture;
     colliderFlags: THREE.DataTexture;
     floorSkirtType: THREE.DataTexture;
     ceilSkirtType: THREE.DataTexture;
@@ -301,6 +358,113 @@ function computeDistanceToWall(solid: Uint8Array, W: number, H: number): Uint8Ar
   for (let i = 0; i < W * H; i++) {
     const d = dist[i]!;
     out[i] = d === 0xffff ? 255 : d > 255 ? 255 : d;
+  }
+  return out;
+}
+
+/**
+ * Subdivide each voronoi room region into `numSubSeeds` sub-regions by selecting
+ * evenly-spaced cells from each region's cell list as sub-seeds, then running a
+ * voronoi BFS expansion restricted to each parent region. Returns per-cell distance
+ * to the nearest sub-region boundary (including the outer room/wall boundary).
+ * Values are clamped to [0, 255]. Floor cells that could not be reached return 0.
+ *
+ * This distance field peaks at each sub-seed (interior "low point") and falls to zero
+ * at all edges, producing cave-floor depression masks when applied inverted.
+ */
+function computeDistanceToSubRegionEdge(
+  solid: Uint8Array,
+  regionIdArr: Uint8Array,
+  W: number,
+  H: number,
+  numSubSeeds: number,
+): Uint8Array {
+  const DX = [1, -1, 0, 0];
+  const DY = [0, 0, 1, -1];
+
+  // Collect floor cells per region
+  const regionCells = new Map<number, number[]>();
+  for (let i = 0; i < W * H; i++) {
+    const rid = regionIdArr[i]!;
+    if (rid === 0 || solid[i] !== 0) continue;
+    let cells = regionCells.get(rid);
+    if (cells === undefined) { cells = []; regionCells.set(rid, cells); }
+    cells.push(i);
+  }
+
+  // Assign sub-region IDs via multi-source BFS within each parent region.
+  // Sub-seeds are picked at evenly-spaced indices of each region's cell list.
+  // IDs are globally unique per (region, subSeedIndex) pair.
+  const subRegionId = new Uint32Array(W * H); // 0 = unassigned/wall
+  const voroQueue = new Int32Array(W * H);
+  let qh = 0, qt = 0;
+  let globalSubId = 1;
+
+  for (const [, cells] of regionCells) {
+    const n = cells.length;
+    const ns = Math.min(numSubSeeds, n);
+    for (let s = 0; s < ns; s++) {
+      const cellIdx = cells[Math.floor(s * n / ns)]!;
+      subRegionId[cellIdx] = globalSubId++;
+      voroQueue[qt++] = cellIdx;
+    }
+  }
+
+  // BFS expansion: each sub-seed claims unvisited cells in the same parent region
+  while (qh < qt) {
+    const i = voroQueue[qh++]!;
+    const x = i % W, y = (i / W) | 0;
+    const srid = subRegionId[i]!;
+    const rid = regionIdArr[i]!;
+    for (let d = 0; d < 4; d++) {
+      const nx = x + DX[d]!, ny = y + DY[d]!;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const ni = idx(nx, ny, W);
+      if (solid[ni] !== 0 || regionIdArr[ni] !== rid || subRegionId[ni] !== 0) continue;
+      subRegionId[ni] = srid;
+      voroQueue[qt++] = ni;
+    }
+  }
+
+  // Multi-source BFS from sub-region boundary cells (adjacent to different sub-region or wall)
+  const distU16 = new Uint16Array(W * H).fill(0xffff);
+  const bfsQueue = new Int32Array(W * H);
+  qh = 0; qt = 0;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = idx(x, y, W);
+      if (solid[i] !== 0) { distU16[i] = 0; continue; }
+      const srid = subRegionId[i]!;
+      let isBoundary = false;
+      for (let d = 0; d < 4 && !isBoundary; d++) {
+        const nx = x + DX[d]!, ny = y + DY[d]!;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) { isBoundary = true; break; }
+        const ni = idx(nx, ny, W);
+        if (solid[ni] !== 0 || subRegionId[ni] !== srid) isBoundary = true;
+      }
+      if (isBoundary) { distU16[i] = 0; bfsQueue[qt++] = i; }
+    }
+  }
+
+  while (qh < qt) {
+    const i = bfsQueue[qh++]!;
+    const x = i % W, y = (i / W) | 0;
+    const srid = subRegionId[i]!;
+    const next = distU16[i]! + 1;
+    for (let d = 0; d < 4; d++) {
+      const nx = x + DX[d]!, ny = y + DY[d]!;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const ni = idx(nx, ny, W);
+      if (solid[ni] !== 0 || subRegionId[ni] !== srid) continue;
+      if (next < distU16[ni]!) { distU16[ni] = next; bfsQueue[qt++] = ni; }
+    }
+  }
+
+  const out = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const d = distU16[i]!;
+    out[i] = d === 0xffff ? 0 : d > 255 ? 255 : d;
   }
   return out;
 }
@@ -569,6 +733,14 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
   const vaultHeightScale    = options.vaultHeightScale    ?? 1;
   const distanceToWallWeight = options.distanceToWallWeight ?? 1;
   const noiseWeight          = options.noiseWeight          ?? 1;
+  const vaultedFloor             = options.vaultedFloor             ?? false;
+  const floorSubSeeds            = options.floorSubSeeds            ?? 2;
+  const floorMaxSteps            = options.floorMaxSteps            ?? 3;
+  const floorNoiseFrequency      = options.floorNoiseFrequency      ?? 0.08;
+  const floorNoiseSteps          = options.floorNoiseSteps          ?? 2;
+  const floorHeightScale         = options.floorHeightScale         ?? 1;
+  const floorDistanceToEdgeWeight = options.floorDistanceToEdgeWeight ?? 1;
+  const floorNoiseWeight          = options.floorNoiseWeight          ?? 1;
 
   const seedU32 = hashSeed(options.seed);
   const rand = makeRng(seedU32);
@@ -656,6 +828,37 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
     }
   }
 
+  // Floor depression: each room's voronoi region is subdivided into floorSubSeeds sub-regions.
+  // Distance to sub-region edge peaks at each sub-seed (the "low point"); the floor is
+  // depressed proportional to that distance, mixed with Perlin noise.
+  // Encoding: 128 = no offset, <128 = floor lowered (128 - n = n steps down). 0 = pit marker.
+  const floorHeightOffsetArr = new Uint8Array(W * H);
+  floorHeightOffsetArr.fill(128);
+  if (vaultedFloor) {
+    const distToSubEdge = computeDistanceToSubRegionEdge(solid, regionIdArr, W, H, floorSubSeeds);
+    let maxDtse = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (solid[i] === 0 && distToSubEdge[i]! > maxDtse) maxDtse = distToSubEdge[i]!;
+    }
+    if (maxDtse > 0) {
+      const perlin = makePerlin2D(seedU32 ^ 0xcafebabe);
+      for (let cy = 0; cy < H; cy++) {
+        for (let cx = 0; cx < W; cx++) {
+          const i = idx(cx, cy, W);
+          if (solid[i] !== 0) continue;
+          const normalizedDtse = distToSubEdge[i]! / maxDtse;
+          const noise = perlin(cx * floorNoiseFrequency, cy * floorNoiseFrequency);
+          const drop = Math.max(0, floorHeightScale * (
+            normalizedDtse * floorMaxSteps * floorDistanceToEdgeWeight +
+            noise * floorNoiseSteps * floorNoiseWeight
+          ));
+          // Avoid 0 (pit marker); floor is depressed at sub-region interiors
+          floorHeightOffsetArr[i] = Math.max(1, Math.min(127, 128 - Math.round(drop)));
+        }
+      }
+    }
+  }
+
   const hazards = new Uint8Array(W * H);
   const colliderFlagsArr = buildColliderFlags(solid);
   const temperature = new Uint8Array(W * H);
@@ -697,6 +900,7 @@ export function generateCellularDungeon(options: CellularOptions): CellularDunge
       ceilingType:          maskToDataTextureR8(ceilingType,           W, H, "cellular_ceiling_type"),
       ceilingOverlays:      maskToDataTextureRGBA(ceilingOverlays,     W, H, "cellular_ceiling_overlays"),
       ceilingHeightOffset:  maskToDataTextureR8(ceilingHeightOffsetArr, W, H, "cellular_ceiling_height_offset"),
+      floorHeightOffset:    maskToDataTextureR8(floorHeightOffsetArr,   W, H, "cellular_floor_height_offset"),
       colliderFlags:        maskToDataTextureR8(colliderFlagsArr,       W, H, "cellular_collider_flags"),
       floorSkirtType:  maskToDataTextureRGBA(floorSkirtType, W, H, "cellular_floor_skirt_type"),
       ceilSkirtType:   maskToDataTextureRGBA(ceilSkirtType,  W, H, "cellular_ceil_skirt_type"),

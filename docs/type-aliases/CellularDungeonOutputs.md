@@ -4,7 +4,7 @@
 
 > **CellularDungeonOutputs** = [`RoomedDungeonOutputs`](RoomedDungeonOutputs.md) & `object`
 
-Defined in: [dungeon/cellular.ts:38](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/cellular.ts#L38)
+Defined in: [dungeon/cellular.ts:132](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/dungeon/cellular.ts#L132)
 
 ## Type Declaration
 
@@ -13,6 +13,17 @@ Defined in: [dungeon/cellular.ts:38](https://github.com/philbgarner/atomic-core/
 > **textures**: `object`
 
 #### Type Declaration
+
+#### textures.ceilingHeightOffset
+
+> **ceilingHeightOffset**: `THREE.DataTexture`
+
+Per-cell ceiling height offset (R8). Encoding: 128 = no offset, 127 = +1 step up
+(ceiling raised), 129 = +1 step down (ceiling lowered), 0 = open sky.
+When `vaultedCeiling` is enabled, values are derived from `distanceToWall`
+(weighted by `distanceToWallWeight`, scaled to `vaultMaxSteps`) combined with
+Perlin noise (weighted by `noiseWeight`, amplitude `noiseSteps`), then scaled
+by `vaultHeightScale`. Setting both weights to 0 produces a flat ceiling.
 
 #### textures.ceilingOverlays
 
@@ -33,6 +44,16 @@ Defined in: [dungeon/cellular.ts:38](https://github.com/philbgarner/atomic-core/
 #### textures.distanceToWall
 
 > **distanceToWall**: `THREE.DataTexture`
+
+#### textures.floorHeightOffset
+
+> **floorHeightOffset**: `THREE.DataTexture`
+
+Per-cell floor height offset (R8). Encoding: 128 = no offset, >128 = floor raised,
+<128 = floor lowered, 0 = pit marker.
+When `vaultedFloor` is enabled, each room's voronoi region is subdivided by
+`floorSubSeeds` internal points; the floor is depressed toward those centers
+(using sub-region distance-to-edge), mixed with Perlin noise.
 
 #### textures.floorSkirtType
 

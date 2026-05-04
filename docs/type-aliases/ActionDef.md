@@ -4,7 +4,7 @@
 
 > **ActionDef** = `object`
 
-Defined in: [ui/inventoryDialog.ts:58](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L58)
+Defined in: [ui/inventoryDialog.ts:58](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/ui/inventoryDialog.ts#L58)
 
 A button shown in the right-column action strip.
 
@@ -12,6 +12,6 @@ A button shown in the right-column action strip.
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="icon"></a> `icon?` | `string` | Optional icon URL displayed to the left of the label. | [ui/inventoryDialog.ts:62](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L62) |
-| <a id="label"></a> `label` | `string` | Button label text. | [ui/inventoryDialog.ts:60](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L60) |
-| <a id="onclick"></a> `onClick` | (`handle`) => `void` | Called when the button is clicked, receiving the live inventory handle. | [ui/inventoryDialog.ts:64](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/ui/inventoryDialog.ts#L64) |
+| <a id="icon"></a> `icon?` | `string` | Optional icon URL displayed to the left of the label. | [ui/inventoryDialog.ts:62](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/ui/inventoryDialog.ts#L62) |
+| <a id="label"></a> `label` | `string` | Button label text. | [ui/inventoryDialog.ts:60](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/ui/inventoryDialog.ts#L60) |
+| <a id="onclick"></a> `onClick` | (`handle`) => `void` | Called when the button is clicked, receiving the live inventory handle. | [ui/inventoryDialog.ts:64](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/ui/inventoryDialog.ts#L64) |

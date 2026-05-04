@@ -4,7 +4,7 @@
 
 > **setCeilingPanelCount**(`outputs`, `cx`, `cz`, `count`): `void`
 
-Defined in: [dungeon/bsp.ts:1313](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/dungeon/bsp.ts#L1313)
+Defined in: [dungeon/bsp.ts:1314](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/dungeon/bsp.ts#L1314)
 
 Set the number of ceiling panels (downward-facing vertical quads below the ceiling)
 for a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)

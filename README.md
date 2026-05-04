@@ -807,6 +807,26 @@ dungeon: {
   // Cellular-specific options
   fillRatio:   0.45,   // initial wall density (0-1); default 0.45
   iterations:  5,      // smoothing passes; default 5
+
+  // ── Vaulted ceiling (enabled by default) ─────────────────────────────────
+  vaultedCeiling:        true,  // raise ceiling toward room centers; default true
+  vaultMaxSteps:         3,     // max ceiling raise in offset steps; default 3
+  noiseFrequency:        0.08,  // Perlin spatial frequency for ceiling; default 0.08
+  noiseSteps:            2,     // Perlin amplitude in offset steps; default 2
+  vaultHeightScale:      1,     // overall ceiling raise multiplier; default 1
+  distanceToWallWeight:  1,     // weight of distance-to-wall term (0–1); default 1
+  noiseWeight:           1,     // weight of Perlin noise term (0–1); default 1
+
+  // ── Vaulted floor (opt-in) ────────────────────────────────────────────────
+  // Depresses the floor toward sub-region interiors for organic cave floors.
+  vaultedFloor:              false,  // enable floor depressions; default false
+  floorSubSeeds:             2,      // sub-regions per voronoi room; default 2
+  floorMaxSteps:             3,      // max floor depression in offset steps; default 3
+  floorNoiseFrequency:       0.08,   // Perlin spatial frequency for floor; default 0.08
+  floorNoiseSteps:           2,      // Perlin amplitude in offset steps; default 2
+  floorHeightScale:          1,      // overall floor depression multiplier; default 1
+  floorDistanceToEdgeWeight: 1,      // weight of sub-region distance term; default 1
+  floorNoiseWeight:          1,      // weight of Perlin noise term; default 1
 }
 ```
 
@@ -1469,9 +1489,10 @@ var renderer = AtomicCore.createDungeonRenderer(viewportEl, game, {
   wallTileId:    16,
 
   // ── Camera ────────────────────────────────────────────────────────────────
-  fov:             75,       // degrees; default 75
-  lerpFactor:      0.18,     // camera smoothing (0 = instant); default 0.18
-  eyeHeightFactor: 0.66,     // eye level as fraction of ceilingHeight (0=floor, 1=ceiling); default 0.66
+  fov:                75,       // degrees; default 75
+  lerpFactor:         0.18,     // camera smoothing (0 = instant); default 0.18
+  eyeHeightFactor:    0.66,     // eye level as fraction of ceilingHeight (0=floor, 1=ceiling); default 0.66
+  snapCameraToFloor:  false,    // camera Y tracks floorHeightOffset at player cell; default false
 
   // ── Geometry ─────────────────────────────────────────────────────────────
   tileSize:      3,          // world units per grid cell; default 3
@@ -1534,6 +1555,7 @@ If no `atlas` is provided the renderer falls back to plain-coloured `MeshStandar
 | `renderer.addLayer(spec)` | Stack an instanced geometry layer on any surface; returns a `LayerHandle` |
 | `renderer.highlightCells(filter)` | Overlay coloured floor highlights on a subset of cells; returns a `LayerHandle` |
 | `renderer.setAmbientOcclusion(intensity)` | Update AO intensity at runtime (`0`–`1`); takes effect next frame |
+| `renderer.setSnapCameraToFloor(enabled)` | Toggle floor-height camera tracking at runtime; camera Y lerps to `eyeHeightFactor * ceilingHeight + floorOffset` |
 | `renderer.setSkybox(opts)` | Attach or swap the skybox cube map; pass `null` to revert to the plain fog colour |
 | `renderer.rebuild()` | Tear down and rebuild all dungeon geometry (call after `game.regenerate()`) |
 | `renderer.worldToScreen(gridX, gridZ, worldY?)` | Project a grid cell to pixel coords; returns `null` when off-screen |
@@ -1987,14 +2009,14 @@ All settings are passed directly to `AtomicCore.createGame()` or the relevant `a
 | Section | Key settings |
 |---|---|
 | `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `generator` (`'bsp'` \| `'cellular'`), `theme` (string / array / weighted pairs / callback), `onPlace`, `onHeightOffset`, `restore` |
-| `dungeon` (cellular) | `fillRatio`, `iterations` |
+| `dungeon` (cellular) | `fillRatio`, `iterations`, `vaultedCeiling`, `vaultMaxSteps`, `noiseFrequency`, `noiseSteps`, `vaultHeightScale`, `distanceToWallWeight`, `noiseWeight`, `vaultedFloor`, `floorSubSeeds`, `floorMaxSteps`, `floorNoiseFrequency`, `floorNoiseSteps`, `floorHeightScale`, `floorDistanceToEdgeWeight`, `floorNoiseWeight` |
 | `dungeon.tiled` | `map`, `layers`, `objectTypes`, `tilesetMap` |
 | `player` | `id`, `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed` |
 | `turns` | `onAdvance` |
 | `combat` | `damageFormula`, `factions`, `onDamage`, `onDeath`, `onMiss` |
 | `passages` | `traversalFactor`, `onToggle`, `onTraverse` |
 | `transport` | `ActionTransport` instance (e.g. from `createWebSocketTransport`) |
-| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `ambientOcclusion` |
+| `createDungeonRenderer` | `atlas`, `floorTileId`, `ceilTileId`, `wallTileId`, `wallTiles`, `floorSkirtTiles`, `ceilSkirtTiles`, `fov`, `tileSize`, `ceilingHeight`, `fogNear`, `fogFar`, `fogColor`, `lerpFactor`, `eyeHeightFactor`, `snapCameraToFloor`, `ambientOcclusion` |
 | `renderer.addLayer` | `target`, `tileId`, `yOffset`, `filter` |
 | `attachSpawner` | `onSpawn` - callback receiving `{ dungeon, roomId, x, y }` |
 | `attachDecorator` | `onDecorate` - callback receiving `{ dungeon, roomId, x, y }` |

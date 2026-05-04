@@ -4,7 +4,7 @@
 
 > **createEntity**(`opts`): [`EntityBase`](../type-aliases/EntityBase.md)
 
-Defined in: [entities/factory.ts:57](https://github.com/philbgarner/atomic-core/blob/ef32dae4d7c26fc08c73501d5930c28933411788/src/lib/entities/factory.ts#L57)
+Defined in: [entities/factory.ts:57](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/entities/factory.ts#L57)
 
 Create a game entity.
 
