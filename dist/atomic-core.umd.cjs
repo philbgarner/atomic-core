@@ -5838,9 +5838,9 @@ void main() {
 		}
 		let currentEntities = [];
 		let tgtX = 0, tgtZ = 0, tgtYaw = 0;
-		let tgtY = ceilingH * eyeHeightFactor;
+		let tgtY = tileSize * eyeHeightFactor;
 		let curX = 0, curZ = 0, curYaw = 0;
-		let curY = ceilingH * eyeHeightFactor;
+		let curY = tileSize * eyeHeightFactor;
 		let initialized = false;
 		const onTurn = () => {
 			buildDungeon();
@@ -5853,9 +5853,9 @@ void main() {
 				if (floorOffData && outputs) {
 					const floorVal = floorOffData[game.player.z * outputs.width + game.player.x] ?? 128;
 					const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
-					tgtY = ceilingH * eyeHeightFactor + floorOffset;
-				} else tgtY = ceilingH * eyeHeightFactor;
-			} else tgtY = ceilingH * eyeHeightFactor;
+					tgtY = tileSize * eyeHeightFactor + floorOffset;
+				} else tgtY = tileSize * eyeHeightFactor;
+			} else tgtY = tileSize * eyeHeightFactor;
 			if (!initialized) {
 				curX = tgtX;
 				curZ = tgtZ;
@@ -6104,14 +6104,14 @@ void main() {
 			},
 			setSnapCameraToFloor(enabled) {
 				snapToFloor = enabled;
-				tgtY = ceilingH * eyeHeightFactor;
+				tgtY = tileSize * eyeHeightFactor;
 				if (enabled && initialized) {
 					const outputs = game.dungeon.outputs;
 					const floorOffData = outputs?.textures.floorHeightOffset?.image.data;
 					if (floorOffData && outputs) {
 						const floorVal = floorOffData[game.player.z * outputs.width + game.player.x] ?? 128;
 						const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
-						tgtY = ceilingH * eyeHeightFactor + floorOffset;
+						tgtY = tileSize * eyeHeightFactor + floorOffset;
 					}
 				}
 			},

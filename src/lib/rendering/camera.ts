@@ -299,7 +299,6 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 	let blocked = options.blocked ?? false;
 	let canPhaseWalls = options.canPhaseWalls ?? false;
 	let blockedPositions = options.blockedPositions ?? [];
-
 	let logical: CameraState = { x: options.startX, z: options.startZ, yaw: startYaw };
 	let visual: CameraState = { ...logical };
 
@@ -333,9 +332,11 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 	}
 
 	function beginAnim(toX: number, toZ: number, toYaw: number, isMove: boolean, deltaYaw?: number) {
-		anim.fromX = logical.x;
-		anim.fromZ = logical.z;
-		anim.fromYaw = logical.yaw;
+		// Use the CURRENT visual yaw as the starting point to prevent "snapping"
+		anim.fromX = visual.x;
+        anim.fromZ = visual.z;
+        anim.fromYaw = visual.yaw;
+
 		anim.toX = toX;
 		anim.toZ = toZ;
 		anim.toYaw = toYaw;
@@ -345,6 +346,7 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 		anim.startTime = performance.now();
 		anim.animating = true;
 		logical = { x: toX, z: toZ, yaw: normalizeAngle(toYaw) };
+
 		if (isMove) options.onStep?.();
 	}
 
@@ -468,8 +470,6 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 			};
 			if (t >= 1) {
 				anim.animating = false;
-
-				visual.yaw = normalizeAngle(anim.fromYaw + anim.deltaYaw);
 
 				const next = actionQueue.shift();
 				if (next) next();
