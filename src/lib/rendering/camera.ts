@@ -27,10 +27,6 @@ export type CameraState = {
 	yaw: number;
 };
 
-// queue motions instead of blocking them!
-const actionQueue: (() => void)[] = [];
-const MAX_QUEUE = 2;
-
 // ---------------------------------------------------------------------------
 // createCamera — analog first-person with wall-sliding
 // ---------------------------------------------------------------------------
@@ -292,6 +288,10 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 	const lerpMs = options.moveLerpMs ?? DEFAULT_LERP_MS;
 	const startYaw = options.startYaw ?? 0;
 
+	// queue motions instead of blocking them!
+	const actionQueue: (() => void)[] = [];
+	const MAX_QUEUE = 2;
+
 	let solidData = options.solidData;
 	let colliderFlagsData = options.colliderFlagsData ?? null;
 	let width = options.width;
@@ -310,6 +310,7 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 		toX: logical.x,
 		toZ: logical.z,
 		toYaw: logical.yaw,
+		deltaYaw: 0,
 		startTime: 0,
 		animating: false,
 	};
@@ -331,13 +332,16 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 		return ((a % TWO_PI) + TWO_PI) % TWO_PI;
 	}
 
-	function beginAnim(toX: number, toZ: number, toYaw: number, isMove: boolean) {
+	function beginAnim(toX: number, toZ: number, toYaw: number, isMove: boolean, deltaYaw?: number) {
 		anim.fromX = logical.x;
 		anim.fromZ = logical.z;
 		anim.fromYaw = logical.yaw;
 		anim.toX = toX;
 		anim.toZ = toZ;
 		anim.toYaw = toYaw;
+
+		anim.deltaYaw = deltaYaw !== undefined ? deltaYaw : shortestAngleDelta(anim.fromYaw, anim.toYaw);
+
 		anim.startTime = performance.now();
 		anim.animating = true;
 		logical = { x: toX, z: toZ, yaw: normalizeAngle(toYaw) };
@@ -407,14 +411,14 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 		turnLeft() {
 			tryAction(() => {
 				const { x, z, yaw } = logical;
-				beginAnim(x, z, yaw + Math.PI / 2, false);
+				beginAnim(x, z, yaw + Math.PI / 2, false, +Math.PI / 2);
 				options.onRotation?.();
 			});
 		},
 		turnRight() {
 			tryAction(() => {
 				const { x, z, yaw } = logical;
-				beginAnim(x, z, yaw - Math.PI / 2, false);
+				beginAnim(x, z, yaw - Math.PI / 2, false, -Math.PI / 2);
 				options.onRotation?.();
 			});
 		},
@@ -457,14 +461,15 @@ export function createEotBCamera(options: EotBCameraOptions): EotBCamera {
 			if (!anim.animating) return;
 			const t = Math.min((timestamp - anim.startTime) / lerpMs, 1);
 			const s = t * t * (3 - 2 * t); // smoothstep
-			const deltaYaw = shortestAngleDelta(anim.fromYaw, anim.toYaw);
 			visual = {
 				x: anim.fromX + (anim.toX - anim.fromX) * s,
 				z: anim.fromZ + (anim.toZ - anim.fromZ) * s,
-				yaw: anim.fromYaw + deltaYaw * s,
+				yaw: anim.fromYaw + anim.deltaYaw * s,
 			};
 			if (t >= 1) {
 				anim.animating = false;
+
+				visual.yaw = normalizeAngle(anim.fromYaw + anim.deltaYaw);
 
 				const next = actionQueue.shift();
 				if (next) next();

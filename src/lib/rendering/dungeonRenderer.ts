@@ -389,7 +389,7 @@ export type DungeonRenderer = {
   /**
    * Enable or disable floor-height camera tracking at runtime without
    * rebuilding the renderer. When enabled, the camera Y lerps to
-   * `ceilingHeight * eyeHeightFactor + floorOffset` at the player's cell.
+   * `tileSize * eyeHeightFactor + floorOffset` at the player's cell.
    * Takes effect immediately on the next rendered frame.
    */
   setSnapCameraToFloor(enabled: boolean): void;
@@ -1960,11 +1960,11 @@ export function createDungeonRenderer(
   let tgtX = 0,
     tgtZ = 0,
     tgtYaw = 0;
-  let tgtY = ceilingH * eyeHeightFactor;
+  let tgtY = tileSize * eyeHeightFactor;
   let curX = 0,
     curZ = 0,
     curYaw = 0;
-  let curY = ceilingH * eyeHeightFactor;
+  let curY = tileSize * eyeHeightFactor;
   let initialized = false;
 
   const onTurn = () => {
@@ -1981,12 +1981,12 @@ export function createDungeonRenderer(
         const floorVal = floorOffData[idx] ?? 128;
         // floorVal === 0 means pit — treat as neutral for camera purposes
         const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
-        tgtY = ceilingH * eyeHeightFactor + floorOffset;
+        tgtY = tileSize * eyeHeightFactor + floorOffset;
       } else {
-        tgtY = ceilingH * eyeHeightFactor;
+        tgtY = tileSize * eyeHeightFactor;
       }
     } else {
-      tgtY = ceilingH * eyeHeightFactor;
+      tgtY = tileSize * eyeHeightFactor;
     }
 
     if (!initialized) {
@@ -2277,7 +2277,7 @@ export function createDungeonRenderer(
     },
     setSnapCameraToFloor(enabled: boolean) {
       snapToFloor = enabled;
-      tgtY = ceilingH * eyeHeightFactor;
+      tgtY = tileSize * eyeHeightFactor;
       if (enabled && initialized) {
         const outputs = game.dungeon.outputs;
         const floorOffData = outputs?.textures.floorHeightOffset?.image.data as Uint8Array | undefined;
@@ -2285,7 +2285,7 @@ export function createDungeonRenderer(
           const idx = game.player.z * outputs.width + game.player.x;
           const floorVal = floorOffData[idx] ?? 128;
           const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
-          tgtY = ceilingH * eyeHeightFactor + floorOffset;
+          tgtY = tileSize * eyeHeightFactor + floorOffset;
         }
       }
     },

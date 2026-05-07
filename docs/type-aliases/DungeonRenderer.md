@@ -287,7 +287,7 @@ Defined in: [rendering/dungeonRenderer.ts:395](https://github.com/philbgarner/at
 
 Enable or disable floor-height camera tracking at runtime without
 rebuilding the renderer. When enabled, the camera Y lerps to
-`ceilingHeight * eyeHeightFactor + floorOffset` at the player's cell.
+`tileSize * eyeHeightFactor + floorOffset` at the player's cell.
 Takes effect immediately on the next rendered frame.
 
 #### Parameters
