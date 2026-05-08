@@ -33,11 +33,7 @@ function rogueSpriteMap() {
     frameSize: { w: 64, h: 64 },
     layers: [
       { tile: "mob_rogue_base.png", opacity: 1.0 },
-      {
-        tile: "mob_rogue_head.png",
-        opacity: 1.0,
-        bob: { amplitudeY: 0.015, speed: 2 },
-      },
+      { tile: "mob_rogue_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
     ],
   };
 }
@@ -47,11 +43,7 @@ function warriorSpriteMap() {
     frameSize: { w: 64, h: 64 },
     layers: [
       { tile: "mob_warrior_base.png", opacity: 1.0 },
-      {
-        tile: "mob_warrior_head.png",
-        opacity: 1.0,
-        bob: { amplitudeY: 0.015, speed: 2 },
-      },
+      { tile: "mob_warrior_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
     ],
   };
 }
@@ -61,11 +53,7 @@ function mageSpriteMap() {
     frameSize: { w: 128, h: 64 },
     layers: [
       { tile: "mob_mage_base.png", opacity: 1.0 },
-      {
-        tile: "mob_mage_head.png",
-        opacity: 1.0,
-        bob: { amplitudeY: 0.015, speed: 2 },
-      },
+      { tile: "mob_mage_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
     ],
   };
 }
@@ -84,22 +72,22 @@ function spriteMapForKey(key) {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const minimapCanvas = document.getElementById("minimap");
-const connectScreen = document.getElementById("connect-screen");
-const connectBtn = document.getElementById("connect-btn");
-const serverUrlEl = document.getElementById("server-url");
-const connectError = document.getElementById("connect-error");
-const viewportEl = document.getElementById("viewport");
-const logEl = document.getElementById("log");
-const hpEl = document.getElementById("hp");
-const turnEl = document.getElementById("turn");
-const posEl = document.getElementById("pos");
-const playerCountEl = document.getElementById("player-count");
-const playerListEl = document.getElementById("player-list");
-const chatOverlayEl = document.getElementById("chat-overlay");
-const chatModalEl = document.getElementById("chat-modal");
-const chatInputEl = document.getElementById("chat-input");
-const chatSendBtn = document.getElementById("chat-send");
+const minimapCanvas  = document.getElementById("minimap");
+const connectScreen  = document.getElementById("connect-screen");
+const connectBtn     = document.getElementById("connect-btn");
+const serverUrlEl    = document.getElementById("server-url");
+const connectError   = document.getElementById("connect-error");
+const viewportEl     = document.getElementById("viewport");
+const logEl          = document.getElementById("log");
+const hpEl           = document.getElementById("hp");
+const turnEl         = document.getElementById("turn");
+const posEl          = document.getElementById("pos");
+const playerCountEl  = document.getElementById("player-count");
+const playerListEl   = document.getElementById("player-list");
+const chatOverlayEl  = document.getElementById("chat-overlay");
+const chatModalEl    = document.getElementById("chat-modal");
+const chatInputEl    = document.getElementById("chat-input");
+const chatSendBtn    = document.getElementById("chat-send");
 
 // ---------------------------------------------------------------------------
 // Connection flow
@@ -142,64 +130,6 @@ const MY_DUNGEON_CONFIG = {
 };
 
 // ---------------------------------------------------------------------------
-// Entity tracking (enemies spawned on the host, synced via server state)
-// ---------------------------------------------------------------------------
-
-const enemies = [];
-let spawned = 0;
-const MAX_ENEMIES = 2;
-
-// Other connected players — updated on every network-state event
-let otherPlayerEntities = [];
-
-// ---------------------------------------------------------------------------
-// Chat state
-// ---------------------------------------------------------------------------
-
-let chatModalOpen = false;
-
-function openChatModal() {
-  chatModalOpen = true;
-  chatModalEl.style.display = "flex";
-  chatInputEl.value = "";
-  chatInputEl.focus();
-}
-
-function closeChatModal() {
-  chatModalOpen = false;
-  chatModalEl.style.display = "none";
-}
-
-function addChatMessage(senderId, text) {
-  const isServer = senderId === "server";
-  const div = document.createElement("div");
-  div.className = "chat-msg" + (isServer ? " server-msg" : "");
-  div.textContent = isServer ? text : `${senderId}: ${text}`;
-  chatOverlayEl.prepend(div);
-  // Remove the element after the CSS animation ends so the DOM stays tidy
-  setTimeout(() => div.remove(), 6500);
-}
-
-// ---------------------------------------------------------------------------
-// Player list
-// ---------------------------------------------------------------------------
-
-function updatePlayerList(players, myPlayerId) {
-  playerListEl.innerHTML = "";
-  const entries = Object.entries(players);
-  playerCountEl.textContent = String(entries.length);
-  for (const [pid, ps] of entries) {
-    const isSelf = pid === myPlayerId;
-    const div = document.createElement("div");
-    div.className =
-      "player-entry" + (isSelf ? " self" : "") + (!ps.alive ? " dead" : "");
-    div.textContent =
-      (isSelf ? "► " : "  ") + pid + "  " + ps.hp + "/" + ps.maxHp;
-    playerListEl.appendChild(div);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Main game setup
 // ---------------------------------------------------------------------------
 
@@ -208,21 +138,43 @@ async function startGame(
   { playerId, isHost, dungeonConfig },
   chosenSprite = "rogue",
 ) {
-  addLog(
-    `Connected as ${playerId} (${isHost ? "host" : "peer"}) — ${chosenSprite}`,
-    "turn",
-  );
+  addLog(`Connected as ${playerId} (${isHost ? "host" : "peer"}) — ${chosenSprite}`, "turn");
 
   // Non-host clients receive the dungeon config from the server so they
   // generate the identical dungeon (same seed). Host uses its own config.
-  const dungeon = isHost
-    ? MY_DUNGEON_CONFIG
-    : (dungeonConfig ?? MY_DUNGEON_CONFIG);
+  const dungeon = isHost ? MY_DUNGEON_CONFIG : (dungeonConfig ?? MY_DUNGEON_CONFIG);
 
+  // ── Enemy / entity state ──────────────────────────────────────────────────
+  // Only the host spawns enemies; peers receive positions via network-state.
+  const enemies = [];
+  let spawned = 0;
+  const MAX_ENEMIES = 2;
+
+  let otherPlayerEntities = [];
+
+  // ── Chat state ────────────────────────────────────────────────────────────
+  let chatModalOpen = false;
+
+  function openChatModal() {
+    chatModalOpen = true;
+    chatModalEl.style.display = "flex";
+    chatInputEl.value = "";
+    chatInputEl.focus();
+  }
+
+  function closeChatModal() {
+    chatModalOpen = false;
+    chatModalEl.style.display = "none";
+  }
+
+  // ── Game ──────────────────────────────────────────────────────────────────
+
+  // All combat is server-authoritative in multiplayer — onDamage/onDeath/onMiss
+  // callbacks never fire locally. Log and animate via game.animations instead.
   const game = createGame(document.body, {
     dungeon,
     player: {
-      id: playerId,       // match server-assigned id so reconciliation aligns
+      id: playerId,             // match server-assigned id so reconciliation aligns
       spriteName: chosenSprite, // synced to all peers on every action
       hp: 30,
       maxHp: 30,
@@ -230,27 +182,10 @@ async function startGame(
       defense: 2,
       speed: 5,
     },
-    combat: {
-      onDamage({ attacker, defender, amount }) {
-        addLog(
-          `${attacker.type} hits ${defender.type} for ${amount} dmg`,
-          "damage",
-        );
-      },
-      onDeath({ entity }) {
-        addLog(`${entity.type} is slain!`, "death");
-      },
-      onMiss({ attacker, defender }) {
-        addLog(`${attacker.type} misses ${defender.type}`, "turn");
-      },
-    },
     transport,
   });
 
-  // ── Turn-animation callback system ──────────────────────────────────────
-  //
-  // Handlers fire between turn resolution and entity-position sync, so
-  // entities are still at their pre-move positions when tweens/floats run.
+  // ── Animation handlers ────────────────────────────────────────────────────
 
   const canvasWrapEl = document.getElementById("canvas-wrap");
 
@@ -259,23 +194,21 @@ async function startGame(
     el.className = "anim-float";
     el.style.color = color;
     const pos = renderer?.worldToScreen(gridX, gridZ);
-    el.style.left = (pos ? pos.x : canvasWrapEl.clientWidth * 0.5) + "px";
+    el.style.left = (pos ? pos.x : canvasWrapEl.clientWidth  * 0.5) + "px";
     el.style.top  = (pos ? pos.y : canvasWrapEl.clientHeight * 0.4) + "px";
     el.textContent = text;
     canvasWrapEl.appendChild(el);
     el.addEventListener("animationend", () => el.remove(), { once: true });
   }
 
-  // All combat is server-authoritative, so onDamage/onDeath callbacks never
-  // fire in multiplayer. Log and animate from the animation diff events instead.
   game.animations.on("damage", async ({ entity, amount }) => {
-    addLog(`${entity.type} takes ${amount} dmg`, "damage");
+    addLog(`${entity.type ?? entity.id} takes ${amount} dmg`, "damage");
     showFloatText(`-${amount}`, "#f66", entity.x, entity.z);
     await new Promise((r) => setTimeout(r, 450));
   });
 
   game.animations.on("death", async ({ entity }) => {
-    addLog(`${entity.type} is slain!`, "death");
+    addLog(`${entity.type ?? entity.id} is slain!`, "death");
     showFloatText("DEAD", "#f99", entity.x, entity.z);
     await new Promise((r) => setTimeout(r, 500));
   });
@@ -285,111 +218,107 @@ async function startGame(
     await new Promise((r) => setTimeout(r, 300));
   });
 
-  // ── Minimap ──────────────────────────────────────────────────────────────
+  // ── Minimap ───────────────────────────────────────────────────────────────
 
   attachMinimap(game, minimapCanvas, {
     size: 196,
     showEntities: true,
     colors: {
-      explored: "#334",
-      visible: "#aac",
-      player: "#0f0",
-      enemy: "#f44",
+      floor:    "#aac",
+      floorDim: "#334",
+      player:   "#0f0",
+      enemy:    "#f44",
     },
   });
 
-  // ── 3D renderer ──────────────────────────────────────────────────────────
+  // ── 3D renderer ───────────────────────────────────────────────────────────
 
   let renderer;
 
-  {
-    const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
-    const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
-      showLoadingScreen: false,
-    });
-    const resolver = packedAtlasResolver(packed);
+  const atlasJson = await fetch("../textureAtlas.json").then((r) => r.json());
+  const packed = await loadTextureAtlas("../textureAtlas.png", atlasJson, {
+    showLoadingScreen: false,
+  });
+  const resolver = packedAtlasResolver(packed);
 
-    renderer = createDungeonRenderer(viewportEl, game, {
-      packedAtlas: packed,
-      tileNameResolver: resolver,
-      floorTile: "flagstone_floor_stone.png",
-      ceilTile: "plaster_ceiling.png",
-      wallTile: "brick_wall_stone.png",
-    });
+  renderer = createDungeonRenderer(viewportEl, game, {
+    packedAtlas: packed,
+    tileNameResolver: resolver,
+    floorTile: "flagstone_floor_stone.png",
+    ceilTile:  "plaster_ceiling.png",
+    wallTile:  "brick_wall_stone.png",
+  });
 
-    // ── Spawner — must be registered before generate() ────────────────────
+  // ── Spawner — must be registered before generate() ────────────────────────
 
-    attachSpawner(game, {
-      onSpawn({ roomId, x, y }) {
-        if (!isHost) return null;
-        if (spawned >= MAX_ENEMIES) return null;
-        if (roomId < 2) return null;
-        if (Math.random() > 0.75) return null;
-        spawned++;
-        const e = createEntity({
-          kind: "enemy",
-          faction: "enemy",
-          type: "goblin",
-          spriteName: "g",
-          x,
-          z: y,
-          hp: 8,
-          maxHp: 8,
-          attack: 2,
-          defense: 0,
-          speed: 6,
-          danger: 1,
-          xp: 10,
-          spriteMap: {
-            frameSize: { w: 64, h: 64 },
-            layers: [
-              { tile: "mob_goblin_base.png", opacity: 1.0 },
-              {
-                tile: "mob_goblin_happy_head.png",
-                opacity: 1.0,
-                bob: { amplitudeY: 0.015, speed: 2 },
-              },
-            ],
-          },
-        });
-        enemies.push(e);
-        return e;
-      },
-    });
-
-    game.generate();
-
-    {
-      const allRooms = Object.values(game.dungeon.rooms);
-      const roomCount = allRooms.filter((r) => r.type === "room").length;
-      const corridorCount = allRooms.filter((r) => r.type === "corridor").length;
-      const seed = dungeon.seed.toString(16).toUpperCase();
-      addLog(
-        `Dungeon 0x${seed} — ${roomCount} rooms, ${corridorCount} corridors, ${spawned} enemies`,
-        "turn",
-      );
-    }
-
-    // Host sends solid map to server so it can validate all players' moves
-    if (isHost) {
-      const solid = Array.from(game.dungeon.outputs.textures.solid.image.data);
-      transport.initDungeon({
-        solid,
-        width: game.dungeon.width,
-        height: game.dungeon.height,
-        config: MY_DUNGEON_CONFIG,
+  attachSpawner(game, {
+    onSpawn({ roomId, x, y }) {
+      if (!isHost) return null;
+      if (spawned >= MAX_ENEMIES) return null;
+      if (roomId < 2) return null;
+      if (Math.random() > 0.75) return null;
+      spawned++;
+      const e = createEntity({
+        kind: "enemy",
+        faction: "enemy",
+        type: "goblin",
+        spriteName: "goblin",
+        x,
+        z: y,
+        hp: 8,
+        maxHp: 8,
+        attack: 2,
+        defense: 0,
+        speed: 6,
+        danger: 1,
+        xp: 10,
+        spriteMap: {
+          frameSize: { w: 64, h: 64 },
+          layers: [
+            { tile: "mob_goblin_base.png", opacity: 1.0 },
+            { tile: "mob_goblin_happy_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+          ],
+        },
       });
-      // Send initial monster positions so clients that connect later see them.
-      transport.sendMonsterState(enemies.map(monsterNetState));
-    }
+      enemies.push(e);
+      return e;
+    },
+  });
+
+  // ── Generate ──────────────────────────────────────────────────────────────
+
+  await game.generate();
+
+  {
+    const allRooms = Object.values(game.dungeon.rooms);
+    const roomCount = allRooms.filter((r) => r.type === "room").length;
+    const corridorCount = allRooms.filter((r) => r.type === "corridor").length;
+    const seed = dungeon.seed.toString(16).toUpperCase();
+    addLog(
+      `Dungeon 0x${seed} — ${roomCount} rooms, ${corridorCount} corridors, ${spawned} enemies`,
+      "turn",
+    );
   }
 
-  // ── Events ───────────────────────────────────────────────────────────────
+  // Host sends the solid map so the server can validate all players' moves,
+  // and the initial monster roster so late-joining peers see them.
+  if (isHost) {
+    const solid = Array.from(game.dungeon.outputs.textures.solid.image.data);
+    transport.initDungeon({
+      solid,
+      width:  game.dungeon.width,
+      height: game.dungeon.height,
+      config: MY_DUNGEON_CONFIG,
+    });
+    transport.sendMonsterState(enemies.map(monsterNetState));
+  }
+
+  // ── Events ────────────────────────────────────────────────────────────────
 
   game.events.on("turn", ({ turn }) => {
     turnEl.textContent = String(turn);
-    hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
-    posEl.textContent = `${game.player.x}, ${game.player.z}`;
+    hpEl.textContent   = `${game.player.hp} / ${game.player.maxHp}`;
+    posEl.textContent  = `${game.player.x}, ${game.player.z}`;
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
   });
 
@@ -397,24 +326,15 @@ async function startGame(
   // including when OTHER players move. Update the renderer immediately so
   // remote movement is visible in real-time, not deferred to the local turn.
   game.events.on("network-state", (update) => {
-    const allPlayers = Object.entries(update.players);
-
     updatePlayerList(update.players, playerId);
 
-    otherPlayerEntities = allPlayers
+    otherPlayerEntities = Object.entries(update.players)
       .filter(([pid]) => pid !== playerId)
       .map(([pid, ps]) => {
-        // ps contains the remote player's full entity state (spriteName, hp,
-        // any custom attributes, etc.) — spread it so nothing gets dropped.
-        // The server uses 'y' for the grid row; remap to 'z' for the client.
+        // ps carries the remote player's full entity state. The server uses 'y'
+        // for the grid row; remap to 'z' for the renderer.
         const { y, ...rest } = ps;
-        return {
-          ...rest,
-          id: pid,
-          kind: "npc",
-          z: y,
-          spriteMap: spriteMapForKey(ps.spriteName),
-        };
+        return { ...rest, id: pid, kind: "npc", z: y, spriteMap: spriteMapForKey(ps.spriteName) };
       });
 
     // Server is authoritative for monster positions — sync all clients.
@@ -426,7 +346,6 @@ async function startGame(
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
   });
 
-  // Chat messages received from the server
   transport.onChat(({ playerId: senderId, text }) => {
     addChatMessage(senderId, text);
   });
@@ -435,7 +354,7 @@ async function startGame(
     addLog(`[sfx] ${name}`, "audio");
   });
 
-  // ── Chat modal ───────────────────────────────────────────────────────────
+  // ── Chat ──────────────────────────────────────────────────────────────────
 
   function sendChat() {
     const text = chatInputEl.value.trim();
@@ -447,45 +366,30 @@ async function startGame(
   chatSendBtn.addEventListener("click", sendChat);
 
   chatInputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendChat();
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeChatModal();
-    }
+    if (e.key === "Enter")  { e.preventDefault(); sendChat(); }
+    if (e.key === "Escape") { e.preventDefault(); closeChatModal(); }
     e.stopPropagation(); // prevent game keybindings from firing while typing
   });
 
-  // Open chat on Enter when the modal is not already open
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !chatModalOpen) {
-      e.preventDefault();
-      openChatModal();
-    }
-    if (e.key === "Escape" && chatModalOpen) {
-      e.preventDefault();
-      closeChatModal();
-    }
+    if (e.key === "Enter"  && !chatModalOpen) { e.preventDefault(); openChatModal(); }
+    if (e.key === "Escape" &&  chatModalOpen) { e.preventDefault(); closeChatModal(); }
   });
 
-  // ── Keyboard input ───────────────────────────────────────────────────────
+  // ── Keybindings ───────────────────────────────────────────────────────────
 
   attachKeybindings(game, {
     bindings: {
-      moveForward: ["w", "W", "ArrowUp"],
+      moveForward:  ["w", "W", "ArrowUp"],
       moveBackward: ["s", "S", "ArrowDown"],
-      moveLeft: ["a", "A", "ArrowLeft"],
-      moveRight: ["d", "D", "ArrowRight"],
-      turnLeft: ["q", "Q"],
-      turnRight: ["e", "E"],
-      wait: [" "],
+      moveLeft:     ["a", "A", "ArrowLeft"],
+      moveRight:    ["d", "D", "ArrowRight"],
+      turnLeft:     ["q", "Q"],
+      turnRight:    ["e", "E"],
+      wait:         [" "],
     },
     onAction(action, event) {
-      // Block movement while the chat modal is open
       if (chatModalOpen) return;
-
       event.preventDefault();
       if (!game.player.alive) {
         addLog("You are dead. Refresh to restart.", "death");
@@ -496,37 +400,20 @@ async function startGame(
         const yaw = game.player.facing;
         const fx = Math.round(-Math.sin(yaw));
         const fz = Math.round(-Math.cos(yaw));
-        const sx = Math.round(Math.cos(yaw));
+        const sx = Math.round( Math.cos(yaw));
         const sz = Math.round(-Math.sin(yaw));
-        return game.player.move(
-          forward * fx + strafe * sx,
-          forward * fz + strafe * sz,
-        );
+        return game.player.move(forward * fx + strafe * sx, forward * fz + strafe * sz);
       }
 
       let a;
       switch (action) {
-        case "moveForward":
-          a = relativeMove(1, 0);
-          break;
-        case "moveBackward":
-          a = relativeMove(-1, 0);
-          break;
-        case "moveLeft":
-          a = relativeMove(0, -1);
-          break;
-        case "moveRight":
-          a = relativeMove(0, 1);
-          break;
-        case "turnLeft":
-          a = game.player.rotate(Math.PI / 2);
-          break;
-        case "turnRight":
-          a = game.player.rotate(-Math.PI / 2);
-          break;
-        case "wait":
-          a = game.player.wait();
-          break;
+        case "moveForward":  a = relativeMove(1,  0); break;
+        case "moveBackward": a = relativeMove(-1, 0); break;
+        case "moveLeft":     a = relativeMove(0, -1); break;
+        case "moveRight":    a = relativeMove(0,  1); break;
+        case "turnLeft":     a = game.player.rotate( Math.PI / 2); break;
+        case "turnRight":    a = game.player.rotate(-Math.PI / 2); break;
+        case "wait":         a = game.player.wait();               break;
       }
 
       if (a) game.turns.commit(a);
@@ -546,23 +433,45 @@ function addLog(text, cls) {
   while (logEl.children.length > 40) logEl.lastElementChild.remove();
 }
 
+function addChatMessage(senderId, text) {
+  const isServer = senderId === "server";
+  const div = document.createElement("div");
+  div.className = "chat-msg" + (isServer ? " server-msg" : "");
+  div.textContent = isServer ? text : `${senderId}: ${text}`;
+  chatOverlayEl.prepend(div);
+  setTimeout(() => div.remove(), 6500);
+}
+
+function updatePlayerList(players, myPlayerId) {
+  playerListEl.innerHTML = "";
+  const entries = Object.entries(players);
+  playerCountEl.textContent = String(entries.length);
+  for (const [pid, ps] of entries) {
+    const isSelf = pid === myPlayerId;
+    const div = document.createElement("div");
+    div.className = "player-entry" + (isSelf ? " self" : "") + (!ps.alive ? " dead" : "");
+    div.textContent = (isSelf ? "► " : "  ") + pid + "  " + ps.hp + "/" + ps.maxHp;
+    playerListEl.appendChild(div);
+  }
+}
+
 function monsterNetState(e) {
   return {
-    id: e.id,
-    kind: "enemy",
-    type: e.type,
-    sprite: e.sprite,
-    x: e.x,
-    z: e.z,
-    hp: e.hp,
-    maxHp: e.maxHp,
-    alive: e.alive,
-    attack: e.attack,
-    defense: e.defense,
-    speed: e.speed,
+    id:         e.id,
+    kind:       e.kind,
+    type:       e.type,
+    spriteName: e.spriteName,
+    x:          e.x,
+    z:          e.z,
+    hp:         e.hp,
+    maxHp:      e.maxHp,
+    alive:      e.alive,
+    attack:     e.attack,
+    defense:    e.defense,
+    speed:      e.speed,
     blocksMove: e.blocksMove,
-    faction: e.faction,
-    tick: e.tick,
-    spriteMap: e.spriteMap,
+    faction:    e.faction,
+    tick:       e.tick,
+    spriteMap:  e.spriteMap,
   };
 }
