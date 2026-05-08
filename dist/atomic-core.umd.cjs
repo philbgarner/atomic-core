@@ -1893,8 +1893,13 @@
 			emit(...args) {
 				const [event, payload] = args;
 				const set = handlers[event];
-				if (!set) return;
-				for (const h of set) h(payload);
+				if (!set) return Promise.resolve();
+				const promises = [];
+				for (const h of set) {
+					const result = h(payload);
+					if (result) promises.push(result);
+				}
+				return promises.length ? Promise.all(promises).then(() => void 0) : Promise.resolve();
 			}
 		};
 	}
@@ -2958,6 +2963,7 @@
 		const { width, height } = internal.dungeonOutputs;
 		const flags = internal.colliderFlagsData;
 		const player = internal.playerState.entity;
+		if (player.x < 0 || player.z < 0) return;
 		const fovMask = new Uint8Array(width * height);
 		computeFov(player.x, player.z, {
 			isOpaque: (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
@@ -3161,7 +3167,7 @@
 			}
 		};
 	}
-	function runGenerate(internal, dungeonHandle, turnsHandle) {
+	async function runGenerate(internal, dungeonHandle, turnsHandle) {
 		const dungeonOpts = internal.options.dungeon;
 		let dungeonOut;
 		if ("tiled" in dungeonOpts && dungeonOpts.tiled) {
@@ -3374,7 +3380,7 @@
 			internal.turnState = tickUntilPlayer(internal.turnState, deps);
 		}
 		updateFovAndMinimap(internal);
-		internal.events.emit("generate");
+		await internal.events.emit("generate");
 		internal.events.emit("turn", { turn: internal.turnCounter });
 	}
 	function drawMinimap(internal, canvas, opts) {
@@ -3429,8 +3435,8 @@
 			kind: "player",
 			spriteName: "player",
 			faction: "player",
-			x: playerOpts.x ?? 1,
-			z: playerOpts.z ?? 1,
+			x: -1,
+			z: -1,
 			speed: playerOpts.speed ?? 5,
 			alive: true,
 			blocksMove: true,
@@ -3682,12 +3688,12 @@
 			get animations() {
 				return internal.animationRegistry;
 			},
-			generate() {
+			async generate() {
 				if (generated) return;
 				generated = true;
-				runGenerate(internal, dungeonHandle, turnsHandle);
+				return runGenerate(internal, dungeonHandle, turnsHandle);
 			},
-			regenerate() {
+			async regenerate() {
 				internal.entityById.clear();
 				internal.entityById.set(internal.playerActorId, internal.playerState.entity);
 				internal.decorations.length = 0;
@@ -3701,7 +3707,7 @@
 				internal.playerState.facing = 0;
 				generated = false;
 				generated = true;
-				runGenerate(internal, dungeonHandle, turnsHandle);
+				return runGenerate(internal, dungeonHandle, turnsHandle);
 			},
 			destroy() {
 				if (internal.destroyed) return;
@@ -7204,7 +7210,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "0.9.4",
+			version: "0.9.5",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,

@@ -104,11 +104,11 @@ export interface GameEventMap {
         ceilingPanels?: (string | null)[];
     };
 }
-type Handler<T> = T extends void ? () => void : (payload: T) => void;
+type Handler<T> = T extends void ? () => void | Promise<void> : (payload: T) => void | Promise<void>;
 export interface EventEmitter {
     on<K extends keyof GameEventMap>(event: K, handler: Handler<GameEventMap[K]>): void;
     off<K extends keyof GameEventMap>(event: K, handler: Handler<GameEventMap[K]>): void;
-    emit<K extends keyof GameEventMap>(...args: GameEventMap[K] extends void ? [event: K] : [event: K, payload: GameEventMap[K]]): void;
+    emit<K extends keyof GameEventMap>(...args: GameEventMap[K] extends void ? [event: K] : [event: K, payload: GameEventMap[K]]): Promise<void>;
 }
 /** Create a typed event emitter that dispatches `GameEventMap` events. */
 export declare function createEventEmitter(): EventEmitter;
