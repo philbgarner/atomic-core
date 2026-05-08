@@ -13,14 +13,20 @@ import { ActionTransport } from '../transport/types';
 import { MissionsHandle } from '../missions/types';
 import { AnimationsHandle } from '../animations/types';
 export type PublicRoom = {
+    /** Unique room identifier — pass this to `onChooseSpawn` to spawn the player here. */
     id: number;
     type: "room" | "corridor";
+    /** Top-left cell column of the room's bounding rect. */
     x: number;
+    /** Top-left cell row of the room's bounding rect. */
     z: number;
     w: number;
     h: number;
+    /** Centre cell column (pre-computed as `Math.floor(x + w / 2)`). */
     cx: number;
+    /** Centre cell row (pre-computed as `Math.floor(z + h / 2)`). */
     cz: number;
+    /** IDs of rooms/corridors directly connected to this one. */
     connections: number[];
 };
 export type DecorationList = {
@@ -100,6 +106,17 @@ export type PlaceAPI = {
     decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     surface(x: number, z: number, layers: SurfacePaintTarget): void;
 };
+/**
+ * Passed to `onChooseSpawn` so you can inspect the dungeon layout before
+ * committing to a spawn room.
+ *
+ * `rooms` contains every room and corridor in the dungeon.
+ * `startRoom` is the default player-start room (furthest from the exit).
+ * `endRoom` is the exit room.
+ *
+ * Return any `room.id` from the list and the player will be placed at that
+ * room's centre cell.
+ */
 export type SpawnChooserContext = {
     rooms: PublicRoom[];
     startRoom: PublicRoom;
@@ -109,13 +126,44 @@ export type DungeonOptions = (BspDungeonOptions & {
     cellular?: never;
     tiled?: never;
     onPlace?: (ctx: OnPlaceContext) => void;
-    /** Return a roomId to override the default spawn room (furthest from exit). */
+    /**
+     * Override where the player spawns.
+     *
+     * Called during `game.generate()` **before** the player position is written
+     * and before FOV / minimap exploration is computed, so returning a different
+     * room here has no side-effects on the explored state.
+     *
+     * Ignored if `player.x` / `player.z` are set explicitly in `createGame` options.
+     *
+     * Return the `id` of any room from `ctx.rooms` (only rooms with
+     * `type === "room"` are included — corridors are filtered out).
+     * The player will be placed at that room's centre cell.
+     *
+     * @example
+     * onChooseSpawn({ rooms }) {
+     *   // spawn in the largest room
+     *   return rooms.reduce((best, r) =>
+     *     r.w * r.h > best.w * best.h ? r : best
+     *   ).id;
+     * }
+     */
     onChooseSpawn?: (ctx: SpawnChooserContext) => number;
 }) | (CellularOptions & {
     cellular: true;
     tiled?: never;
     onPlace?: (ctx: OnPlaceContext) => void;
-    /** Return a roomId to override the default spawn room. */
+    /**
+     * Override where the player spawns.
+     *
+     * Called during `game.generate()` **before** the player position is written
+     * and before FOV / minimap exploration is computed, so returning a different
+     * room here has no side-effects on the explored state.
+     *
+     * Ignored if `player.x` / `player.z` are set explicitly in `createGame` options.
+     *
+     * Return the `id` of any room from `ctx.rooms`.
+     * The player will be placed at that room's centre cell.
+     */
     onChooseSpawn?: (ctx: SpawnChooserContext) => number;
 }) | {
     tiled: {
