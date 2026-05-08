@@ -76,7 +76,7 @@ async function init() {
   // 3D geometry is built, so this is the correct place to write sky panel
   // counts into the dungeon outputs.
   game.events.on("generate", applySkyPanels);
-  game.generate();
+  await game.generate();
 }
 
 // ---------------------------------------------------------------------------

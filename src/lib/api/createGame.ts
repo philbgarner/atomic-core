@@ -327,13 +327,13 @@ export type GameHandle = {
    */
   animations: AnimationsHandle;
   /** Generate the dungeon and start the game. Call after attaching all callbacks. */
-  generate(): void;
+  generate(): Promise<void>;
   /**
    * Tear down the current dungeon, reset all spawned actors and decorations,
    * restore the player to full health, and regenerate from the current dungeon
    * config (including any seed change made before calling this).
    */
-  regenerate(): void;
+  regenerate(): Promise<void>;
   /** Unmount and clean up all listeners. */
   destroy(): void;
 };
@@ -907,11 +907,11 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
 // generate() — build dungeon + init turn system
 // ---------------------------------------------------------------------------
 
-function runGenerate(
+async function runGenerate(
   internal: GameInternal,
   dungeonHandle: DungeonHandle,
   turnsHandle: TurnsHandle,
-): void {
+): Promise<void> {
   const dungeonOpts = internal.options.dungeon;
 
   // 1. Build dungeon
@@ -1183,7 +1183,7 @@ function runGenerate(
   updateFovAndMinimap(internal);
 
   // 12. Let subscribers post-process dungeon data before geometry is built.
-  internal.events.emit("generate");
+  await internal.events.emit("generate");
 
   // 13. Emit initial turn event (renderer builds geometry on this).
   internal.events.emit("turn", { turn: internal.turnCounter });
@@ -1530,13 +1530,13 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     get missions() { return internal.missions; },
     get animations() { return internal.animationRegistry; },
 
-    generate() {
+    async generate() {
       if (generated) return;
       generated = true;
-      runGenerate(internal, dungeonHandle, turnsHandle);
+      return runGenerate(internal, dungeonHandle, turnsHandle);
     },
 
-    regenerate() {
+    async regenerate() {
       internal.entityById.clear();
       internal.entityById.set(internal.playerActorId, internal.playerState.entity);
       internal.decorations.length = 0;
@@ -1550,7 +1550,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
       internal.playerState.facing = 0;
       generated = false;
       generated = true;
-      runGenerate(internal, dungeonHandle, turnsHandle);
+      return runGenerate(internal, dungeonHandle, turnsHandle);
     },
 
     destroy() {

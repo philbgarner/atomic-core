@@ -75,7 +75,7 @@ export interface GameEventMap {
 // EventEmitter
 // ---------------------------------------------------------------------------
 
-type Handler<T> = T extends void ? () => void : (payload: T) => void;
+type Handler<T> = T extends void ? () => void | Promise<void> : (payload: T) => void | Promise<void>;
 type HandlerMap = { [K in keyof GameEventMap]?: Set<Handler<GameEventMap[K]>> };
 
 export interface EventEmitter {
@@ -83,7 +83,7 @@ export interface EventEmitter {
   off<K extends keyof GameEventMap>(event: K, handler: Handler<GameEventMap[K]>): void;
   emit<K extends keyof GameEventMap>(
     ...args: GameEventMap[K] extends void ? [event: K] : [event: K, payload: GameEventMap[K]]
-  ): void;
+  ): Promise<void>;
 }
 
 /** Create a typed event emitter that dispatches `GameEventMap` events. */
@@ -104,13 +104,16 @@ export function createEventEmitter(): EventEmitter {
 
     emit<K extends keyof GameEventMap>(
       ...args: GameEventMap[K] extends void ? [event: K] : [event: K, payload: GameEventMap[K]]
-    ): void {
+    ): Promise<void> {
       const [event, payload] = args as [K, GameEventMap[K]];
       const set = handlers[event] as Set<Handler<GameEventMap[K]>> | undefined;
-      if (!set) return;
+      if (!set) return Promise.resolve();
+      const promises: Promise<void>[] = [];
       for (const h of set) {
-        (h as (p: GameEventMap[K]) => void)(payload);
+        const result = (h as (p: GameEventMap[K]) => void | Promise<void>)(payload);
+        if (result) promises.push(result);
       }
+      return promises.length ? Promise.all(promises).then(() => undefined) : Promise.resolve();
     },
   };
 }
