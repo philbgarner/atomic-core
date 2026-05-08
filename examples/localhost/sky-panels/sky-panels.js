@@ -69,6 +69,7 @@ async function init() {
     floorTile: "flagstone_floor_stone.png",
     ceilTile: "plaster_ceiling.png",
     wallTile: "brick_wall_stone.png",
+    ambientOcclusion: 0.75,
   });
 
   // The "generate" event fires after dungeon data is computed but before
