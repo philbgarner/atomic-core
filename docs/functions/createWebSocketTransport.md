@@ -4,7 +4,7 @@
 
 > **createWebSocketTransport**(`url`): [`ActionTransport`](../type-aliases/ActionTransport.md)
 
-Defined in: [transport/websocket.ts:34](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/transport/websocket.ts#L34)
+Defined in: [transport/websocket.ts:34](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/transport/websocket.ts#L34)
 
 Create a browser-side WebSocket transport for multiplayer.
 Pass the returned `ActionTransport` to `createGame()` via `GameOptions.transport`.

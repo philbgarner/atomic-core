@@ -4,7 +4,7 @@
 
 > **FactionRegistry** = `object`
 
-Defined in: [combat/factions.ts:13](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/combat/factions.ts#L13)
+Defined in: [combat/factions.ts:13](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/combat/factions.ts#L13)
 
 ## Methods
 
@@ -12,7 +12,7 @@ Defined in: [combat/factions.ts:13](https://github.com/philbgarner/atomic-core/b
 
 > **getStance**(`from`, `to`): [`FactionStance`](FactionStance.md)
 
-Defined in: [combat/factions.ts:22](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/combat/factions.ts#L22)
+Defined in: [combat/factions.ts:22](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/combat/factions.ts#L22)
 
 Returns the stance of `from` toward `to`. Default: "neutral".
 
@@ -33,7 +33,7 @@ Returns the stance of `from` toward `to`. Default: "neutral".
 
 > **isHostile**(`from`, `to`): `boolean`
 
-Defined in: [combat/factions.ts:25](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/combat/factions.ts#L25)
+Defined in: [combat/factions.ts:25](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/combat/factions.ts#L25)
 
 Returns true if `from` treats `to` as hostile.
 
@@ -54,7 +54,7 @@ Returns true if `from` treats `to` as hostile.
 
 > **setStance**(`from`, `to`, `stance`): `void`
 
-Defined in: [combat/factions.ts:19](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/combat/factions.ts#L19)
+Defined in: [combat/factions.ts:19](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/combat/factions.ts#L19)
 
 Register a relationship. Relationships are directional:
 setStance("orc", "player", "hostile") does not automatically

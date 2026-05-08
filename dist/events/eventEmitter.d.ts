@@ -46,6 +46,12 @@ export interface GameEventMap {
         item: EventItem;
         entity: EventEntity;
     };
+    /**
+     * Fires once after dungeon generation completes, before the initial `turn`
+     * event. Subscribe here to modify dungeon texture data (e.g. sky panels,
+     * ceiling heights) before the renderer builds its geometry.
+     */
+    generate: void;
     /** Fires at the start of every turn. */
     turn: {
         turn: number;

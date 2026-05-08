@@ -748,6 +748,16 @@ dungeon: {
       place.surface(room.cx, room.cz, ['flagstone-floor', 'crack-overlay'])
     })
   },
+
+  // Override the player spawn room (BSP and cellular generators only).
+  // Called before player position or FOV is written, so there are no
+  // spurious explored cells around the default (1,1) fallback.
+  // Ignored if player.x / player.z are set explicitly.
+  onChooseSpawn: function({ rooms, startRoom, endRoom }) {
+    // Return any room id from `rooms`; the player spawns at that room's centre cell.
+    // rooms contains only rooms (type === 'room'), not corridors.
+    return startRoom.id  // default: the room furthest from the exit
+  },
 }
 ```
 
@@ -979,12 +989,14 @@ The renderer reads both textures and applies the offset as a Y translation per i
 
 ```js
 player: {
-  x: 2, z: 2,         // starting grid position (overridden by PlayerStart object if using Tiled)
+  x: 2, z: 2,         // explicit starting cell — overrides onChooseSpawn and the BSP default
   hp: 30, maxHp: 30,
   attack: 4, defense: 2,
   speed: 5,            // turn cost - lower = faster
 }
 ```
+
+For BSP and cellular dungeons, omit `x`/`z` and use `dungeon.onChooseSpawn` instead. Setting explicit coordinates bypasses `onChooseSpawn` and falls back to that fixed cell regardless of dungeon layout. When using Tiled, the `PlayerStart` object in the map takes precedence over both.
 
 Reactive state and action methods on `game.player`:
 
@@ -2008,7 +2020,7 @@ All settings are passed directly to `AtomicCore.createGame()` or the relevant `a
 
 | Section | Key settings |
 |---|---|
-| `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `generator` (`'bsp'` \| `'cellular'`), `theme` (string / array / weighted pairs / callback), `onPlace`, `onHeightOffset`, `restore` |
+| `dungeon` | `seed`, `width`, `height`, `minLeafSize`, `maxLeafSize`, `minRoomSize`, `maxRoomSize`, `generator` (`'bsp'` \| `'cellular'`), `theme` (string / array / weighted pairs / callback), `onPlace`, `onChooseSpawn`, `onHeightOffset`, `restore` |
 | `dungeon` (cellular) | `fillRatio`, `iterations`, `vaultedCeiling`, `vaultMaxSteps`, `noiseFrequency`, `noiseSteps`, `vaultHeightScale`, `distanceToWallWeight`, `noiseWeight`, `vaultedFloor`, `floorSubSeeds`, `floorMaxSteps`, `floorNoiseFrequency`, `floorNoiseSteps`, `floorHeightScale`, `floorDistanceToEdgeWeight`, `floorNoiseWeight` |
 | `dungeon.tiled` | `map`, `layers`, `objectTypes`, `tilesetMap` |
 | `player` | `id`, `x`, `z`, `hp`, `maxHp`, `attack`, `defense`, `speed` |

@@ -1667,12 +1667,12 @@ export function createDungeonRenderer(
           }
         }
 
-        // Sky panels: open-sky cells emit toward solid walls; non-sky cells emit toward open-sky neighbours.
+        // Sky panels: open-sky cells emit toward non-sky neighbours; non-sky cells emit toward open-sky neighbours.
         const skyCount = skyPanelCountData ? (skyPanelCountData[idx] ?? 0) : 0;
         if (skyCount > 0) {
           function emitSkyPanels(mx: number, mz: number, ry: number) {
             for (let i = 0; i < skyCount; i++) {
-              skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+              skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
               skyPanelRects.push(getUvRect(wallId));
               skyPanelRots.push(0);
               skyPanelHeightScales.push(1.0);
@@ -1681,10 +1681,10 @@ export function createDungeonRenderer(
             }
           }
           if (isOpenSky) {
-            if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-            if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-            if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-            if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+            if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+            if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+            if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+            if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
           } else {
             if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
             if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);

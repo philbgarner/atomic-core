@@ -4,7 +4,7 @@
 
 > **setCeilSkirtTiles**(`outputs`, `cx`, `cz`, `tiles`): `void`
 
-Defined in: [dungeon/bsp.ts:1273](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/dungeon/bsp.ts#L1273)
+Defined in: [dungeon/bsp.ts:1273](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/dungeon/bsp.ts#L1273)
 
 Write ceiling skirt overlay tile IDs for a single cell.
 `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.

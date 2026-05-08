@@ -4,7 +4,7 @@
 
 > **attachKeybindings**(`game`, `opts`): `void`
 
-Defined in: [api/createGame.ts:1577](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/api/createGame.ts#L1577)
+Defined in: [api/createGame.ts:1628](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/api/createGame.ts#L1628)
 
 Install keyboard bindings. Wraps `createKeybindings` and registers the
 handle with the game so it is cleaned up on `destroy()`.

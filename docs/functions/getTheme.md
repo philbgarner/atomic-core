@@ -4,7 +4,7 @@
 
 > **getTheme**(`name`): [`ThemeDef`](../type-aliases/ThemeDef.md) \| `undefined`
 
-Defined in: [dungeon/themes.ts:90](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/dungeon/themes.ts#L90)
+Defined in: [dungeon/themes.ts:90](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/dungeon/themes.ts#L90)
 
 Retrieve a theme definition by name.
 Returns `undefined` if the name is not registered.

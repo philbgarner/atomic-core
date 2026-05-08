@@ -29,6 +29,12 @@ export interface GameEventMap {
   'chest-open': { chest: EventEntity; loot: EventItem[] };
   /** An entity picked up an item. */
   'item-pickup': { item: EventItem; entity: EventEntity };
+  /**
+   * Fires once after dungeon generation completes, before the initial `turn`
+   * event. Subscribe here to modify dungeon texture data (e.g. sky panels,
+   * ceiling heights) before the renderer builds its geometry.
+   */
+  generate: void;
   /** Fires at the start of every turn. */
   turn: { turn: number };
   /** Player reached the exit or a custom win condition fired. */

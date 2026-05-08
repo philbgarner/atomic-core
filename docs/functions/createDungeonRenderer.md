@@ -4,7 +4,7 @@
 
 > **createDungeonRenderer**(`element`, `game`, `options?`): [`DungeonRenderer`](../type-aliases/DungeonRenderer.md)
 
-Defined in: [rendering/dungeonRenderer.ts:604](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/rendering/dungeonRenderer.ts#L604)
+Defined in: [rendering/dungeonRenderer.ts:604](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/rendering/dungeonRenderer.ts#L604)
 
 Mount a Three.js first-person dungeon renderer into `element`.
 

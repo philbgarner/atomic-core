@@ -4,7 +4,7 @@
 
 > **showInventory**(`opts?`): [`InventoryHandle`](../type-aliases/InventoryHandle.md)
 
-Defined in: [ui/inventoryDialog.ts:209](https://github.com/philbgarner/atomic-core/blob/0f897612d0f33dd03c22bc22a0b5b59095b003c6/src/lib/ui/inventoryDialog.ts#L209)
+Defined in: [ui/inventoryDialog.ts:209](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/ui/inventoryDialog.ts#L209)
 
 Build and open an RPG-style inventory dialog.
 

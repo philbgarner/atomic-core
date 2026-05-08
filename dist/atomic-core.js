@@ -3348,6 +3348,7 @@ function runGenerate(internal, dungeonHandle, turnsHandle) {
 		internal.turnState = tickUntilPlayer(internal.turnState, deps);
 	}
 	updateFovAndMinimap(internal);
+	internal.events.emit("generate");
 	internal.events.emit("turn", { turn: internal.turnCounter });
 }
 function drawMinimap(internal, canvas, opts) {
@@ -5608,7 +5609,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			if (skyCount > 0) {
 				function emitSkyPanels(mx, mz, ry) {
 					for (let i = 0; i < skyCount; i++) {
-						skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+						skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
 						skyPanelRects.push(getUvRect(wallId));
 						skyPanelRots.push(0);
 						skyPanelHeightScales.push(1);
@@ -5620,10 +5621,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					}
 				}
 				if (isOpenSky) {
-					if (isSolid(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-					if (isSolid(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-					if (isSolid(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-					if (isSolid(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+					if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+					if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+					if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
 				} else {
 					if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
 					if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Sky Panels</title>
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>sky panels</h1>
+            <div id="stats">
+                HP: <span id="hp">—</span><br />
+                Turn: <span id="turn">0</span><br />
+                Pos: <span id="pos">—</span>
+            </div>
+            <div id="desc">
+                Cells adjacent to walls keep a ceiling.<br /><br />
+                Cells two or more steps from any wall become open sky.<br /><br />
+                Sky panels are placed on the ceiling cells facing into the open area, visible from within the sky zone.
+            </div>
+            <div id="log"></div>
+            <div id="controls">
+                WASD / Arrow keys — move<br />
+                Q / E — turn left / right<br />
+                Space — wait
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <!-- Expose THREE as a global from the local ESM build (UMD was removed in r160+) -->
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./sky-panels.js" defer></script>
+    </body>
+</html>
