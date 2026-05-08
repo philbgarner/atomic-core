@@ -686,6 +686,7 @@ function updateFovAndMinimap(internal: GameInternal): void {
   const { width, height } = internal.dungeonOutputs;
   const flags = internal.colliderFlagsData;
   const player = internal.playerState.entity;
+  if (player.x < 0 || player.z < 0) return;
 
   const fovMask = new Uint8Array(width * height);
   computeFov(player.x, player.z, {
@@ -1305,8 +1306,8 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     kind: "player",
     spriteName: "player",
     faction: "player",
-    x: playerOpts.x ?? 1,
-    z: playerOpts.z ?? 1,
+    x: -1,
+    z: -1,
     speed: playerOpts.speed ?? 5,
     alive: true,
     blocksMove: true,
