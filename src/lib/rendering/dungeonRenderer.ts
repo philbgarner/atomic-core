@@ -486,6 +486,46 @@ function computeFaceAO(
   return [1, 1, 1, 1];
 }
 
+/**
+ * Per-corner AO for a vertical skirt face (floor-step or ceiling-step panel).
+ * Skirts face AWAY from the current cell toward the lower/higher neighbour,
+ * so their UV x-axis is mirrored relative to the matching wall direction.
+ * Returns [tl, tr, bl, br] in [0,1].
+ */
+function computeSkirtFaceAO(
+  isSol: (x: number, z: number) => boolean,
+  cx: number,
+  cz: number,
+  dir: "north" | "south" | "east" | "west",
+): [number, number, number, number] {
+  const n = isSol;
+  if (dir === "north") {
+    // ry=π (same UV as south wall): x=0 → east (+X), x=1 → west (-X). Neighbour at cz-1.
+    const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
+    const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
+    return [aoE, aoW, aoE, aoW];
+  }
+  if (dir === "south") {
+    // ry=0 (same UV as north wall): x=0 → west (-X), x=1 → east (+X). Neighbour at cz+1.
+    const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
+    const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
+    return [aoW, aoE, aoW, aoE];
+  }
+  if (dir === "west") {
+    // ry=-π/2 (same UV as east wall): x=0 → north (-Z), x=1 → south (+Z). Neighbour at cx-1.
+    const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
+    const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
+    return [aoN, aoS, aoN, aoS];
+  }
+  if (dir === "east") {
+    // ry=+π/2 (same UV as west wall): x=0 → south (+Z), x=1 → north (-Z). Neighbour at cx+1.
+    const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
+    const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
+    return [aoS, aoN, aoS, aoN];
+  }
+  return [1, 1, 1, 1];
+}
+
 function makeFaceMatrix(
   x: number,
   y: number,
@@ -1319,6 +1359,8 @@ export function createDungeonRenderer(
     const floorsAo: number[] = [];
     const ceilsAo: number[] = [];
     const wallsAo: number[] = [];
+    const floorEdgesAo: number[] = [];
+    const ceilEdgesAo: number[] = [];
     // XZ outward normals per wall instance: [nx, nz] pairs.
     const wallNormals: number[] = [];
     const wallRots: number[] = [];
@@ -1521,6 +1563,9 @@ export function createDungeonRenderer(
             const stepH = currentFloorY - neighborFloorY;
             const fullPanels = Math.floor(stepH / tileSize);
             const rem = stepH - fullPanels * tileSize;
+            const isBlockingFloor = (nx: number, nz: number) =>
+              isSolid(nx, nz) || (openFloorVal(nx, nz) ?? 128) > nfVal;
+            const ao = aoEnabled ? computeSkirtFaceAO(isBlockingFloor, cx, cz, dir) : null;
             for (let i = 0; i < fullPanels; i++) {
               const midY = neighborFloorY + i * tileSize + tileSize / 2;
               floorEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -1528,6 +1573,7 @@ export function createDungeonRenderer(
               floorEdgeRots.push(s.rotation ?? 0);
               floorEdgeHeightScales.push(1.0);
               floorEdgeCellMap.push({ cx, cz });
+              if (ao) floorEdgesAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
             if (rem > 0.001) {
               const midY = neighborFloorY + fullPanels * tileSize + rem / 2;
@@ -1536,6 +1582,7 @@ export function createDungeonRenderer(
               floorEdgeRots.push(s.rotation ?? 0);
               floorEdgeHeightScales.push(rem / tileSize);
               floorEdgeCellMap.push({ cx, cz });
+              if (ao) floorEdgesAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
           }
           const nfN = openFloorVal(cx, cz - 1);
@@ -1602,6 +1649,9 @@ export function createDungeonRenderer(
             const h = (ncVal - ceilVal) * offsetStep;
             const fullPanels = Math.floor(h / tileSize);
             const rem = h - fullPanels * tileSize;
+            const isBlockingCeil = (nx: number, nz: number) =>
+              isSolid(nx, nz) || (openCeilVal(nx, nz) ?? 128) < ncVal;
+            const ao = aoEnabled ? computeSkirtFaceAO(isBlockingCeil, cx, cz, dir) : null;
             for (let i = 0; i < fullPanels; i++) {
               const midY = yCurrent - i * tileSize - tileSize / 2;
               ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -1609,6 +1659,7 @@ export function createDungeonRenderer(
               ceilEdgeRots.push(s.rotation ?? 0);
               ceilEdgeHeightScales.push(1.0);
               ceilEdgeCellMap.push({ cx, cz });
+              if (ao) ceilEdgesAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
             if (rem > 0.001) {
               const midY = yCurrent - fullPanels * tileSize - rem / 2;
@@ -1617,6 +1668,7 @@ export function createDungeonRenderer(
               ceilEdgeRots.push(s.rotation ?? 0);
               ceilEdgeHeightScales.push(rem / tileSize);
               ceilEdgeCellMap.push({ cx, cz });
+              if (ao) ceilEdgesAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
           }
           const ncN = openCeilVal(cx, cz - 1);
@@ -1758,6 +1810,7 @@ export function createDungeonRenderer(
     floorEdgeMesh = buildInstancedMesh(
       floorEdges, floorEdgeRects, floorEdgeMat, !!packedAtlas,
       undefined, floorEdgeRots, floorEdgeHeightScales, fEdgeCX, fEdgeCZ,
+      aoEnabled && floorEdgesAo.length ? new Float32Array(floorEdgesAo) : undefined,
     );
     scene.add(floorEdgeMesh);
     meshToCellMap.set(floorEdgeMesh, floorEdgeCellMap);
@@ -1765,6 +1818,7 @@ export function createDungeonRenderer(
     ceilEdgeMesh = buildInstancedMesh(
       ceilEdges, ceilEdgeRects, ceilEdgeMat, !!packedAtlas,
       undefined, ceilEdgeRots, ceilEdgeHeightScales, cEdgeCX, cEdgeCZ,
+      aoEnabled && ceilEdgesAo.length ? new Float32Array(ceilEdgesAo) : undefined,
     );
     scene.add(ceilEdgeMesh);
     meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
