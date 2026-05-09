@@ -104,10 +104,10 @@ export function makeDungeon() {
     ambientOcclusion: 1,
     openSkyLighting: 0.1,
     surfaceLighting: {
-      floor: 1.0,
-      ceiling: 0.95,
-      wallMin: 0.85,
-      wallMax: 0.9,
+      floor: 0.05,
+      ceiling: 0.05,
+      wallMin: 1.5,
+      wallMax: 3.0,
     },
     skybox: { faces: globs.skyboxFaces },
     /*
