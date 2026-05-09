@@ -1,0 +1,217 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+	--border: #4a4080;
+	--panel: #141029;
+	--lilac-white: #d8c8f7;
+	--ridyn: #ffcccc;
+	--gold: #f0c040;
+	--bg: #0a0a1a;
+	--desc: #8090c0;
+	--damage: #f66;
+	--audio: #69f;
+	--muted: #404060;
+	--gold-dim: #a07820;
+	--text: #c8d0f8;
+	--death: #f99;
+	--fadeborder: #ffffff40;
+	--darker-lilac_t: #2d2633c0;
+	--lilac: #b679f2;
+}
+
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	font-family: "Reem Kufi", sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	font-size: 12px;
+	display: flex;
+	image-rendering: pixelated;
+	justify-content: center;
+	align-items: center;
+	overflow: hidden;
+}
+
+#canvas-wrap {
+	flex: 1;
+	position: relative;
+	overflow: hidden;
+	z-index: 1;
+}
+
+#viewport {
+	width: 100%;
+	height: 100%;
+}
+
+/* Minimap overlay — bottom-right corner of the viewport */
+#minimap {
+	border: 2px solid var(--border);
+	background: #000;
+	image-rendering: pixelated;
+	opacity: 0.9;
+	pointer-events: none;
+}
+
+/* ── Mouse tooltip ───────────────────────────────────────────────────── */
+#cell-tooltip {
+	position: absolute;
+	pointer-events: none;
+	background: rgba(10, 10, 26, 0.85);
+	border: 1px solid var(--border);
+	color: var(--cyan);
+	font-size: 7px;
+	line-height: 1.8;
+	padding: 5px 8px;
+	white-space: nowrap;
+	transform: translate(14px, -50%);
+	z-index: 10;
+}
+
+#cell-tooltip.hidden {
+	display: none;
+}
+
+/* used at top of screen for mission complete */
+#banner {
+	position: fixed;
+	top: 24px;
+	left: 50%;
+	transform: translateX(-50%) translateY(-20px);
+	background: var(--mission-banner);
+	border: 2px solid var(--mission-done);
+	color: var(--mission-done);
+	font-size: 9px;
+	padding: 12px 20px;
+	text-align: center;
+	line-height: 2;
+	z-index: 100;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	white-space: nowrap;
+	box-shadow: 0 0 24px rgba(68, 204, 119, 0.3);
+}
+
+#banner.visible {
+	opacity: 1;
+	transform: translateX(-50%) translateY(0);
+}
+
+.hidden {
+	display: none !important;
+}
+
+/* compass stuff */
+.compass {
+	position: relative;
+	width: 136px;
+	height: 136px;
+	transform: scale(2);
+	transform-origin: left top;
+	margin-bottom: 136px;
+}
+
+.layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	transform-origin: 50% 50%;
+	will-change: transform;
+}
+
+.tod {
+	z-index: 1;
+	transition: transform 0.6s ease-in-out;
+}
+
+.base {
+	z-index: 2;
+}
+
+.needle {
+	z-index: 3;
+	transition: transform 0.6s ease-in-out;
+}
+
+/* marble buttons */
+.img-btnQ {
+	position: relative;
+	background-image: var(--bgq), var(--bgqa);
+	background-size: cover;
+	border: none;
+	background-color: transparent;
+	cursor: pointer;
+}
+
+.img-btnQ .btn-canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.img-btnQ:active .btn-canvas {
+	transform: translate(1px, 1px);
+}
+
+.img-btnQ:active {
+	background-image: var(--bgqa), var(--bgq);
+}
+
+.img-btnQ::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0);
+	pointer-events: none;
+}
+
+.img-btnQ:hover::after {
+	background: rgba(255, 255, 255, 0.25);
+}
+
+.charbox {
+	border: 2px solid var(--border);
+	display: flex;
+	flex-direction: column;
+}
+
+.img-wrapper {
+	position: relative;
+	display: inline-block; 
+  }
+  
+  .img-wrapper img {
+	display: block; 
+  }
+  
+  .img-text {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	color: var(--bg);
+	font-size: 24px;
+	pointer-events: none; 
+	white-space: nowrap;
+	overflow: hidden;
+	max-width: 100%;
+	text-overflow: ellipsis;
+  }

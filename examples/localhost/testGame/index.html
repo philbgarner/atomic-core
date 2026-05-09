@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>test for GM</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400..700&display=swap" rel="stylesheet">
+
+	<link rel="stylesheet" href="./b/vidstyles.css" />
+	<link rel="stylesheet" href="./b/styles.css" />
+	<link rel="stylesheet" href="./b/multiplayer.css" />
+	<link rel="stylesheet" href="./b/modal.css" />
+</head>
+
+<body>
+	<div id="titlescreen" class="screen" style="width: 1280px; height: 800px;"></div>
+
+	<!-- Connection splash shown before the WebSocket handshake completes -->
+	<div id="gamescreen" class="screen" style="display:flex;"></div>
+
+	<div id="modal-overlay" class="modal-overlay hidden">
+		<div class="modal">
+			<div class="modal-header">
+				<div class="decal left"></div>
+				<div class="title-wrap">
+					<h2 class="modal-title"></h2>
+				</div>
+				<div class="decal right"></div>
+			</div>
+			<div class="text-area">
+			</div>
+			<div style="flex: 1;align-items: end;display: flex;padding: 4px 0px 8px 0px; justify-content: center;">
+				<img src="./a/glitchedwm.png">
+			</div>
+
+			<div class="image-area">
+				<canvas id="spriteCanvas" width="800" height="800"></canvas>
+			</div>
+		</div>
+	</div>
+
+	<div id="invdialog" class="modal-overlay hidden">
+		<div class="invmodal">
+			<canvas id="invCanvas" width="800" height="800"></canvas>
+			<div class="dialog-inv">
+				<div id="col1"></div>
+				<div class="overlay">
+					<div class="sprite hidden" id="icon0"
+						style="top: 308px; right: 76px; background-position: -1536px -1152px;"></div>
+					<div class="sprite hidden" id="icon1"
+						style="top: 308px; right: 18px; background-position: -1536px -1184px;"></div>
+					<div class="sprite hidden" id="icon2"
+						style="top: 18px;  right: 76px; background-position: -1536px -1216px;"></div>
+					<div class="sprite hidden" id="icon3"
+						style="top: 76px;  right: 76px; background-position: -1536px -1248px;"></div>
+					<div class="sprite hidden" id="icon4"
+						style="top: 76px;  right: 18px; background-position: -1536px -1280px;"></div>
+					<div class="sprite hidden" id="icon5"
+						style="top: 134px; right: 76px; background-position: -1536px -1312px;"></div>
+					<div class="sprite hidden" id="icon6"
+						style="top: 134px; right: 18px; background-position: -1536px -1344px;"></div>
+					<div class="sprite hidden" id="icon7"
+						style="top: 192px; right: 76px; background-position: -1536px -1376px;"></div>
+					<div class="sprite hidden" id="icon8"
+						style="top: 192px; right: 18px; background-position: -1536px -1408px;"></div>
+					<div class="sprite hidden" id="icon9"
+						style="top: 250px; right: 76px; background-position: -1536px -1440px;"></div>
+					<div class="sprite hidden" id="icon10"
+						style="top: 250px;right: 18px; background-position: -1536px -1472px;"></div>
+					<div class="sprite hidden" id="icon11"
+						style="top: 366px;right: 18px; background-position: -1536px -1504px;"></div>
+					<div class="sprite hidden" id="icon12"
+						style="top: 366px;right: 76px; background-position: -1536px -1504px;"></div>
+
+					<h2 id="player_name"
+						style="position:absolute; background-color: rgba(0, 0, 0, 0.75); left:0px; top:704px; width:100%; height:96px; margin-top:0px; text-align: center;">
+					</h2>
+					<h2 id="player_gold"
+						style="position:absolute; right:70px; top:628px; width:94px; height:64px; margin-top:0px; display:grid; place-items: center;">
+					</h2>
+					<div style="position:absolute; right:98px; top:540px; width:66px; height:64px;"
+						onclick="addLog(txt('tipbin'), 'inv');"></div>
+					<div style="position:absolute; right:12px; top:12px; width:52px; height:46px;" onclick="exitdlg();">
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div id="levelTitleOverlay" class="modal-overlay hidden">
+		<div id="levelTitleModal" class="modal title-card">
+			<img src="./a/eternalnight.png">
+		</div>
+	</div>
+
+	<!-- Expose THREE as a global from the local ESM build (UMD was removed in r160+) -->
+	<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js",
+			"atomic-core": "../../../dist/atomic-core.js"
+		  }
+		}
+		</script>
+
+	<script type="module" src="./b/introtitle.js"></script>
+	
+</body>
+
+</html>
