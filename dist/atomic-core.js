@@ -4755,8 +4755,8 @@ function computeFaceAO(isSol, cx, cz, dir) {
 function computeSkirtFaceAO(isSol, cx, cz, dir) {
 	const n = isSol;
 	if (dir === "north") {
-		const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
-		const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
+		const aoE = vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3;
+		const aoW = vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3;
 		return [
 			aoE,
 			aoW,
@@ -4765,8 +4765,8 @@ function computeSkirtFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "south") {
-		const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
-		const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
+		const aoW = vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3;
+		const aoE = vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3;
 		return [
 			aoW,
 			aoE,
@@ -4775,8 +4775,8 @@ function computeSkirtFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "west") {
-		const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
-		const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
+		const aoN = vertexAO(n(cx, cz - 1), n(cx - 1, cz), n(cx - 1, cz - 1)) / 3;
+		const aoS = vertexAO(n(cx, cz + 1), n(cx - 1, cz), n(cx - 1, cz + 1)) / 3;
 		return [
 			aoN,
 			aoS,
@@ -4785,8 +4785,8 @@ function computeSkirtFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "east") {
-		const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
-		const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
+		const aoS = vertexAO(n(cx, cz + 1), n(cx + 1, cz), n(cx + 1, cz + 1)) / 3;
+		const aoN = vertexAO(n(cx, cz - 1), n(cx + 1, cz), n(cx + 1, cz - 1)) / 3;
 		return [
 			aoS,
 			aoN,
@@ -5376,10 +5376,12 @@ function createDungeonRenderer(element, game, options = {}) {
 		const floorWallSkirtRots = [];
 		const floorWallSkirtHeightScales = [];
 		const floorWallSkirtRowIndexes = [];
+		const floorWallSkirtAo = [];
 		const ceilWallSkirtEdges = [];
 		const ceilWallSkirtRects = [];
 		const ceilWallSkirtRots = [];
 		const ceilWallSkirtHeightScales = [];
+		const ceilWallSkirtAo = [];
 		const ceilWallSkirtRowIndexes = [];
 		const skyPanelEdges = [];
 		const skyPanelRects = [];
@@ -5567,6 +5569,7 @@ function createDungeonRenderer(element, game, options = {}) {
 					const s = spec(wallTiles, dir, wallId);
 					const fullPanels = Math.floor(gapH / tileSize);
 					const rem = gapH - fullPanels * tileSize;
+					const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 					for (let i = 0; i < fullPanels; i++) {
 						const midY = -(i * tileSize + tileSize / 2);
 						floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -5578,6 +5581,7 @@ function createDungeonRenderer(element, game, options = {}) {
 							cx,
 							cz
 						});
+						if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 					}
 					if (rem > .001) {
 						const midY = -(fullPanels * tileSize + rem / 2);
@@ -5590,6 +5594,7 @@ function createDungeonRenderer(element, game, options = {}) {
 							cx,
 							cz
 						});
+						if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 					}
 				}
 				if (isSolid(cx, cz - 1)) addWallFloorSkirt(wx, cz * tileSize, 0, "north");
@@ -5645,6 +5650,7 @@ function createDungeonRenderer(element, game, options = {}) {
 						const s = spec(wallTiles, dir, wallId);
 						const fullPanels = Math.floor(gapH / tileSize);
 						const rem = gapH - fullPanels * tileSize;
+						const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 						for (let i = 0; i < fullPanels; i++) {
 							const midY = ceilingH + i * tileSize + tileSize / 2;
 							ceilWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -5656,6 +5662,7 @@ function createDungeonRenderer(element, game, options = {}) {
 								cx,
 								cz
 							});
+							if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 						if (rem > .001) {
 							const midY = ceilingH + fullPanels * tileSize + rem / 2;
@@ -5668,6 +5675,7 @@ function createDungeonRenderer(element, game, options = {}) {
 								cx,
 								cz
 							});
+							if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 					}
 					if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
@@ -5756,13 +5764,13 @@ function createDungeonRenderer(element, game, options = {}) {
 		meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 		if (floorWallSkirtEdges.length > 0) {
 			const [fwsCX, fwsCZ] = cellArrays(floorWallSkirtCellMap);
-			floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, void 0, void 0, floorWallSkirtRowIndexes);
+			floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, aoEnabled && floorWallSkirtAo.length ? new Float32Array(floorWallSkirtAo) : void 0, void 0, floorWallSkirtRowIndexes);
 			scene.add(floorWallSkirtMesh);
 			meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
 		}
 		if (ceilWallSkirtEdges.length > 0) {
 			const [cwsCX, cwsCZ] = cellArrays(ceilWallSkirtCellMap);
-			ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ, void 0, void 0, ceilWallSkirtRowIndexes);
+			ceilWallSkirtMesh = buildInstancedMesh(ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas, void 0, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ, aoEnabled && ceilWallSkirtAo.length ? new Float32Array(ceilWallSkirtAo) : void 0, void 0, ceilWallSkirtRowIndexes);
 			scene.add(ceilWallSkirtMesh);
 			meshToCellMap.set(ceilWallSkirtMesh, ceilWallSkirtCellMap);
 		}

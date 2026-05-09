@@ -501,26 +501,26 @@ function computeSkirtFaceAO(
   const n = isSol;
   if (dir === "north") {
     // ry=π (same UV as south wall): x=0 → east (+X), x=1 → west (-X). Neighbour at cz-1.
-    const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
-    const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
+    const aoE = vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3;
+    const aoW = vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3;
     return [aoE, aoW, aoE, aoW];
   }
   if (dir === "south") {
     // ry=0 (same UV as north wall): x=0 → west (-X), x=1 → east (+X). Neighbour at cz+1.
-    const aoW = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
-    const aoE = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
+    const aoW = vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3;
+    const aoE = vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3;
     return [aoW, aoE, aoW, aoE];
   }
   if (dir === "west") {
     // ry=-π/2 (same UV as east wall): x=0 → north (-Z), x=1 → south (+Z). Neighbour at cx-1.
-    const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
-    const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
+    const aoN = vertexAO(n(cx, cz - 1), n(cx - 1, cz), n(cx - 1, cz - 1)) / 3;
+    const aoS = vertexAO(n(cx, cz + 1), n(cx - 1, cz), n(cx - 1, cz + 1)) / 3;
     return [aoN, aoS, aoN, aoS];
   }
   if (dir === "east") {
     // ry=+π/2 (same UV as west wall): x=0 → south (+Z), x=1 → north (-Z). Neighbour at cx+1.
-    const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
-    const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
+    const aoS = vertexAO(n(cx, cz + 1), n(cx + 1, cz), n(cx + 1, cz + 1)) / 3;
+    const aoN = vertexAO(n(cx, cz - 1), n(cx + 1, cz), n(cx + 1, cz - 1)) / 3;
     return [aoS, aoN, aoS, aoN];
   }
   return [1, 1, 1, 1];
@@ -1373,10 +1373,12 @@ export function createDungeonRenderer(
     const floorWallSkirtRots: number[] = [];
     const floorWallSkirtHeightScales: number[] = [];
     const floorWallSkirtRowIndexes: number[] = [];
+    const floorWallSkirtAo: number[] = [];
     const ceilWallSkirtEdges: THREE.Matrix4[] = [];
     const ceilWallSkirtRects: UvRect[] = [];
     const ceilWallSkirtRots: number[] = [];
     const ceilWallSkirtHeightScales: number[] = [];
+    const ceilWallSkirtAo: number[] = [];
     const ceilWallSkirtRowIndexes: number[] = [];
     const skyPanelEdges: THREE.Matrix4[] = [];
     const skyPanelRects: UvRect[] = [];
@@ -1609,6 +1611,7 @@ export function createDungeonRenderer(
             const s = spec(wallTiles, dir, wallId);
             const fullPanels = Math.floor(gapH / tileSize);
             const rem = gapH - fullPanels * tileSize;
+            const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
             for (let i = 0; i < fullPanels; i++) {
               const midY = -(i * tileSize + tileSize / 2);
               floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -1617,6 +1620,7 @@ export function createDungeonRenderer(
               floorWallSkirtHeightScales.push(1.0);
               floorWallSkirtRowIndexes.push(i);
               floorWallSkirtCellMap.push({ cx, cz });
+              if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
             if (rem > 0.001) {
               const midY = -(fullPanels * tileSize + rem / 2);
@@ -1626,6 +1630,7 @@ export function createDungeonRenderer(
               floorWallSkirtHeightScales.push(rem / tileSize);
               floorWallSkirtRowIndexes.push(fullPanels);
               floorWallSkirtCellMap.push({ cx, cz });
+              if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
             }
           }
           if (isSolid(cx, cz - 1)) addWallFloorSkirt(wx, cz * tileSize, 0, "north");
@@ -1693,6 +1698,7 @@ export function createDungeonRenderer(
               const s = spec(wallTiles, dir, wallId);
               const fullPanels = Math.floor(gapH / tileSize);
               const rem = gapH - fullPanels * tileSize;
+              const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
               for (let i = 0; i < fullPanels; i++) {
                 const midY = ceilingH + i * tileSize + tileSize / 2;
                 ceilWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -1701,6 +1707,7 @@ export function createDungeonRenderer(
                 ceilWallSkirtHeightScales.push(1.0);
                 ceilWallSkirtRowIndexes.push(i);
                 ceilWallSkirtCellMap.push({ cx, cz });
+                if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
               }
               if (rem > 0.001) {
                 const midY = ceilingH + fullPanels * tileSize + rem / 2;
@@ -1710,6 +1717,7 @@ export function createDungeonRenderer(
                 ceilWallSkirtHeightScales.push(rem / tileSize);
                 ceilWallSkirtRowIndexes.push(fullPanels);
                 ceilWallSkirtCellMap.push({ cx, cz });
+                if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
               }
             }
             if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
@@ -1828,7 +1836,8 @@ export function createDungeonRenderer(
       floorWallSkirtMesh = buildInstancedMesh(
         floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas,
         undefined, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ,
-        undefined, undefined, floorWallSkirtRowIndexes,
+        aoEnabled && floorWallSkirtAo.length ? new Float32Array(floorWallSkirtAo) : undefined,
+        undefined, floorWallSkirtRowIndexes,
       );
       scene.add(floorWallSkirtMesh);
       meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
@@ -1838,7 +1847,8 @@ export function createDungeonRenderer(
       ceilWallSkirtMesh = buildInstancedMesh(
         ceilWallSkirtEdges, ceilWallSkirtRects, ceilWallSkirtMat, !!packedAtlas,
         undefined, ceilWallSkirtRots, ceilWallSkirtHeightScales, cwsCX, cwsCZ,
-        undefined, undefined, ceilWallSkirtRowIndexes,
+        aoEnabled && ceilWallSkirtAo.length ? new Float32Array(ceilWallSkirtAo) : undefined,
+        undefined, ceilWallSkirtRowIndexes,
       );
       scene.add(ceilWallSkirtMesh);
       meshToCellMap.set(ceilWallSkirtMesh, ceilWallSkirtCellMap);
