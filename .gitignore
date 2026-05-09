@@ -4,3 +4,4 @@ node_modules
 .workspace
 archive/*
 #dist # Turns out the github build pipeline does rely on this.
+testGame
