@@ -103,12 +103,6 @@ export function makeDungeon() {
     // AO darkens corners; openSkyLighting lightens floors below sky holes.
     ambientOcclusion: 1,
     openSkyLighting: 0.1,
-    surfaceLighting: {
-      floor: 0.05,
-      ceiling: 0.05,
-      wallMin: 1.5,
-      wallMax: 3.0,
-    },
     skybox: { faces: globs.skyboxFaces },
     /*
 		// ── Skybox ────────────────────────────────────────────────────────────────
@@ -127,9 +121,9 @@ export function makeDungeon() {
 		},*/
     surfaceLighting: {
       floor: 1.0,
-      ceiling: 0.95,
+      ceiling: 0.9,
       wallMin: 0.85,
-      wallMax: 0.9,
+      wallMax: 0.95,
     },
     entityAppearances: {
       health_potion: {
