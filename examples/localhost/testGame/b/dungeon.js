@@ -194,8 +194,8 @@ export function makeDungeon() {
 
       // Puddle near room centre
       if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
-        return { floor: ["wet-overlay"], wall: ["wet-wall"] };
-      }
+		return { floor: ['natural/fx_burning'], wall: ['natural/fx_burning'] };
+	}
 
       return null;
     },
@@ -239,34 +239,29 @@ export function makeDungeon() {
   window.renderer = renderer;
 
   attachDecorator(window.game, {
-    onDecorate({ dungeon, roomId, x, y }) {
-      let room = dungeon.rooms[roomId];
-      if (!room) return null;
+	onDecorate({ dungeon, roomId, x, y }) {
+		let room = dungeon.rooms[roomId];
+		if (!room) return null;
 
-      if (Math.random() < 0.5) {
-        const e = createEntity({
-          id: `decor${x}${y}`,
-          type: "decor",
-          kind: "decoration",
-          faction: "none",
-          spriteMap: {
-            frameSize: { w: 64, h: 64 },
-            layers: [{ tile: "natural/rose", opacity: 1.0 }],
-          },
-          x: x,
-          z: y,
-          blocksMove: true,
-          alive: false,
-          yaw: 0, // rotation in radians
-          scale: 1, // uniform scale multiplier
-        });
-        globs.entities.push(e);
-        return e;
-      }
+		if (Math.random() < 0.5) {
+			const e = createEntity({	
+				id: `decor${x}${y}`,
+				type: "decor",
+				kind: 'decoration', faction: 'none',
+				spriteMap: {frameSize: { w: 64, h: 64 },layers: [{ tile: "natural/rose", opacity: 1.0 },],},
+				x: x,
+				z: y,
+				blocksMove: false,
+				yaw: 1,       // rotation in radians
+				scale: 2,       // uniform scale multiplier
+			});
+			globs.entities.push(e);
+			return e;
+		}
 
-      return null;
-    },
-  });
+		return null;
+	},
+});
 }
 
 function makeFaceUrl(w, h, stops, starCount = 0) {

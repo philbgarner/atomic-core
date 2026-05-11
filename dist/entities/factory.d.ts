@@ -1,4 +1,4 @@
-import { EntityBase, EntityKind, SpriteMap } from './types';
+import type { EntityBase, EntityKind, SpriteMap } from "./types";
 /**
  * Required and optional engine-level fields for createEntity().
  * Any additional keys (hp, maxHp, attack, xp, …) are passed through verbatim

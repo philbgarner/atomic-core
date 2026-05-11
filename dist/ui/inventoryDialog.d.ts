@@ -1,4 +1,5 @@
-import { Item, InventorySlot } from '../entities/inventory';
+import './inventoryDialog.css';
+import type { Item, InventorySlot } from '../entities/inventory';
 /** Defines a single equipment slot position on the paper-doll diagram. */
 export type EquipSlotDef = {
     /** Unique identifier matching keys in `InventoryOptions.equippedItems`. */
