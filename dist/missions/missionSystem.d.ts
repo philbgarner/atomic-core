@@ -1,6 +1,6 @@
-import { EventEmitter } from '../events/eventEmitter';
-import { ActionTransport } from '../transport/types';
-import { MissionsHandle } from './types';
+import type { EventEmitter } from '../events/eventEmitter';
+import type { ActionTransport } from '../transport/types';
+import type { MissionsHandle } from './types';
 /**
  * Create the mission system.
  *

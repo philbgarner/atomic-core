@@ -1,6 +1,6 @@
-import { EventEmitter } from '../events/eventEmitter';
-import { PlayerHandle } from '../api/player';
-import { DungeonHandle } from '../api/createGame';
+import type { EventEmitter } from '../events/eventEmitter';
+import type { PlayerHandle } from '../api/player';
+import type { DungeonHandle } from '../api/createGame';
 /** Lifecycle state of a mission. */
 export type MissionStatus = 'active' | 'complete' | 'failed';
 export type Mission = {

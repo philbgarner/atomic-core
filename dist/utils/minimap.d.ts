@@ -1,4 +1,4 @@
-import { BspDungeonOutputs } from '../dungeon/bsp';
+import type { BspDungeonOutputs } from "../dungeon/bsp";
 export type MinimapState = {
     width: number;
     height: number;
@@ -12,6 +12,10 @@ export type MinimapState = {
  * Pre-explores the start room (endRoomId), the first monster's room, and the
  * corridor path connecting them — matching the classic roguelike "you know
  * where you started" reveal.
+ *
+ * not convinced this is the right thing to do. we can't guarantee starting anywhere
+ * due to dev having control over spawn point. besides, the ttrpg solution here
+ * is: you can see the steps you came down and the room you've entered.
  */
 export declare function createMinimapState(dungeon: BspDungeonOutputs): MinimapState;
 /**
