@@ -1878,7 +1878,16 @@ game.dungeon.paint(x, z, {
   floorSkirtBase: ['mud-trim', null],
 })
 game.dungeon.unpaint(x, z)   // clears all surfaces including skirt/panel overrides
+
+// Simplified setter — auto-targets by cell type
+game.dungeon.set(x, y, 'stone-floor')           // open cell: sets floor + ceiling
+game.dungeon.set(x, y, 'stone-wall')            // solid cell: sets wall only
+game.dungeon.set(x, y, 'trim', {
+  applyTextureTo: ['floor', 'ceiling'],          // explicit target override
+})
 ```
+
+`game.dungeon.set(x, y, spriteName, options?)` is a convenience wrapper over `paint()`. When called with no options it inspects the cell's solid flag and automatically applies the sprite to the right surfaces. Pass `options.applyTextureTo` with an array of `'floor' | 'wall' | 'ceiling'` to target specific surfaces regardless of the cell type.
 
 ---
 

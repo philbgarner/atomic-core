@@ -38,6 +38,11 @@ export type PassageList = {
     toggle(id: number): void;
     list: HiddenPassage[];
 };
+export type ApplyTarget = 'floor' | 'wall' | 'ceiling';
+export type SetCellOptions = {
+    /** Override which surfaces receive the texture. When omitted, defaults to floor+ceiling for open cells and wall for solid cells. */
+    applyTextureTo?: ApplyTarget[];
+};
 export type DungeonHandle = {
     readonly width: number;
     readonly height: number;
@@ -54,6 +59,13 @@ export type DungeonHandle = {
     unpaint(x: number, z: number): void;
     /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
     readonly paintMap: ReadonlyMap<string, SurfacePaintTarget>;
+    /**
+     * Set the texture (sprite name) at cell (x, y).
+     * For open (non-solid) cells with no options: applies to floor and ceiling.
+     * For solid cells with no options: applies to the wall only.
+     * Pass `options.applyTextureTo` to explicitly choose which surfaces are set.
+     */
+    set(x: number, y: number, spriteName: string, options?: SetCellOptions): void;
 };
 export type TurnsHandle = {
     /** Current turn counter. */

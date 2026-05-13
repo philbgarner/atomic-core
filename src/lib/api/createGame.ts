@@ -96,6 +96,13 @@ export type PassageList = {
   list: HiddenPassage[];
 };
 
+export type ApplyTarget = 'floor' | 'wall' | 'ceiling';
+
+export type SetCellOptions = {
+  /** Override which surfaces receive the texture. When omitted, defaults to floor+ceiling for open cells and wall for solid cells. */
+  applyTextureTo?: ApplyTarget[];
+};
+
 export type DungeonHandle = {
   readonly width: number;
   readonly height: number;
@@ -112,6 +119,13 @@ export type DungeonHandle = {
   unpaint(x: number, z: number): void;
   /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
   readonly paintMap: ReadonlyMap<string, SurfacePaintTarget>;
+  /**
+   * Set the texture (sprite name) at cell (x, y).
+   * For open (non-solid) cells with no options: applies to floor and ceiling.
+   * For solid cells with no options: applies to the wall only.
+   * Pass `options.applyTextureTo` to explicitly choose which surfaces are set.
+   */
+  set(x: number, y: number, spriteName: string, options?: SetCellOptions): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -791,6 +805,31 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
       internal.paintMap.delete(`${x},${z}`);
       writePaintToOverlayTexture(internal, x, z);
       internal.events.emit('cell-paint', { x, z, floor: [], wall: [], ceil: [], ceilSkirtBase: [], floorSkirtBase: [], skyPanels: [], ceilingPanels: [] });
+    },
+
+    set(x: number, y: number, spriteName: string, options?: SetCellOptions) {
+      const dungeon = internal.dungeonOutputs;
+      if (!dungeon) return;
+
+      const layers: SurfacePaintTarget = {};
+
+      if (options?.applyTextureTo?.length) {
+        for (const target of options.applyTextureTo) {
+          if (target === 'floor') layers.floor = [spriteName];
+          else if (target === 'wall') layers.wall = [spriteName];
+          else if (target === 'ceiling') layers.ceil = [spriteName];
+        }
+      } else {
+        const isSolid = (dungeon.textures.solid.image.data as Uint8Array)[y * dungeon.width + x] !== 0;
+        if (isSolid) {
+          layers.wall = [spriteName];
+        } else {
+          layers.floor = [spriteName];
+          layers.ceil = [spriteName];
+        }
+      }
+
+      this.paint(x, y, layers);
     },
 
     get paintMap(): ReadonlyMap<string, SurfacePaintTarget> {

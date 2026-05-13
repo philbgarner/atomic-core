@@ -3077,6 +3077,21 @@
 					ceilingPanels: []
 				});
 			},
+			set(x, y, spriteName, options) {
+				const dungeon = internal.dungeonOutputs;
+				if (!dungeon) return;
+				const layers = {};
+				if (options?.applyTextureTo?.length) {
+					for (const target of options.applyTextureTo) if (target === "floor") layers.floor = [spriteName];
+					else if (target === "wall") layers.wall = [spriteName];
+					else if (target === "ceiling") layers.ceil = [spriteName];
+				} else if (dungeon.textures.solid.image.data[y * dungeon.width + x] !== 0) layers.wall = [spriteName];
+				else {
+					layers.floor = [spriteName];
+					layers.ceil = [spriteName];
+				}
+				this.paint(x, y, layers);
+			},
 			get paintMap() {
 				return internal.paintMap;
 			}

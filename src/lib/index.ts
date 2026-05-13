@@ -10,7 +10,7 @@ export {
   attachSurfacePainter,
   attachKeybindings,
 } from './api/createGame'
-export type { SurfacePaintTarget, PlaceAPI } from './api/createGame'
+export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget } from './api/createGame'
 
 export { createEntity }                              from './entities/factory'
 export type { EntityCoreOpts }                       from './entities/factory'
