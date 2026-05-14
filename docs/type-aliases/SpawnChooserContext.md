@@ -4,7 +4,7 @@
 
 > **SpawnChooserContext** = `object`
 
-Defined in: [api/createGame.ts:194](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/api/createGame.ts#L194)
+Defined in: [api/createGame.ts:373](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/api/createGame.ts#L373)
 
 Passed to `onChooseSpawn` so you can inspect the dungeon layout before
 committing to a spawn room.
@@ -20,6 +20,6 @@ room's centre cell.
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="endroom"></a> `endRoom` | `PublicRoom` | [api/createGame.ts:197](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/api/createGame.ts#L197) |
-| <a id="rooms"></a> `rooms` | `PublicRoom`[] | [api/createGame.ts:195](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/api/createGame.ts#L195) |
-| <a id="startroom"></a> `startRoom` | `PublicRoom` | [api/createGame.ts:196](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/api/createGame.ts#L196) |
+| <a id="endroom"></a> `endRoom` | `PublicRoom` | [api/createGame.ts:376](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/api/createGame.ts#L376) |
+| <a id="rooms"></a> `rooms` | `PublicRoom`[] | [api/createGame.ts:374](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/api/createGame.ts#L374) |
+| <a id="startroom"></a> `startRoom` | `PublicRoom` | [api/createGame.ts:375](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/api/createGame.ts#L375) |

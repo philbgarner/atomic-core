@@ -4,7 +4,7 @@
 
 > **registerTheme**(`name`, `def`): `void`
 
-Defined in: [dungeon/themes.ts:82](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/dungeon/themes.ts#L82)
+Defined in: [dungeon/themes.ts:82](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/dungeon/themes.ts#L82)
 
 Register a custom theme (or override a built-in).
 The `name` becomes a valid key for `ThemeSelector` string values.

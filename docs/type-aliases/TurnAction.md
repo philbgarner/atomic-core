@@ -4,14 +4,14 @@
 
 > **TurnAction** = `object`
 
-Defined in: [turn/types.ts:61](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L61)
+Defined in: [turn/types.ts:61](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L61)
 
 ## Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="dx"></a> `dx?` | `number` | [turn/types.ts:63](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L63) |
-| <a id="dy"></a> `dy?` | `number` | [turn/types.ts:64](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L64) |
-| <a id="kind"></a> `kind` | [`TurnActionKind`](TurnActionKind.md) | [turn/types.ts:62](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L62) |
-| <a id="meta"></a> `meta?` | `Record`\<`string`, `unknown`\> | [turn/types.ts:66](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L66) |
-| <a id="targetid"></a> `targetId?` | `ActorId` | [turn/types.ts:65](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/turn/types.ts#L65) |
+| <a id="dx"></a> `dx?` | `number` | [turn/types.ts:63](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L63) |
+| <a id="dy"></a> `dy?` | `number` | [turn/types.ts:64](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L64) |
+| <a id="kind"></a> `kind` | [`TurnActionKind`](TurnActionKind.md) | [turn/types.ts:62](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L62) |
+| <a id="meta"></a> `meta?` | `Record`\<`string`, `unknown`\> | [turn/types.ts:66](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L66) |
+| <a id="targetid"></a> `targetId?` | `ActorId` | [turn/types.ts:65](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/turn/types.ts#L65) |

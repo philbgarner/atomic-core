@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { buildColliderFlags } from "./colliderFlags";
+import { buildColliderFlags, IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE } from "./colliderFlags";
 
 // -----------------------------
 // Types
@@ -1321,4 +1321,59 @@ export function setCeilingPanelCount(
   const data = outputs.textures.ceilingPanelCount.image.data as Uint8Array;
   data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
   outputs.textures.ceilingPanelCount.needsUpdate = true;
+}
+
+export function setSolid(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  solid: boolean,
+): void {
+  const data = outputs.textures.solid.image.data as Uint8Array;
+  data[cz * outputs.width + cx] = solid ? 1 : 0;
+  outputs.textures.solid.needsUpdate = true;
+}
+
+export function setColliderFlagsCell(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  flags: { walkable?: boolean; blocked?: boolean; lightPassable?: boolean },
+): void {
+  const data = outputs.textures.colliderFlags.image.data as Uint8Array;
+  const idx = cz * outputs.width + cx;
+  let byte = data[idx]!;
+  if (flags.walkable !== undefined)
+    byte = flags.walkable ? (byte | IS_WALKABLE) : (byte & ~IS_WALKABLE);
+  if (flags.blocked !== undefined)
+    byte = flags.blocked ? (byte | IS_BLOCKED) : (byte & ~IS_BLOCKED);
+  if (flags.lightPassable !== undefined)
+    byte = flags.lightPassable ? (byte | IS_LIGHT_PASSABLE) : (byte & ~IS_LIGHT_PASSABLE);
+  data[idx] = byte;
+  outputs.textures.colliderFlags.needsUpdate = true;
+}
+
+export function setFloorHeightOffset(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  steps: number,
+): void {
+  if (!outputs.textures.floorHeightOffset) return;
+  const data = outputs.textures.floorHeightOffset.image.data as Uint8Array;
+  // 128 = no offset; raw 0 reserved for pits
+  data[cz * outputs.width + cx] = Math.max(1, Math.min(255, 128 + steps));
+  outputs.textures.floorHeightOffset.needsUpdate = true;
+}
+
+export function setCeilingHeightOffset(
+  outputs: DungeonOutputs,
+  cx: number,
+  cz: number,
+  steps: number,
+): void {
+  if (!outputs.textures.ceilingHeightOffset) return;
+  const data = outputs.textures.ceilingHeightOffset.image.data as Uint8Array;
+  data[cz * outputs.width + cx] = Math.max(0, Math.min(255, 128 + steps));
+  outputs.textures.ceilingHeightOffset.needsUpdate = true;
 }

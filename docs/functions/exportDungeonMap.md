@@ -4,7 +4,7 @@
 
 > **exportDungeonMap**(`dungeon`, `options`): [`DungeonMapFile`](../type-aliases/DungeonMapFile.md)
 
-Defined in: [dungeon/mapFile.ts:130](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/dungeon/mapFile.ts#L130)
+Defined in: [dungeon/mapFile.ts:130](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/dungeon/mapFile.ts#L130)
 
 Snapshot a dungeon and all settings needed to reproduce it into a
 plain, JSON-safe DungeonMapFile object.

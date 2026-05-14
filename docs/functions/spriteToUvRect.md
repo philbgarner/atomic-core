@@ -4,7 +4,7 @@
 
 > **spriteToUvRect**(`sprite`): [`UvRect`](../type-aliases/UvRect.md)
 
-Defined in: [rendering/textureLoader.ts:103](https://github.com/philbgarner/atomic-core/blob/22b32c79f9172ace1f5895d025ae991a6d07ad0a/src/lib/rendering/textureLoader.ts#L103)
+Defined in: [rendering/textureLoader.ts:103](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/rendering/textureLoader.ts#L103)
 
 Convert a PackedSprite's canvas UV coordinates to a GL-convention UV rect.
 Three.js textures use flipY=true by default, so canvas y=0 (top) becomes

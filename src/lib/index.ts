@@ -10,7 +10,7 @@ export {
   attachSurfacePainter,
   attachKeybindings,
 } from './api/createGame'
-export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget } from './api/createGame'
+export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget, ColliderFlags } from './api/createGame'
 
 export { createEntity }                              from './entities/factory'
 export type { EntityCoreOpts }                       from './entities/factory'
@@ -59,7 +59,7 @@ export type { SpawnChooserContext }                  from './api/createGame'
 // Map file import/export
 export { exportDungeonMap, dungeonMapToJson, importDungeonMap, dungeonMapFromJson } from './dungeon/mapFile'
 export type { DungeonMapFile, DungeonMapMeta, SerializedRendererOptions, ExportOptions, ImportResult } from './dungeon/mapFile'
-export { setFloorSkirtTiles, setCeilSkirtTiles, setSkyPanelCount, setCeilingPanelCount } from './dungeon/bsp'
+export { setFloorSkirtTiles, setCeilSkirtTiles, setSkyPanelCount, setCeilingPanelCount, setFloorHeightOffset, setCeilingHeightOffset } from './dungeon/bsp'
 export { IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE, buildColliderFlags, colliderFlagsFromSolid, isWalkableCell, isBlockedCell, isLightPassableCell } from './dungeon/colliderFlags'
 export type { EntityBase, HiddenPassage, ObjectPlacement } from './entities/types'
 export type { Item, InventorySlot }                  from './entities/inventory'

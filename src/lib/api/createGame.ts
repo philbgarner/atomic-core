@@ -9,7 +9,7 @@
 //
 // See README §Script Tag Developer Guide for full option shapes.
 
-import { generateBspDungeon } from "../dungeon/bsp";
+import { generateBspDungeon, setSkyPanelCount, setCeilingPanelCount, setSolid, setColliderFlagsCell, setFloorHeightOffset, setCeilingHeightOffset } from "../dungeon/bsp";
 import type { BspDungeonOptions, BspDungeonOutputs, RoomedDungeonOutputs, DungeonOutputs, RoomInfo } from "../dungeon/bsp";
 import { generateCellularDungeon } from "../dungeon/cellular";
 import type { CellularOptions, CellularDungeonOutputs } from "../dungeon/cellular";
@@ -98,9 +98,35 @@ export type PassageList = {
 
 export type ApplyTarget = 'floor' | 'wall' | 'ceiling';
 
+export type ColliderFlags = {
+  walkable?: boolean;
+  blocked?: boolean;
+  lightPassable?: boolean;
+};
+
 export type SetCellOptions = {
   /** Override which surfaces receive the texture. When omitted, defaults to floor+ceiling for open cells and wall for solid cells. */
   applyTextureTo?: ApplyTarget[];
+  /** Make this cell solid (true) or passable (false). Phase 2. */
+  solid?: boolean;
+  /** Fine-grained collider flags. Phase 2. */
+  colliderFlags?: ColliderFlags;
+  /** Raise (+) or lower (-) the floor surface by this many offset steps. Phase 3. */
+  floorHeightOffset?: number;
+  /** Lower (+) or raise (-) the ceiling surface by this many offset steps. Phase 3. */
+  ceilingHeightOffset?: number;
+  /** Number of upward sky panels above the wall (open-sky cells). 0–4. */
+  skyPanelCount?: number;
+  /** Number of downward ceiling panels hanging below the ceiling. 0–4. */
+  ceilingPanelCount?: number;
+  /** Floor skirt slot tile names (up to 4). Null entries inherit the default. */
+  floorSkirt?: (string | null)[];
+  /** Ceiling skirt slot tile names (up to 4). Null entries inherit the default. */
+  ceilingSkirt?: (string | null)[];
+  /** Hazard ID to write into the hazards texture (0 = none). Phase 4. */
+  hazard?: number;
+  /** Temperature value (0–255; 127 = neutral). Phase 4. */
+  temperature?: number;
 };
 
 export type DungeonHandle = {
@@ -120,10 +146,149 @@ export type DungeonHandle = {
   /** Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. */
   readonly paintMap: ReadonlyMap<string, SurfacePaintTarget>;
   /**
-   * Set the texture (sprite name) at cell (x, y).
-   * For open (non-solid) cells with no options: applies to floor and ceiling.
-   * For solid cells with no options: applies to the wall only.
-   * Pass `options.applyTextureTo` to explicitly choose which surfaces are set.
+   * Write a sprite name and optional cell-state overrides to the cell at grid
+   * coordinates `(x, y)`.  This is the primary high-level API for modifying
+   * individual dungeon cells at runtime after `generate()` has been called.
+   * It composes several lower-level texture writes into a single call.
+   *
+   * ---
+   *
+   * ### Texture / surface selection
+   *
+   * The `spriteName` is looked up in the tile atlas and written to one or more
+   * render surfaces.  Which surfaces are written depends on `options.applyTextureTo`:
+   *
+   * - **Omitted (default):** the function reads the cell's current `solid` flag.
+   *   - Solid cell (wall): writes `spriteName` to the **wall** surface only.
+   *   - Open cell (floor): writes `spriteName` to both **floor** and **ceiling**.
+   * - **Explicit `applyTextureTo`:** each entry in the array maps to one surface.
+   *   Allowed values are `'floor'`, `'wall'`, and `'ceiling'`.  You can write to
+   *   any combination in a single call, e.g. `['floor', 'ceiling']` or
+   *   `['wall', 'floor']`.  The auto-detection logic above is bypassed entirely
+   *   when this option is present.
+   *
+   * Internally, surface writes go through `dungeon.paint()`, which updates the
+   * internal `paintMap` and fires a `'cell-paint'` event so the renderer refreshes
+   * only the affected cell.
+   *
+   * ---
+   *
+   * ### Skirt tiles (`floorSkirt` / `ceilingSkirt`)
+   *
+   * Skirt tiles are thin decorative border strips that appear at the base of walls
+   * (floor skirt) or at the top of walls near the ceiling (ceiling skirt).  Each
+   * array holds up to four sprite-name slots corresponding to the four RGBA
+   * channels of the skirt DataTexture.
+   *
+   * - Pass a sprite name string to set that slot.
+   * - Pass `null` to leave the slot at its current/default value.
+   * - Arrays shorter than 4 leave trailing slots unchanged.
+   *
+   * Example — set only the first skirt slot, leave the rest alone:
+   * ```ts
+   * game.dungeon.set(3, 7, 'stone', { floorSkirt: ['trim', null, null, null] });
+   * ```
+   *
+   * ---
+   *
+   * ### Panel counts (`skyPanelCount` / `ceilingPanelCount`)
+   *
+   * These control how many extra vertical panel rows are rendered above or below
+   * a cell's geometry edge, using the skirt base-tile system as a source for tile
+   * IDs.
+   *
+   * - `skyPanelCount` (0–4): number of upward-facing panels above the wall top,
+   *   intended for open-sky cells where the wall needs to extend visually through
+   *   the sky opening.
+   * - `ceilingPanelCount` (0–4): number of downward-facing panels hanging below
+   *   the ceiling surface.
+   *
+   * Values are clamped to `[0, 4]` by the underlying helpers.
+   *
+   * ---
+   *
+   * ### Solid flag and collider flags (`solid` / `colliderFlags`)
+   *
+   * `solid` writes the single-byte `solid` DataTexture channel, which the renderer
+   * uses to decide whether to build wall geometry for a cell.
+   *
+   * When `solid` is set, sensible collider flag defaults are automatically derived
+   * and written to the `colliderFlags` DataTexture:
+   *
+   * | `solid` value | Derived `walkable` | Derived `blocked` | Derived `lightPassable` |
+   * |---|---|---|---|
+   * | `true`  | `false` | `true`  | `false` |
+   * | `false` | `true`  | `false` | `true`  |
+   *
+   * Any `colliderFlags` you provide **override** the derived values on a per-flag
+   * basis.  This allows combinations like a see-through wall:
+   * ```ts
+   * // Solid wall that still lets light pass (e.g. glass)
+   * game.dungeon.set(4, 4, 'glass', {
+   *   solid: true,
+   *   colliderFlags: { lightPassable: true },
+   * });
+   * ```
+   *
+   * If you only provide `colliderFlags` without `solid`, only the specified flag
+   * bits are merged into the existing byte; `solid` is left untouched.
+   *
+   * The three flag bit-masks exported from the library are:
+   * - `IS_WALKABLE`       (`0x01`) — normal movement permitted
+   * - `IS_BLOCKED`        (`0x02`) — movement blocked (wall/obstacle)
+   * - `IS_LIGHT_PASSABLE` (`0x04`) — line-of-sight and light passes through
+   *
+   * ---
+   *
+   * ### Height offsets (`floorHeightOffset` / `ceilingHeightOffset`)
+   *
+   * Both values are **signed step counts** relative to the cell's default height.
+   * Positive raises the floor / lowers the ceiling; negative does the opposite.
+   * The values are encoded as unsigned bytes centred on `128` (= no offset) before
+   * being written to the respective R8 DataTexture:
+   *
+   * - `floorHeightOffset`: stored as `clamp(128 + steps, 1, 255)`.  Raw `0` is
+   *   reserved for pit cells (no floor geometry) and is never written by this
+   *   function.
+   * - `ceilingHeightOffset`: stored as `clamp(128 + steps, 0, 255)`.  The
+   *   encoding convention is inverted in the shader — a positive `steps` value
+   *   here lowers the ceiling, matching the intuitive idea of "shrinking the room
+   *   from the top".
+   *
+   * Both textures are optional fields on `DungeonOutputs`; if they are absent
+   * (e.g. for tiled dungeon outputs that don't generate them) the write is a
+   * silent no-op.
+   *
+   * ```ts
+   * // Raise the floor by one step — creates a raised platform effect
+   * game.dungeon.set(5, 5, 'stone', { floorHeightOffset: 1 });
+   *
+   * // Raise the ceiling by two steps — makes a taller room section
+   * game.dungeon.set(5, 5, 'stone', { ceilingHeightOffset: -2 });
+   * ```
+   *
+   * ---
+   *
+   * ### Not-yet-wired options (`hazard` / `temperature`)
+   *
+   * `hazard` and `temperature` are defined on `SetCellOptions` for forward
+   * compatibility but are **not written** by this function in the current version
+   * (Phase 4, not yet implemented).  Passing them has no effect.
+   *
+   * ---
+   *
+   * ### Prerequisites
+   *
+   * `generate()` must have been called before `set()`.  If no dungeon has been
+   * generated yet, the function returns silently without writing anything.
+   *
+   * @param x - Cell column index (0-based, left-to-right).
+   * @param y - Cell row index (0-based, top-to-bottom).
+   * @param spriteName - Name of the sprite as defined in the tile atlas JSON.
+   *   Must match an entry in `atlas.json`; unrecognised names are treated as
+   *   transparent / empty.
+   * @param options - Optional overrides.  All fields are independent; you can
+   *   combine any subset in a single call.
    */
   set(x: number, y: number, spriteName: string, options?: SetCellOptions): void;
 };
@@ -829,7 +994,30 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
         }
       }
 
+      if (options?.floorSkirt !== undefined) layers.floorSkirtBase = options.floorSkirt;
+      if (options?.ceilingSkirt !== undefined) layers.ceilSkirtBase = options.ceilingSkirt;
+
       this.paint(x, y, layers);
+
+      if (options?.skyPanelCount !== undefined)
+        setSkyPanelCount(dungeon, x, y, options.skyPanelCount);
+      if (options?.ceilingPanelCount !== undefined)
+        setCeilingPanelCount(dungeon, x, y, options.ceilingPanelCount);
+
+      if (options?.floorHeightOffset !== undefined)
+        setFloorHeightOffset(dungeon, x, y, options.floorHeightOffset);
+      if (options?.ceilingHeightOffset !== undefined)
+        setCeilingHeightOffset(dungeon, x, y, options.ceilingHeightOffset);
+
+      if (options?.solid !== undefined) {
+        setSolid(dungeon, x, y, options.solid);
+        const derivedFlags = options.solid
+          ? { walkable: false, blocked: true,  lightPassable: false }
+          : { walkable: true,  blocked: false, lightPassable: true  };
+        setColliderFlagsCell(dungeon, x, y, { ...derivedFlags, ...options.colliderFlags });
+      } else if (options?.colliderFlags !== undefined) {
+        setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
+      }
     },
 
     get paintMap(): ReadonlyMap<string, SurfacePaintTarget> {
