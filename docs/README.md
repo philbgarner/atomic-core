@@ -37,6 +37,7 @@
 - [CombatResult](type-aliases/CombatResult.md)
 - [DirectionFaceMap](type-aliases/DirectionFaceMap.md)
 - [DropTarget](type-aliases/DropTarget.md)
+- [DungeonHandle](type-aliases/DungeonHandle.md)
 - [DungeonInitPayload](type-aliases/DungeonInitPayload.md)
 - [DungeonMapFile](type-aliases/DungeonMapFile.md)
 - [DungeonMapMeta](type-aliases/DungeonMapMeta.md)

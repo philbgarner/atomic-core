@@ -4,7 +4,7 @@
 
 > **MissionCompleteCallback** = (`mission`) => `void`
 
-Defined in: [missions/types.ts:70](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/missions/types.ts#L70)
+Defined in: [missions/types.ts:70](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/missions/types.ts#L70)
 
 Optional callback invoked immediately after the mission transitions to
 'complete'. Use this to run bookkeeping, manipulate game state, update the

@@ -4,7 +4,7 @@
 
 > **createFactionRegistryFromTable**(`table`): [`FactionRegistry`](../type-aliases/FactionRegistry.md)
 
-Defined in: [combat/factions.ts:58](https://github.com/philbgarner/atomic-core/blob/1139349d441f04e7debe01470110a1d23e276630/src/lib/combat/factions.ts#L58)
+Defined in: [combat/factions.ts:58](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/combat/factions.ts#L58)
 
 Convenience: build a registry from a stance table.
 
