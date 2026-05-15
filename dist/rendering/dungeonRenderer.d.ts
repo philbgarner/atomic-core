@@ -1,3 +1,8 @@
+import { GameHandle } from '../api/createGame';
+import { EntityBase, ObjectPlacement } from '../entities/types';
+import { DirectionFaceMap } from './tileAtlas';
+import { PackedAtlas } from './textureLoader';
+import { SkyboxOptions } from './skybox';
 /**
  * dungeonRenderer.ts
  *
@@ -23,14 +28,9 @@
  *   game.events.on('turn', () => renderer.setEntities(enemies));
  */
 import * as THREE from "three";
-import type { GameHandle } from "../api/createGame";
-import type { EntityBase, ObjectPlacement } from "../entities/types";
-import type { DirectionFaceMap } from "./tileAtlas";
-export type { FaceTileSpec, DirectionFaceMap } from "./tileAtlas";
-import type { PackedAtlas } from "./textureLoader";
-export type { SpriteMap } from "./billboardSprites";
-import type { SkyboxOptions } from "./skybox";
-export type { SkyboxFaces, SkyboxOptions } from "./skybox";
+export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
+export type { SpriteMap } from './billboardSprites';
+export type { SkyboxFaces, SkyboxOptions } from './skybox';
 /**
  * Information about a dungeon cell returned by mouse interaction callbacks.
  */

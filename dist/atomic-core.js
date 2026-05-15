@@ -851,6 +851,33 @@ function setCeilingPanelCount(outputs, cx, cz, count) {
 	data[cz * outputs.width + cx] = Math.max(0, Math.min(4, count));
 	outputs.textures.ceilingPanelCount.needsUpdate = true;
 }
+function setSolid(outputs, cx, cz, solid) {
+	const data = outputs.textures.solid.image.data;
+	data[cz * outputs.width + cx] = solid ? 1 : 0;
+	outputs.textures.solid.needsUpdate = true;
+}
+function setColliderFlagsCell(outputs, cx, cz, flags) {
+	const data = outputs.textures.colliderFlags.image.data;
+	const idx = cz * outputs.width + cx;
+	let byte = data[idx];
+	if (flags.walkable !== void 0) byte = flags.walkable ? byte | 1 : byte & -2;
+	if (flags.blocked !== void 0) byte = flags.blocked ? byte | 2 : byte & -3;
+	if (flags.lightPassable !== void 0) byte = flags.lightPassable ? byte | 4 : byte & -5;
+	data[idx] = byte;
+	outputs.textures.colliderFlags.needsUpdate = true;
+}
+function setFloorHeightOffset(outputs, cx, cz, steps) {
+	if (!outputs.textures.floorHeightOffset) return;
+	const data = outputs.textures.floorHeightOffset.image.data;
+	data[cz * outputs.width + cx] = Math.max(1, Math.min(255, 128 + steps));
+	outputs.textures.floorHeightOffset.needsUpdate = true;
+}
+function setCeilingHeightOffset(outputs, cx, cz, steps) {
+	if (!outputs.textures.ceilingHeightOffset) return;
+	const data = outputs.textures.ceilingHeightOffset.image.data;
+	data[cz * outputs.width + cx] = Math.max(0, Math.min(255, 128 + steps));
+	outputs.textures.ceilingHeightOffset.needsUpdate = true;
+}
 //#endregion
 //#region src/lib/dungeon/cellular.ts
 /**
@@ -2388,13 +2415,17 @@ function castLight(cx, cy, row, startSlope, endSlope, radius, radiusSq, xx, xy, 
 * Pre-explores the start room (endRoomId), the first monster's room, and the
 * corridor path connecting them — matching the classic roguelike "you know
 * where you started" reveal.
+* 
+* not convinced this is the right thing to do. we can't guarantee starting anywhere 
+* due to dev having control over spawn point. besides, the ttrpg solution here
+* is: you can see the steps you came down and the room you've entered.
 */
 function createMinimapState(dungeon) {
 	const { width, height } = dungeon;
 	return {
 		width,
 		height,
-		explored: buildInitialExploredMask(dungeon),
+		explored: new Uint8Array(width * height),
 		visible: new Uint8Array(width * height)
 	};
 }
@@ -2408,50 +2439,6 @@ function updateExplored(state, fovResult) {
 		state.visible[i] = fovResult[i] ?? 0;
 		if (fovResult[i]) state.explored[i] = 1;
 	}
-}
-function buildInitialExploredMask(dungeon) {
-	const { width, height, rooms, endRoomId, fullRegionIds } = dungeon;
-	const mask = new Uint8Array(width * height);
-	function markRegion(regionId) {
-		for (let i = 0; i < fullRegionIds.length; i++) if (fullRegionIds[i] === regionId) mask[i] = 1;
-	}
-	markRegion(endRoomId);
-	let firstMobRoomId = null;
-	for (const [roomId, room] of rooms) if (roomId !== endRoomId && room.type === "room") {
-		firstMobRoomId = roomId;
-		break;
-	}
-	if (firstMobRoomId !== null) {
-		markRegion(firstMobRoomId);
-		const roomToCorridors = /* @__PURE__ */ new Map();
-		for (const [id, room] of rooms) {
-			if (room.type !== "corridor") continue;
-			for (const connRoomId of room.connections) {
-				if (!roomToCorridors.has(connRoomId)) roomToCorridors.set(connRoomId, []);
-				roomToCorridors.get(connRoomId).push(id);
-			}
-		}
-		const visited = new Set([endRoomId]);
-		const queue = [[endRoomId, []]];
-		outer: while (queue.length > 0) {
-			const [curRoom, corridorPath] = queue.shift();
-			for (const corridorId of roomToCorridors.get(curRoom) ?? []) {
-				const corridor = rooms.get(corridorId);
-				if (!corridor) continue;
-				for (const nextRoom of corridor.connections) {
-					if (nextRoom === curRoom || visited.has(nextRoom)) continue;
-					visited.add(nextRoom);
-					const newPath = [...corridorPath, corridorId];
-					if (nextRoom === firstMobRoomId) {
-						for (const cid of newPath) markRegion(cid);
-						break outer;
-					}
-					queue.push([nextRoom, newPath]);
-				}
-			}
-		}
-	}
-	return mask;
 }
 /** Write all cells of a passage into the mask. Use PASSAGE_NONE to erase. */
 function stampPassageToMask(mask, width, passage, value) {
@@ -3064,7 +3051,28 @@ function makeDungeonHandle(internal) {
 				layers.floor = [spriteName];
 				layers.ceil = [spriteName];
 			}
+			if (options?.floorSkirt !== void 0) layers.floorSkirtBase = options.floorSkirt;
+			if (options?.ceilingSkirt !== void 0) layers.ceilSkirtBase = options.ceilingSkirt;
 			this.paint(x, y, layers);
+			if (options?.skyPanelCount !== void 0) setSkyPanelCount(dungeon, x, y, options.skyPanelCount);
+			if (options?.ceilingPanelCount !== void 0) setCeilingPanelCount(dungeon, x, y, options.ceilingPanelCount);
+			if (options?.floorHeightOffset !== void 0) setFloorHeightOffset(dungeon, x, y, options.floorHeightOffset);
+			if (options?.ceilingHeightOffset !== void 0) setCeilingHeightOffset(dungeon, x, y, options.ceilingHeightOffset);
+			if (options?.solid !== void 0) {
+				setSolid(dungeon, x, y, options.solid);
+				setColliderFlagsCell(dungeon, x, y, {
+					...options.solid ? {
+						walkable: false,
+						blocked: true,
+						lightPassable: false
+					} : {
+						walkable: true,
+						blocked: false,
+						lightPassable: true
+					},
+					...options.colliderFlags
+				});
+			} else if (options?.colliderFlags !== void 0) setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 		},
 		get paintMap() {
 			return internal.paintMap;
@@ -7314,6 +7322,6 @@ function dungeonMapFromJson(json) {
 	return importDungeonMap(JSON.parse(json));
 }
 //#endregion
-export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingPanelCount, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation };
+export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingHeightOffset, setCeilingPanelCount, setFloorHeightOffset, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation };
 
 //# sourceMappingURL=atomic-core.js.map

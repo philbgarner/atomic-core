@@ -1,4 +1,4 @@
-import type { ActionTransport } from './types';
+import { ActionTransport } from './types';
 /**
  * Create a browser-side WebSocket transport for multiplayer.
  * Pass the returned `ActionTransport` to `createGame()` via `GameOptions.transport`.

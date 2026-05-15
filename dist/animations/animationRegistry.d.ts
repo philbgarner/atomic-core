@@ -1,4 +1,4 @@
-import type { AnimationQueueEntry, AnimationsHandle } from './types';
+import { AnimationQueueEntry, AnimationsHandle } from './types';
 export type AnimationRegistry = AnimationsHandle & {
     _enqueue(entry: AnimationQueueEntry): void;
     _flush(): Promise<void>;

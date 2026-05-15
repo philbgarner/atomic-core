@@ -235,4 +235,12 @@ export declare function setSkyPanelCount(outputs: DungeonOutputs, cx: number, cz
  * Count is clamped to [0, 4].
  */
 export declare function setCeilingPanelCount(outputs: DungeonOutputs, cx: number, cz: number, count: number): void;
+export declare function setSolid(outputs: DungeonOutputs, cx: number, cz: number, solid: boolean): void;
+export declare function setColliderFlagsCell(outputs: DungeonOutputs, cx: number, cz: number, flags: {
+    walkable?: boolean;
+    blocked?: boolean;
+    lightPassable?: boolean;
+}): void;
+export declare function setFloorHeightOffset(outputs: DungeonOutputs, cx: number, cz: number, steps: number): void;
+export declare function setCeilingHeightOffset(outputs: DungeonOutputs, cx: number, cz: number, steps: number): void;
 //# sourceMappingURL=bsp.d.ts.map

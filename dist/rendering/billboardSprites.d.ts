@@ -1,6 +1,6 @@
+import { EntityBase } from '../entities/types';
+import { PackedAtlas } from './textureLoader';
 import * as THREE from "three";
-import type { EntityBase } from "../entities/types";
-import type { PackedAtlas } from "./textureLoader";
 export type AngleKey = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
 export interface SpriteBob {
     /** Peak horizontal displacement left/right of offsetX, in world units. Default 0. */

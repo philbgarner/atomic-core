@@ -1,5 +1,5 @@
-import type { SpriteMap } from "../rendering/billboardSprites";
-export type { SpriteMap } from "../rendering/billboardSprites";
+import { SpriteMap } from '../rendering/billboardSprites';
+export type { SpriteMap } from '../rendering/billboardSprites';
 export type EntityKind = "player" | "npc" | "enemy" | "decoration";
 /**
  * Unified base for every game entity.
