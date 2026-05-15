@@ -869,13 +869,13 @@ function setColliderFlagsCell(outputs, cx, cz, flags) {
 function setFloorHeightOffset(outputs, cx, cz, steps) {
 	if (!outputs.textures.floorHeightOffset) return;
 	const data = outputs.textures.floorHeightOffset.image.data;
-	data[cz * outputs.width + cx] = Math.max(1, Math.min(255, 128 + steps));
+	data[cz * outputs.width + cx] = steps;
 	outputs.textures.floorHeightOffset.needsUpdate = true;
 }
 function setCeilingHeightOffset(outputs, cx, cz, steps) {
 	if (!outputs.textures.ceilingHeightOffset) return;
 	const data = outputs.textures.ceilingHeightOffset.image.data;
-	data[cz * outputs.width + cx] = Math.max(0, Math.min(255, 128 + steps));
+	data[cz * outputs.width + cx] = steps;
 	outputs.textures.ceilingHeightOffset.needsUpdate = true;
 }
 //#endregion

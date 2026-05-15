@@ -1362,7 +1362,7 @@ export function setFloorHeightOffset(
   if (!outputs.textures.floorHeightOffset) return;
   const data = outputs.textures.floorHeightOffset.image.data as Uint8Array;
   // 128 = no offset; raw 0 reserved for pits
-  data[cz * outputs.width + cx] = Math.max(1, Math.min(255, 128 + steps));
+  data[cz * outputs.width + cx] = steps;
   outputs.textures.floorHeightOffset.needsUpdate = true;
 }
 
@@ -1374,6 +1374,6 @@ export function setCeilingHeightOffset(
 ): void {
   if (!outputs.textures.ceilingHeightOffset) return;
   const data = outputs.textures.ceilingHeightOffset.image.data as Uint8Array;
-  data[cz * outputs.width + cx] = Math.max(0, Math.min(255, 128 + steps));
+  data[cz * outputs.width + cx] = steps;
   outputs.textures.ceilingHeightOffset.needsUpdate = true;
 }
