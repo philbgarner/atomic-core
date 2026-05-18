@@ -1294,13 +1294,31 @@ export function createDungeonRenderer(
       faceNormals.length ? new Float32Array(faceNormals) : undefined,
     );
 
-    if (spec.polygonOffset !== false) {
-      spec.material.polygonOffset = true;
-      spec.material.polygonOffsetFactor = -1;
-      spec.material.polygonOffsetUnits = -1;
-    }
-    mesh.renderOrder = 1;
-    return mesh;
+      if (spec.polygonOffset !== false) {
+		spec.material.polygonOffset = true;
+		spec.material.polygonOffsetFactor = -1;
+		spec.material.polygonOffsetUnits = -1;
+	  }
+  
+	  // Ensure the layer material uses the correct directional surface lighting
+	  // mode for its target surface. createAtlasMaterial() defaults to
+	  // surfaceLight=1.0 (flat, no directional effect), which is wrong for wall
+	  // and skirt layers — those need surfaceLight<0 to activate the camera-angle
+	  // formula that keeps brightness consistent with the base wall geometry.
+	  const sm = spec.material as THREE.ShaderMaterial;
+	  if (sm.uniforms?.['uSurfaceLight']) {
+		const isWallLike = spec.target === 'wall' || spec.target === 'floorSkirt' || spec.target === 'ceilSkirt';
+		if (isWallLike) {
+		  (sm.uniforms['uSurfaceLight'] as { value: number }).value = -1.0;
+		} else if (spec.target === 'floor') {
+		  (sm.uniforms['uSurfaceLight'] as { value: number }).value = floorLight;
+		} else if (spec.target === 'ceil') {
+		  (sm.uniforms['uSurfaceLight'] as { value: number }).value = ceilLight;
+		}
+	  }
+  
+	  mesh.renderOrder = 1;
+	  return mesh;
   }
 
   function buildDungeon() {

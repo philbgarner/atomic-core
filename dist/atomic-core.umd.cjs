@@ -2779,7 +2779,7 @@
 	function makeApplyAction(internal, combatOpts, onAnimEvent) {
 		return function customApplyAction(state, actorId, action, deps) {
 			if (action.kind === "interact" && action.meta?.rotate !== void 0) {
-				if (actorId === internal.playerActorId) internal.playerState.facing = ((internal.playerState.facing + action.meta.rotate) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+				if (actorId === internal.playerActorId) internal.playerState.facing = internal.playerState.facing + action.meta.rotate;
 				return state;
 			}
 			if (action.kind === "interact") {
@@ -5366,6 +5366,12 @@ void main() {
 				spec.material.polygonOffset = true;
 				spec.material.polygonOffsetFactor = -1;
 				spec.material.polygonOffsetUnits = -1;
+			}
+			const sm = spec.material;
+			if (sm.uniforms?.["uSurfaceLight"]) {
+				if (spec.target === "wall" || spec.target === "floorSkirt" || spec.target === "ceilSkirt") sm.uniforms["uSurfaceLight"].value = -1;
+				else if (spec.target === "floor") sm.uniforms["uSurfaceLight"].value = floorLight;
+				else if (spec.target === "ceil") sm.uniforms["uSurfaceLight"].value = ceilLight;
 			}
 			mesh.renderOrder = 1;
 			return mesh;

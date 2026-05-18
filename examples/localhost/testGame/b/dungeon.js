@@ -243,7 +243,7 @@ export function makeDungeon() {
 		let room = dungeon.rooms[roomId];
 		if (!room) return null;
 
-		if (Math.random() < 0.5) {
+		if (Math.random() < 0.25) {
 			const e = createEntity({	
 				id: `decor${x}${y}`,
 				type: "decor",

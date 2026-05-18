@@ -726,8 +726,8 @@ function makeApplyAction(
     // Rotation — update player facing, don't advance grid position
     if (action.kind === "interact" && action.meta?.rotate !== undefined) {
       if (actorId === internal.playerActorId) {
-        internal.playerState.facing =
-          ((internal.playerState.facing + (action.meta.rotate as number)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        internal.playerState.facing = (internal.playerState.facing + (action.meta.rotate as number));
+		// was but this doesn't match curYaw code - ((internal.playerState.facing + (action.meta.rotate as number)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
       }
       return state;
     }
