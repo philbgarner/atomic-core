@@ -5986,8 +5986,8 @@ void main() {
 				curY += (tgtY - curY) * k;
 				curZ += (tgtZ - curZ) * k;
 				let dy = tgtYaw - curYaw;
-				if (dy > Math.PI) dy -= 2 * Math.PI;
-				if (dy < -Math.PI) dy += 2 * Math.PI;
+				while (dy > Math.PI) dy -= 2 * Math.PI;
+				while (dy < -Math.PI) dy += 2 * Math.PI;
 				curYaw += dy * k;
 				camera.position.set(curX, curY, curZ);
 				camera.rotation.set(0, curYaw, 0, "YXZ");
