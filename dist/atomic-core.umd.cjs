@@ -2946,11 +2946,26 @@
 	}
 	var FOV_RADIUS = 12;
 	function updateFovAndMinimap(internal) {
-		if (!internal.minimapState || !internal.dungeonOutputs || !internal.colliderFlagsData) return;
+		console.trace("updateFovAndMinimap()", JSON.stringify(internal?.entityById?.get("player_1") ?? null));
+		if (!internal.minimapState) {
+			console.warn("[minimap] no minimapState");
+			return;
+		}
+		if (!internal.dungeonOutputs) {
+			console.warn("[minimap] no dungeonOutputs");
+			return;
+		}
+		if (!internal.colliderFlagsData) {
+			console.warn("[minimap] no colliderFlagsData");
+			return;
+		}
 		const { width, height } = internal.dungeonOutputs;
 		const flags = internal.colliderFlagsData;
 		const player = internal.playerState.entity;
-		if (player.x < 0 || player.z < 0) return;
+		if (player.x < 0 || player.z < 0) {
+			console.warn("[minimap] player out of bounds", player.x, player.z);
+			return;
+		}
 		const fovMask = new Uint8Array(width * height);
 		computeFov(player.x, player.z, {
 			isOpaque: (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
@@ -2959,6 +2974,9 @@
 			},
 			radius: FOV_RADIUS
 		});
+		const visCount = fovMask.reduce((n, v) => n + v, 0);
+		if (visCount < 50) console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible (SUSPICIOUS)`);
+		else console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible`);
 		updateExplored(internal.minimapState, fovMask);
 	}
 	function syncAllEntitiesFromTurnState(internal) {
@@ -3233,7 +3251,6 @@
 		internal.playerState.entity.z = playerZ;
 		if ("startRoomId" in dungeonOut) internal.passageMask = buildPassageMask(dungeonOut.width, dungeonOut.height, internal.passages);
 		else internal.passageMask = new Uint8Array(dungeonOut.width * dungeonOut.height);
-		if ("startRoomId" in dungeonOut) internal.minimapState = createMinimapState(dungeonOut);
 		const playerActor = buildPlayerActor(internal.playerActorId, {
 			...playerOpts,
 			x: playerX,
@@ -3393,6 +3410,7 @@
 				if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length || layers.ceilSkirtBase?.length || layers.floorSkirtBase?.length || layers.skyPanels?.length || layers.ceilingPanels?.length)) dungeonHandle.paint(x, y, layers);
 			}
 		}
+		if ("startRoomId" in dungeonOut) internal.minimapState = createMinimapState(dungeonOut);
 		if (internal.turnState) {
 			const deps = {
 				isWalkable: (x, y) => isWalkableCell(getCellFlags(x, y, internal.colliderFlagsData, dungeonOut.width, dungeonOut.height)),
@@ -3402,10 +3420,9 @@
 			};
 			internal.turnState = tickUntilPlayer(internal.turnState, deps);
 		}
-		updateFovAndMinimap(internal);
 		await internal.events.emit("generate");
 		internal.events.emit("turn", { turn: internal.turnCounter });
-		internal.generationReady = true;
+		if (!internal.options.transport) internal.generationReady = true;
 	}
 	function drawMinimap(internal, canvas, opts) {
 		const minimap = internal.minimapState;
@@ -3450,6 +3467,7 @@
 	* after attaching callbacks.
 	*/
 	function createGame(canvas, options) {
+		console.trace("[minimap] createGame()", Date.now());
 		const events = createEventEmitter();
 		const factions = createFactionRegistry();
 		const playerOpts = options.player ?? {};
@@ -3533,7 +3551,8 @@
 		if (options.transport) {
 			options.transport.onStateUpdate(async (update) => {
 				if (internal.destroyed) return;
-				if (!internal.generationReady) return;
+				if (!internal.dungeonOutputs) return;
+				const isServerInit = !internal.generationReady;
 				if (internal.turnState) {
 					const oldActors = internal.turnState.actors;
 					for (const [pid, ps] of Object.entries(update.players)) {
@@ -3679,6 +3698,7 @@
 				}
 				syncAllEntitiesFromTurnState(internal);
 				internal.turnCounter = update.turn;
+				if (isServerInit) internal.generationReady = true;
 				internal.events.emit("turn", { turn: update.turn });
 				internal.events.emit("network-state", update);
 				updateFovAndMinimap(internal);
@@ -3759,6 +3779,7 @@
 			drawMinimap(_internal, canvas, opts);
 		}
 		game.events.on("turn", redraw);
+		redraw();
 	}
 	/**
 	* Register a spawn callback. Called per room during `generate()`.
@@ -5763,6 +5784,11 @@ void main() {
 						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0);
 						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI);
 						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI);
+					} else {
+						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
+						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
+						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
 					}
 				}
 				const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;

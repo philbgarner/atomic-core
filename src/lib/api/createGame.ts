@@ -9,16 +9,42 @@
 //
 // See README §Script Tag Developer Guide for full option shapes.
 
-import { generateBspDungeon, setSkyPanelCount, setCeilingPanelCount, setSolid, setColliderFlagsCell, setFloorHeightOffset, setCeilingHeightOffset } from "../dungeon/bsp";
-import type { BspDungeonOptions, BspDungeonOutputs, RoomedDungeonOutputs, DungeonOutputs, RoomInfo } from "../dungeon/bsp";
+import {
+  generateBspDungeon,
+  setSkyPanelCount,
+  setCeilingPanelCount,
+  setSolid,
+  setColliderFlagsCell,
+  setFloorHeightOffset,
+  setCeilingHeightOffset,
+} from "../dungeon/bsp";
+import type {
+  BspDungeonOptions,
+  BspDungeonOutputs,
+  RoomedDungeonOutputs,
+  DungeonOutputs,
+  RoomInfo,
+} from "../dungeon/bsp";
 import { generateCellularDungeon } from "../dungeon/cellular";
-import type { CellularOptions, CellularDungeonOutputs } from "../dungeon/cellular";
+import type {
+  CellularOptions,
+  CellularDungeonOutputs,
+} from "../dungeon/cellular";
 import { loadTiledMap } from "../dungeon/tiled";
 import type { TiledMapOptions, TiledMapOutputs } from "../dungeon/tiled";
-import { createTurnSystemState, commitPlayerAction, tickUntilPlayer } from "../turn/system";
+import {
+  createTurnSystemState,
+  commitPlayerAction,
+  tickUntilPlayer,
+} from "../turn/system";
 import type { TurnSystemState, TurnSystemDeps } from "../turn/system";
 import { defaultComputeCost } from "../turn/system";
-import type { PlayerActor, MonsterActor, ActorId, TurnAction } from "../turn/types";
+import type {
+  PlayerActor,
+  MonsterActor,
+  ActorId,
+  TurnAction,
+} from "../turn/types";
 import { createEventEmitter } from "../events/eventEmitter";
 import type { EventEmitter } from "../events/eventEmitter";
 import { createFactionRegistry } from "../combat/factions";
@@ -28,7 +54,11 @@ import { decideChasePlayer } from "../ai/monsterAI";
 import { computeFov } from "../ai/fov";
 import { createMinimapState, updateExplored } from "../utils/minimap";
 import type { MinimapState } from "../utils/minimap";
-import { buildPassageMask, enablePassageInMask, disablePassageInMask } from "../passages/mask";
+import {
+  buildPassageMask,
+  enablePassageInMask,
+  disablePassageInMask,
+} from "../passages/mask";
 import type { HiddenPassage, ObjectPlacement } from "../entities/types";
 import type { EntityBase } from "../entities/types";
 import type { SpriteMap } from "../rendering/billboardSprites";
@@ -36,14 +66,17 @@ import { createPlayerHandle } from "./player";
 import type { PlayerHandle, PlayerState } from "./player";
 import { createKeybindings } from "./keybindings";
 import type { KeybindingsOptions, KeybindingsHandle } from "./keybindings";
-import { makeRng } from "../utils/rng"
-import { isWalkableCell, isLightPassableCell } from "../dungeon/colliderFlags"
+import { makeRng } from "../utils/rng";
+import { isWalkableCell, isLightPassableCell } from "../dungeon/colliderFlags";
 import type { ActionTransport } from "../transport/types";
 import { createMissionSystem } from "../missions/missionSystem";
 import type { MissionsHandle } from "../missions/types";
 import { createAnimationRegistry } from "../animations/animationRegistry";
 import type { AnimationRegistry } from "../animations/animationRegistry";
-import type { AnimationQueueEntry, AnimationsHandle } from "../animations/types";
+import type {
+  AnimationQueueEntry,
+  AnimationsHandle,
+} from "../animations/types";
 
 // ---------------------------------------------------------------------------
 // Public room shape (player-facing subset of RoomInfo)
@@ -96,7 +129,7 @@ export type PassageList = {
   list: HiddenPassage[];
 };
 
-export type ApplyTarget = 'floor' | 'wall' | 'ceiling';
+export type ApplyTarget = "floor" | "wall" | "ceiling";
 
 export type ColliderFlags = {
   walkable?: boolean;
@@ -340,7 +373,12 @@ export type OnPlaceContext = {
 };
 
 export type PlaceAPI = {
-  object(x: number, z: number, type: string, meta?: Record<string, unknown>): void;
+  object(
+    x: number,
+    z: number,
+    type: string,
+    meta?: Record<string, unknown>,
+  ): void;
   /**
    * Place a stationary camera-facing billboard sprite at a grid cell.
    * The placement is stored in `game.dungeon.objects` and rendered when passed
@@ -351,11 +389,24 @@ export type PlaceAPI = {
     z: number,
     type: string,
     spriteMap: SpriteMap,
-    opts?: Pick<ObjectPlacement, "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta">,
+    opts?: Pick<
+      ObjectPlacement,
+      "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta"
+    >,
   ): void;
   npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
-  enemy(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
-  decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
+  enemy(
+    x: number,
+    z: number,
+    type: string,
+    opts?: Record<string, unknown>,
+  ): void;
+  decoration(
+    x: number,
+    z: number,
+    type: string,
+    opts?: Record<string, unknown>,
+  ): void;
   surface(x: number, z: number, layers: SurfacePaintTarget): void;
 };
 
@@ -424,8 +475,8 @@ export type DungeonOptions =
     })
   | {
       tiled: { map: unknown } & Omit<TiledMapOptions, "layers"> & {
-        layers?: TiledMapOptions["layers"];
-      };
+          layers?: TiledMapOptions["layers"];
+        };
       cellular?: never;
       onPlace?: (ctx: OnPlaceContext) => void;
       onChooseSpawn?: never;
@@ -439,7 +490,11 @@ export type CombatOptions = {
    * only — non-hostile attacks are blocked, hostile attacks produce no damage.
    */
   resolver?: CombatResolver;
-  onDamage?: (args: { attacker: EntityBase; defender: EntityBase; amount: number }) => void;
+  onDamage?: (args: {
+    attacker: EntityBase;
+    defender: EntityBase;
+    amount: number;
+  }) => void;
   onDeath?: (args: { entity: EntityBase; killer?: EntityBase }) => void;
   onMiss?: (args: { attacker: EntityBase; defender: EntityBase }) => void;
 };
@@ -650,7 +705,10 @@ function getCellFlags(
   return flagsData[y * width + x] ?? 0x02;
 }
 
-function syncEntityFromActor(entity: EntityBase, actor: PlayerActor | MonsterActor): void {
+function syncEntityFromActor(
+  entity: EntityBase,
+  actor: PlayerActor | MonsterActor,
+): void {
   entity.x = actor.x;
   entity.z = actor.y;
   (entity as Record<string, unknown>).hp = actor.hp;
@@ -679,7 +737,7 @@ function entityToMonsterActor(e: EntityBase): MonsterActor {
     id: e.id,
     kind: "monster",
     name: (ev.type as string | undefined) ?? e.kind,
-    glyph: ((ev.type as string | undefined)?.[0]) ?? e.kind[0] ?? "?",
+    glyph: (ev.type as string | undefined)?.[0] ?? e.kind[0] ?? "?",
     x: e.x,
     y: e.z,
     speed: e.speed > 0 ? e.speed : 5,
@@ -731,8 +789,9 @@ function makeApplyAction(
     // Rotation — update player facing, don't advance grid position
     if (action.kind === "interact" && action.meta?.rotate !== undefined) {
       if (actorId === internal.playerActorId) {
-        internal.playerState.facing = (internal.playerState.facing + (action.meta.rotate as number));
-		// was but this doesn't match curYaw code - ((internal.playerState.facing + (action.meta.rotate as number)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        internal.playerState.facing =
+          internal.playerState.facing + (action.meta.rotate as number);
+        // was but this doesn't match curYaw code - ((internal.playerState.facing + (action.meta.rotate as number)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
       }
       return state;
     }
@@ -745,19 +804,33 @@ function makeApplyAction(
           const itemId = action.meta.pickup as string;
           const actorEntity = internal.entityById.get(actorId);
           if (actorEntity) {
-            internal.events.emit("item-pickup", { item: { id: itemId }, entity: actorEntity });
+            internal.events.emit("item-pickup", {
+              item: { id: itemId },
+              entity: actorEntity,
+            });
           }
-          internal.events.emit("audio", { name: "item-pickup", position: [actor.x, actor.y] });
+          internal.events.emit("audio", {
+            name: "item-pickup",
+            position: [actor.x, actor.y],
+          });
         }
         if (action.targetId !== undefined) {
           const target = internal.entityById.get(action.targetId);
           if (target) {
-            const targetType = (target as Record<string, unknown>).type as string | undefined;
+            const targetType = (target as Record<string, unknown>).type as
+              | string
+              | undefined;
             if (targetType === "chest") {
               internal.events.emit("chest-open", { chest: target, loot: [] });
-              internal.events.emit("audio", { name: "chest-open", position: [target.x, target.z] });
+              internal.events.emit("audio", {
+                name: "chest-open",
+                position: [target.x, target.z],
+              });
             } else if (targetType === "door") {
-              internal.events.emit("audio", { name: "door-open", position: [target.x, target.z] });
+              internal.events.emit("audio", {
+                name: "door-open",
+                position: [target.x, target.z],
+              });
             }
           }
         }
@@ -777,7 +850,12 @@ function makeApplyAction(
 
     // Collision check against other alive actors
     const targetActor = Object.values(state.actors).find(
-      (a) => a.id !== actorId && a.alive && a.blocksMovement && a.x === nx && a.y === ny,
+      (a) =>
+        a.id !== actorId &&
+        a.alive &&
+        a.blocksMovement &&
+        a.x === nx &&
+        a.y === ny,
     );
 
     if (targetActor) {
@@ -796,20 +874,51 @@ function makeApplyAction(
           defEv.hp = Math.max(0, currentHp - result.damage);
           if (result.defenderDied) defenderEntity.alive = false;
 
-          onAnimEvent?.({ kind: 'attack', entity: attackerEntity, actor: defenderEntity });
-          onAnimEvent?.({ kind: 'damage', entity: defenderEntity, actor: attackerEntity, amount: result.damage });
+          onAnimEvent?.({
+            kind: "attack",
+            entity: attackerEntity,
+            actor: defenderEntity,
+          });
+          onAnimEvent?.({
+            kind: "damage",
+            entity: defenderEntity,
+            actor: attackerEntity,
+            amount: result.damage,
+          });
 
-          combatOpts?.onDamage?.({ attacker: attackerEntity, defender: defenderEntity, amount: result.damage });
+          combatOpts?.onDamage?.({
+            attacker: attackerEntity,
+            defender: defenderEntity,
+            amount: result.damage,
+          });
           if (result.defenderDied) {
-            onAnimEvent?.({ kind: 'death', entity: defenderEntity, actor: attackerEntity });
-            combatOpts?.onDeath?.({ entity: defenderEntity, killer: attackerEntity });
+            onAnimEvent?.({
+              kind: "death",
+              entity: defenderEntity,
+              actor: attackerEntity,
+            });
+            combatOpts?.onDeath?.({
+              entity: defenderEntity,
+              killer: attackerEntity,
+            });
             if (actorId === internal.playerActorId) {
               const xp = (defEv.xp as number | undefined) ?? 0;
               if (xp > 0) {
-                onAnimEvent?.({ kind: 'xp-gain', entity: attackerEntity, amount: xp });
-                internal.events.emit("xp-gain", { amount: xp, x: defenderEntity.x, z: defenderEntity.z });
+                onAnimEvent?.({
+                  kind: "xp-gain",
+                  entity: attackerEntity,
+                  amount: xp,
+                });
+                internal.events.emit("xp-gain", {
+                  amount: xp,
+                  x: defenderEntity.x,
+                  z: defenderEntity.z,
+                });
               }
-              internal.events.emit("audio", { name: "xp-pickup", position: [defenderEntity.x, defenderEntity.z] });
+              internal.events.emit("audio", {
+                name: "xp-pickup",
+                position: [defenderEntity.x, defenderEntity.z],
+              });
             }
           }
 
@@ -820,11 +929,21 @@ function makeApplyAction(
           };
           return {
             ...state,
-            actors: { ...state.actors, [targetActor.id]: updatedDefender as typeof targetActor },
+            actors: {
+              ...state.actors,
+              [targetActor.id]: updatedDefender as typeof targetActor,
+            },
           };
         } else if (result.outcome === "miss") {
-          onAnimEvent?.({ kind: 'miss', entity: defenderEntity, actor: attackerEntity });
-          combatOpts?.onMiss?.({ attacker: attackerEntity, defender: defenderEntity });
+          onAnimEvent?.({
+            kind: "miss",
+            entity: defenderEntity,
+            actor: attackerEntity,
+          });
+          combatOpts?.onMiss?.({
+            attacker: attackerEntity,
+            defender: defenderEntity,
+          });
         }
       }
       return state;
@@ -832,7 +951,17 @@ function makeApplyAction(
 
     // Walkability check
     if (!internal.colliderFlagsData || !internal.dungeonOutputs) return state;
-    if (!isWalkableCell(getCellFlags(nx, ny, internal.colliderFlagsData, internal.dungeonOutputs.width, internal.dungeonOutputs.height))) {
+    if (
+      !isWalkableCell(
+        getCellFlags(
+          nx,
+          ny,
+          internal.colliderFlagsData,
+          internal.dungeonOutputs.width,
+          internal.dungeonOutputs.height,
+        ),
+      )
+    ) {
       return state;
     }
 
@@ -848,7 +977,12 @@ function makeApplyAction(
 
     const movingEntity = internal.entityById.get(actorId);
     if (movingEntity) {
-      onAnimEvent?.({ kind: 'move', entity: movingEntity, from: { x: actor.x, z: actor.y }, to: { x: nx, z: ny } });
+      onAnimEvent?.({
+        kind: "move",
+        entity: movingEntity,
+        from: { x: actor.x, z: actor.y },
+        to: { x: nx, z: ny },
+      });
     }
 
     return {
@@ -865,16 +999,35 @@ function makeApplyAction(
 const FOV_RADIUS = 12;
 
 function updateFovAndMinimap(internal: GameInternal): void {
-  if (!internal.minimapState || !internal.dungeonOutputs || !internal.colliderFlagsData) return;
+  console.trace(
+    "updateFovAndMinimap()",
+    JSON.stringify(internal?.entityById?.get("player_1") ?? null),
+  );
+  if (!internal.minimapState) {
+    console.warn("[minimap] no minimapState");
+    return;
+  }
+  if (!internal.dungeonOutputs) {
+    console.warn("[minimap] no dungeonOutputs");
+    return;
+  }
+  if (!internal.colliderFlagsData) {
+    console.warn("[minimap] no colliderFlagsData");
+    return;
+  }
 
   const { width, height } = internal.dungeonOutputs;
   const flags = internal.colliderFlagsData;
   const player = internal.playerState.entity;
-  if (player.x < 0 || player.z < 0) return;
+  if (player.x < 0 || player.z < 0) {
+    console.warn("[minimap] player out of bounds", player.x, player.z);
+    return;
+  }
 
   const fovMask = new Uint8Array(width * height);
   computeFov(player.x, player.z, {
-    isOpaque: (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
+    isOpaque: (x, y) =>
+      !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
     visit: (x, y) => {
       if (x >= 0 && y >= 0 && x < width && y < height) {
         fovMask[y * width + x] = 1;
@@ -883,6 +1036,15 @@ function updateFovAndMinimap(internal: GameInternal): void {
     radius: FOV_RADIUS,
   });
 
+  const visCount = fovMask.reduce((n, v) => n + v, 0);
+  if (visCount < 50)
+    console.trace(
+      `[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible (SUSPICIOUS)`,
+    );
+  else
+    console.trace(
+      `[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible`,
+    );
   updateExplored(internal.minimapState, fovMask);
 }
 
@@ -906,23 +1068,39 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
   let _roomsCache: Record<number, PublicRoom> | null = null;
 
   return {
-    get width() { return internal.dungeonOutputs?.width ?? 0; },
-    get height() { return internal.dungeonOutputs?.height ?? 0; },
+    get width() {
+      return internal.dungeonOutputs?.width ?? 0;
+    },
+    get height() {
+      return internal.dungeonOutputs?.height ?? 0;
+    },
     get rooms() {
-      if (!_roomsCache && internal.dungeonOutputs && "rooms" in internal.dungeonOutputs) {
+      if (
+        !_roomsCache &&
+        internal.dungeonOutputs &&
+        "rooms" in internal.dungeonOutputs
+      ) {
         _roomsCache = {};
-        for (const [id, info] of (internal.dungeonOutputs as RoomedDungeonOutputs).rooms) {
+        for (const [id, info] of (
+          internal.dungeonOutputs as RoomedDungeonOutputs
+        ).rooms) {
           _roomsCache[id] = toPublicRoom(id, info);
         }
       }
       return _roomsCache ?? {};
     },
-    get outputs() { return internal.dungeonOutputs; },
+    get outputs() {
+      return internal.dungeonOutputs;
+    },
 
-    get objects(): readonly ObjectPlacement[] { return internal.objectPlacements; },
+    get objects(): readonly ObjectPlacement[] {
+      return internal.objectPlacements;
+    },
 
     decorations: {
-      get list() { return internal.decorations; },
+      get list() {
+        return internal.decorations;
+      },
       add(decoration: EntityBase) {
         internal.decorations.push(decoration);
       },
@@ -933,18 +1111,35 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
     },
 
     passages: {
-      get list() { return internal.passages; },
+      get list() {
+        return internal.passages;
+      },
       toggle(id: number) {
         const passage = internal.passages.find((p) => p.id === id);
-        if (!passage || !internal.passageMask || !internal.dungeonOutputs) return;
+        if (!passage || !internal.passageMask || !internal.dungeonOutputs)
+          return;
         passage.enabled = !passage.enabled;
         if (passage.enabled) {
-          enablePassageInMask(internal.passageMask, internal.dungeonOutputs.width, passage);
+          enablePassageInMask(
+            internal.passageMask,
+            internal.dungeonOutputs.width,
+            passage,
+          );
         } else {
-          disablePassageInMask(internal.passageMask, internal.dungeonOutputs.width, passage);
+          disablePassageInMask(
+            internal.passageMask,
+            internal.dungeonOutputs.width,
+            passage,
+          );
         }
-        internal.options.passages?.onToggle?.({ passage, enabled: passage.enabled });
-        internal.events.emit("audio", { name: "passage-toggle", position: [passage.start.x, passage.start.y] });
+        internal.options.passages?.onToggle?.({
+          passage,
+          enabled: passage.enabled,
+        });
+        internal.events.emit("audio", {
+          name: "passage-toggle",
+          position: [passage.start.x, passage.start.y],
+        });
       },
     },
 
@@ -968,13 +1163,23 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
       const merged: SurfacePaintTarget = { ...existing, ...layers };
       internal.paintMap.set(`${x},${z}`, merged);
       writePaintToOverlayTexture(internal, x, z);
-      internal.events.emit('cell-paint', { x, z, ...layers });
+      internal.events.emit("cell-paint", { x, z, ...layers });
     },
 
     unpaint(x: number, z: number) {
       internal.paintMap.delete(`${x},${z}`);
       writePaintToOverlayTexture(internal, x, z);
-      internal.events.emit('cell-paint', { x, z, floor: [], wall: [], ceil: [], ceilSkirtBase: [], floorSkirtBase: [], skyPanels: [], ceilingPanels: [] });
+      internal.events.emit("cell-paint", {
+        x,
+        z,
+        floor: [],
+        wall: [],
+        ceil: [],
+        ceilSkirtBase: [],
+        floorSkirtBase: [],
+        skyPanels: [],
+        ceilingPanels: [],
+      });
     },
 
     set(x: number, y: number, spriteName: string, options?: SetCellOptions) {
@@ -985,12 +1190,15 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 
       if (options?.applyTextureTo?.length) {
         for (const target of options.applyTextureTo) {
-          if (target === 'floor') layers.floor = [spriteName];
-          else if (target === 'wall') layers.wall = [spriteName];
-          else if (target === 'ceiling') layers.ceil = [spriteName];
+          if (target === "floor") layers.floor = [spriteName];
+          else if (target === "wall") layers.wall = [spriteName];
+          else if (target === "ceiling") layers.ceil = [spriteName];
         }
       } else {
-        const isSolid = (dungeon.textures.solid.image.data as Uint8Array)[y * dungeon.width + x] !== 0;
+        const isSolid =
+          (dungeon.textures.solid.image.data as Uint8Array)[
+            y * dungeon.width + x
+          ] !== 0;
         if (isSolid) {
           layers.wall = [spriteName];
         } else {
@@ -999,8 +1207,10 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
         }
       }
 
-      if (options?.floorSkirt !== undefined) layers.floorSkirtBase = options.floorSkirt;
-      if (options?.ceilingSkirt !== undefined) layers.ceilSkirtBase = options.ceilingSkirt;
+      if (options?.floorSkirt !== undefined)
+        layers.floorSkirtBase = options.floorSkirt;
+      if (options?.ceilingSkirt !== undefined)
+        layers.ceilSkirtBase = options.ceilingSkirt;
 
       this.paint(x, y, layers);
 
@@ -1017,9 +1227,12 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
       if (options?.solid !== undefined) {
         setSolid(dungeon, x, y, options.solid);
         const derivedFlags = options.solid
-          ? { walkable: false, blocked: true,  lightPassable: false }
-          : { walkable: true,  blocked: false, lightPassable: true  };
-        setColliderFlagsCell(dungeon, x, y, { ...derivedFlags, ...options.colliderFlags });
+          ? { walkable: false, blocked: true, lightPassable: false }
+          : { walkable: true, blocked: false, lightPassable: true };
+        setColliderFlagsCell(dungeon, x, y, {
+          ...derivedFlags,
+          ...options.colliderFlags,
+        });
       } else if (options?.colliderFlags !== undefined) {
         setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
       }
@@ -1053,19 +1266,32 @@ function writePaintToOverlayTexture(
 // TurnsHandle factory
 // ---------------------------------------------------------------------------
 
-function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): TurnsHandle {
+function makeTurnsHandle(
+  internal: GameInternal,
+  dungeonHandle: DungeonHandle,
+): TurnsHandle {
   return {
-    get turn() { return internal.turnCounter; },
+    get turn() {
+      return internal.turnCounter;
+    },
 
     async commit(action: TurnAction): Promise<void> {
       if (internal.options.transport) {
         // Collect developer-defined entity fields. Server-managed fields are
         // excluded — the server is authoritative for those and will ignore them
         // anyway, but we skip them here to avoid sending stale values.
-        const serverKeys = new Set(['id', 'x', 'z', 'alive', 'hp', 'maxHp', 'facing']);
+        const serverKeys = new Set([
+          "id",
+          "x",
+          "z",
+          "alive",
+          "hp",
+          "maxHp",
+          "facing",
+        ]);
         const entityState: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(internal.playerState.entity)) {
-          if (!serverKeys.has(k) && typeof v !== 'function') entityState[k] = v;
+          if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
         }
         internal.options.transport.send(action, entityState);
         return;
@@ -1077,26 +1303,34 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
       const { width, height } = internal.dungeonOutputs;
       const dungOut = internal.dungeonOutputs;
 
-      const onAnimEvent = (e: AnimationQueueEntry) => internal.animationRegistry._enqueue(e);
+      const onAnimEvent = (e: AnimationQueueEntry) =>
+        internal.animationRegistry._enqueue(e);
 
       const deps: TurnSystemDeps = {
-        isWalkable: (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
+        isWalkable: (x, y) =>
+          isWalkableCell(getCellFlags(x, y, flags, width, height)),
         monsterDecide: (state, monsterId) =>
           decideChasePlayer(
             state,
             monsterId,
             dungOut,
             (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
-            (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
+            (x, y) =>
+              !isLightPassableCell(getCellFlags(x, y, flags, width, height)),
           ),
         computeCost: (actorId, a) =>
           defaultComputeCost(actorId, a, internal.turnState!.actors),
-        applyAction: makeApplyAction(internal, internal.options.combat, onAnimEvent),
+        applyAction: makeApplyAction(
+          internal,
+          internal.options.combat,
+          onAnimEvent,
+        ),
         onTimeAdvanced: ({ nextTime, prevTime, state }) => {
           if (nextTime > prevTime) {
             internal.turnCounter += 1;
             const playerActor = state.actors[internal.playerActorId];
-            if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
+            if (playerActor)
+              syncEntityFromActor(internal.playerState.entity, playerActor);
             internal.events.emit("turn", { turn: internal.turnCounter });
             internal.options.turns?.onAdvance?.({
               turn: internal.turnCounter,
@@ -1123,7 +1357,10 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
         ...internal.turnState,
         actors: { ...internal.turnState.actors, [entity.id]: actor },
       };
-      internal.turnState.scheduler.add(entity.id, actor.speed > 0 ? Math.floor(100 / actor.speed) : 10);
+      internal.turnState.scheduler.add(
+        entity.id,
+        actor.speed > 0 ? Math.floor(100 / actor.speed) : 10,
+      );
     },
 
     removeActor(id: string) {
@@ -1131,7 +1368,10 @@ function makeTurnsHandle(internal: GameInternal, dungeonHandle: DungeonHandle): 
       if (!internal.turnState) return;
       internal.turnState.scheduler.remove(id);
       const { [id]: _removed, ...rest } = internal.turnState.actors;
-      internal.turnState = { ...internal.turnState, actors: rest as typeof internal.turnState.actors };
+      internal.turnState = {
+        ...internal.turnState,
+        actors: rest as typeof internal.turnState.actors,
+      };
     },
   };
 }
@@ -1155,7 +1395,9 @@ async function runGenerate(
       layers: tiledCfg.layers ?? {},
       tilesetMap: tiledCfg.tilesetMap ?? {},
       objectTypes: tiledCfg.objectTypes ?? {},
-      ...(tiledCfg.objectLayer !== undefined ? { objectLayer: tiledCfg.objectLayer } : {}),
+      ...(tiledCfg.objectLayer !== undefined
+        ? { objectLayer: tiledCfg.objectLayer }
+        : {}),
       ...(tiledCfg.seed !== undefined ? { seed: tiledCfg.seed } : {}),
     });
   } else if ("cellular" in dungeonOpts && dungeonOpts.cellular) {
@@ -1168,7 +1410,8 @@ async function runGenerate(
 
   const rawSolid = dungeonOut.textures.solid.image.data as Uint8Array;
   internal.solidData = rawSolid;
-  internal.colliderFlagsData = dungeonOut.textures.colliderFlags.image.data as Uint8Array;
+  internal.colliderFlagsData = dungeonOut.textures.colliderFlags.image
+    .data as Uint8Array;
 
   // 2. Place player at the spawn room centre (default: startRoomId, overridable via onChooseSpawn)
   const playerOpts = internal.options.player ?? {};
@@ -1179,14 +1422,22 @@ async function runGenerate(
     const rOut = dungeonOut as RoomedDungeonOutputs;
     let spawnRoomId = rOut.startRoomId;
 
-    const onChooseSpawn = (dungeonOpts as { onChooseSpawn?: (ctx: SpawnChooserContext) => number }).onChooseSpawn;
+    const onChooseSpawn = (
+      dungeonOpts as { onChooseSpawn?: (ctx: SpawnChooserContext) => number }
+    ).onChooseSpawn;
     if (onChooseSpawn) {
       const roomList: PublicRoom[] = [];
       for (const [id, info] of rOut.rooms) {
         if (info.type === "room") roomList.push(toPublicRoom(id, info));
       }
-      const startRoom = toPublicRoom(rOut.startRoomId, rOut.rooms.get(rOut.startRoomId)!);
-      const endRoom   = toPublicRoom(rOut.endRoomId,   rOut.rooms.get(rOut.endRoomId)!);
+      const startRoom = toPublicRoom(
+        rOut.startRoomId,
+        rOut.rooms.get(rOut.startRoomId)!,
+      );
+      const endRoom = toPublicRoom(
+        rOut.endRoomId,
+        rOut.rooms.get(rOut.endRoomId)!,
+      );
       spawnRoomId = onChooseSpawn({ rooms: roomList, startRoom, endRoom });
     }
 
@@ -1211,12 +1462,7 @@ async function runGenerate(
     internal.passageMask = new Uint8Array(dungeonOut.width * dungeonOut.height);
   }
 
-  // 4. Minimap state (roomed dungeons only)
-  if ("startRoomId" in dungeonOut) {
-    internal.minimapState = createMinimapState(dungeonOut as RoomedDungeonOutputs);
-  }
-
-  // 5. Build player actor and init turn system
+  // 4. Build player actor and init turn system
   const playerActor = buildPlayerActor(internal.playerActorId, {
     ...playerOpts,
     x: playerX,
@@ -1237,7 +1483,9 @@ async function runGenerate(
   // 6. Run onPlace callback (roomed dungeons)
   if ("startRoomId" in dungeonOut && dungeonOpts.onPlace) {
     const rOut = dungeonOut as RoomedDungeonOutputs;
-    const rngFn = makeRng(typeof rOut.seed === "number" ? rOut.seed : 0x12345678);
+    const rngFn = makeRng(
+      typeof rOut.seed === "number" ? rOut.seed : 0x12345678,
+    );
     const rng = {
       next: rngFn,
       chance: (p: number) => rngFn() < p,
@@ -1248,8 +1496,14 @@ async function runGenerate(
       if (info.type === "room") roomList.push(toPublicRoom(id, info));
     }
 
-    const endRoom   = toPublicRoom(rOut.endRoomId,   rOut.rooms.get(rOut.endRoomId)!);
-    const startRoom = toPublicRoom(rOut.startRoomId, rOut.rooms.get(rOut.startRoomId)!);
+    const endRoom = toPublicRoom(
+      rOut.endRoomId,
+      rOut.rooms.get(rOut.endRoomId)!,
+    );
+    const startRoom = toPublicRoom(
+      rOut.startRoomId,
+      rOut.rooms.get(rOut.startRoomId)!,
+    );
 
     const place: PlaceAPI = {
       object(x, z, type, meta) {
@@ -1269,7 +1523,13 @@ async function runGenerate(
         });
       },
       billboard(x, z, type, spriteMap, opts) {
-        internal.objectPlacements.push({ x, z, type, spriteMap, ...(opts ?? {}) });
+        internal.objectPlacements.push({
+          x,
+          z,
+          type,
+          spriteMap,
+          ...(opts ?? {}),
+        });
       },
       npc(x, z, type, opts) {
         const entity: EntityBase = {
@@ -1326,7 +1586,13 @@ async function runGenerate(
       },
     };
 
-    (dungeonOpts as { onPlace?: (ctx: OnPlaceContext) => void }).onPlace!({ rooms: roomList, endRoom, startRoom, rng, place });
+    (dungeonOpts as { onPlace?: (ctx: OnPlaceContext) => void }).onPlace!({
+      rooms: roomList,
+      endRoom,
+      startRoom,
+      rng,
+      place,
+    });
   }
 
   // 7. Run spawner callback per room
@@ -1355,9 +1621,12 @@ async function runGenerate(
       for (let x = 0; x < width; x++) {
         if (solid[y * width + x] !== 0) continue;
 
-        const roomId = ("startRoomId" in dungeonOut)
-          ? (dungeonOut.textures.regionId.image.data as Uint8Array)[y * width + x] ?? 0
-          : 0;
+        const roomId =
+          "startRoomId" in dungeonOut
+            ? ((dungeonOut.textures.regionId.image.data as Uint8Array)[
+                y * width + x
+              ] ?? 0)
+            : 0;
 
         const result = internal.decoratorCb({
           dungeon: dungeonHandle,
@@ -1381,29 +1650,80 @@ async function runGenerate(
       for (let x = 0; x < width; x++) {
         if (solid[y * width + x] !== 0) continue;
 
-        const roomId = ("startRoomId" in dungeonOut)
-          ? (dungeonOut.textures.regionId.image.data as Uint8Array)[y * width + x] ?? 0
-          : 0;
+        const roomId =
+          "startRoomId" in dungeonOut
+            ? ((dungeonOut.textures.regionId.image.data as Uint8Array)[
+                y * width + x
+              ] ?? 0)
+            : 0;
 
-        const layers = internal.surfacePainterCb({ dungeon: dungeonHandle, roomId, x, y });
-        if (layers && (layers.floor?.length || layers.wall?.length || layers.ceil?.length || layers.ceilSkirtBase?.length || layers.floorSkirtBase?.length || layers.skyPanels?.length || layers.ceilingPanels?.length)) {
+        const layers = internal.surfacePainterCb({
+          dungeon: dungeonHandle,
+          roomId,
+          x,
+          y,
+        });
+        if (
+          layers &&
+          (layers.floor?.length ||
+            layers.wall?.length ||
+            layers.ceil?.length ||
+            layers.ceilSkirtBase?.length ||
+            layers.floorSkirtBase?.length ||
+            layers.skyPanels?.length ||
+            layers.ceilingPanels?.length)
+        ) {
           dungeonHandle.paint(x, y, layers);
         }
       }
     }
   }
 
-  // 10. Tick until player's first turn
+  // 10. Minimap state (roomed dungeons only) — after all middleware has run
+  if ("startRoomId" in dungeonOut) {
+    internal.minimapState = createMinimapState(
+      dungeonOut as RoomedDungeonOutputs,
+    );
+  }
+
+  // 11. Tick until player's first turn
   if (internal.turnState) {
     const deps: TurnSystemDeps = {
-      isWalkable: (x, y) => isWalkableCell(getCellFlags(x, y, internal.colliderFlagsData!, dungeonOut.width, dungeonOut.height)),
+      isWalkable: (x, y) =>
+        isWalkableCell(
+          getCellFlags(
+            x,
+            y,
+            internal.colliderFlagsData!,
+            dungeonOut.width,
+            dungeonOut.height,
+          ),
+        ),
       monsterDecide: (state, monsterId) =>
         decideChasePlayer(
           state,
           monsterId,
           dungeonOut,
-          (x, y) => isWalkableCell(getCellFlags(x, y, internal.colliderFlagsData!, dungeonOut.width, dungeonOut.height)),
-          (x, y) => !isLightPassableCell(getCellFlags(x, y, internal.colliderFlagsData!, dungeonOut.width, dungeonOut.height)),
+          (x, y) =>
+            isWalkableCell(
+              getCellFlags(
+                x,
+                y,
+                internal.colliderFlagsData!,
+                dungeonOut.width,
+                dungeonOut.height,
+              ),
+            ),
+          (x, y) =>
+            !isLightPassableCell(
+              getCellFlags(
+                x,
+                y,
+                internal.colliderFlagsData!,
+                dungeonOut.width,
+                dungeonOut.height,
+              ),
+            ),
         ),
       computeCost: (actorId, a) =>
         defaultComputeCost(actorId, a, internal.turnState!.actors),
@@ -1412,17 +1732,20 @@ async function runGenerate(
     internal.turnState = tickUntilPlayer(internal.turnState, deps);
   }
 
-  // 11. Initial FOV + minimap
-  updateFovAndMinimap(internal);
+  // 12. Initial FOV + minimap
+  //updateFovAndMinimap(internal);
 
-  // 12. Let subscribers post-process dungeon data before geometry is built.
+  // 13. Let subscribers post-process dungeon data before geometry is built.
   await internal.events.emit("generate");
 
-  // 13. Emit initial turn event (renderer builds geometry on this).
+  // 14. Emit initial turn event (renderer builds geometry on this).
   internal.events.emit("turn", { turn: internal.turnCounter });
 
-  // Unblock transport state updates now that the dungeon and player spawn are set.
-  internal.generationReady = true;
+  // For local (no-transport) games, mark ready immediately.
+  // Transport games wait for the server's first authoritative state update instead.
+  if (!internal.options.transport) {
+    internal.generationReady = true;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1466,13 +1789,13 @@ function drawMinimap(
   const cellH = size / height;
 
   const colors = opts.colors ?? {};
-  const floorColor    = colors.floor    ?? "#aab";
+  const floorColor = colors.floor ?? "#aab";
   const floorDimColor = colors.floorDim ?? "#445";
-  const wallColor     = colors.wall     ?? "#777";
-  const wallDimColor  = colors.wallDim  ?? "#333";
-  const playerColor   = colors.player   ?? "#0f0";
-  const npcColor      = colors.npc      ?? "#08f";
-  const enemyColor    = colors.enemy    ?? "#f44";
+  const wallColor = colors.wall ?? "#777";
+  const wallDimColor = colors.wallDim ?? "#333";
+  const playerColor = colors.player ?? "#0f0";
+  const npcColor = colors.npc ?? "#08f";
+  const enemyColor = colors.enemy ?? "#f44";
 
   ctx.clearRect(0, 0, size, size);
 
@@ -1481,7 +1804,7 @@ function drawMinimap(
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
-      const isVisible  = minimap.visible[i]  !== 0;
+      const isVisible = minimap.visible[i] !== 0;
       const isExplored = minimap.explored[i] !== 0;
       if (!isVisible && !isExplored) continue;
 
@@ -1527,7 +1850,11 @@ function drawMinimap(
  * Create a game handle. Does not generate the dungeon — call `game.generate()`
  * after attaching callbacks.
  */
-export function createGame(canvas: HTMLElement, options: GameOptions): GameHandle {
+export function createGame(
+  canvas: HTMLElement,
+  options: GameOptions,
+): GameHandle {
+  console.trace("[minimap] createGame()", Date.now());
   const events = createEventEmitter();
 
   // Faction registry starts empty — dev defines all stances via game.factions
@@ -1602,7 +1929,12 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   events.on("heal", ({ entity, amount }) => {
     if (internal.destroyed) return;
     const fullEntity = internal.entityById.get(entity.id);
-    if (fullEntity) internal.animationRegistry._enqueue({ kind: 'heal', entity: fullEntity, amount });
+    if (fullEntity)
+      internal.animationRegistry._enqueue({
+        kind: "heal",
+        entity: fullEntity,
+        amount,
+      });
   });
 
   events.on("turn", ({ turn }) => {
@@ -1619,7 +1951,10 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   if (options.transport) {
     options.transport.onStateUpdate(async (update) => {
       if (internal.destroyed) return;
-      if (!internal.generationReady) return;
+      // Skip updates that arrive before the dungeon has been generated locally.
+      if (!internal.dungeonOutputs) return;
+      // First update after generation = server's authoritative init (player coords etc.).
+      const isServerInit = !internal.generationReady;
 
       if (internal.turnState) {
         const oldActors = internal.turnState.actors;
@@ -1631,16 +1966,21 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
           if (!entity) continue;
           if (old.x !== ps.x || old.y !== ps.y) {
             internal.animationRegistry._enqueue({
-              kind: 'move', entity,
+              kind: "move",
+              entity,
               from: { x: old.x, z: old.y },
-              to:   { x: ps.x, z: ps.y },
+              to: { x: ps.x, z: ps.y },
             });
           }
           if (ps.hp < old.hp) {
-            internal.animationRegistry._enqueue({ kind: 'damage', entity, amount: old.hp - ps.hp });
+            internal.animationRegistry._enqueue({
+              kind: "damage",
+              entity,
+              amount: old.hp - ps.hp,
+            });
           }
           if (old.alive && !ps.alive) {
-            internal.animationRegistry._enqueue({ kind: 'death', entity });
+            internal.animationRegistry._enqueue({ kind: "death", entity });
           }
         }
 
@@ -1650,8 +1990,12 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
             if (!entity) {
               entity = {
                 id: mn.id,
-                kind: 'enemy',
-                spriteName: mn.spriteName ?? (mn.sprite as string | undefined) ?? mn.type ?? mn.id,
+                kind: "enemy",
+                spriteName:
+                  mn.spriteName ??
+                  (mn.sprite as string | undefined) ??
+                  mn.type ??
+                  mn.id,
                 faction: mn.faction,
                 x: mn.x,
                 z: mn.z,
@@ -1667,7 +2011,8 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
                 ...(mn.type !== undefined ? { type: mn.type } : {}),
                 ...(mn.sprite !== undefined ? { sprite: mn.sprite } : {}),
               };
-              if (mn.spriteMap) (entity as Record<string, unknown>).spriteMap = mn.spriteMap;
+              if (mn.spriteMap)
+                (entity as Record<string, unknown>).spriteMap = mn.spriteMap;
               internal.entityById.set(mn.id, entity);
             }
 
@@ -1675,17 +2020,22 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
             if (old) {
               if (old.x !== mn.x || old.y !== mn.z) {
                 internal.animationRegistry._enqueue({
-                  kind: 'move', entity,
+                  kind: "move",
+                  entity,
                   from: { x: old.x, z: old.y },
-                  to:   { x: mn.x, z: mn.z },
+                  to: { x: mn.x, z: mn.z },
                 });
               }
               const oldHp = (old as { hp: number }).hp;
               if (mn.hp < oldHp) {
-                internal.animationRegistry._enqueue({ kind: 'damage', entity, amount: oldHp - mn.hp });
+                internal.animationRegistry._enqueue({
+                  kind: "damage",
+                  entity,
+                  amount: oldHp - mn.hp,
+                });
               }
               if (old.alive && !mn.alive) {
-                internal.animationRegistry._enqueue({ kind: 'death', entity });
+                internal.animationRegistry._enqueue({ kind: "death", entity });
               }
             }
 
@@ -1700,21 +2050,46 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
         for (const [pid, ps] of Object.entries(update.players)) {
           const actor = actors[pid];
           if (actor) {
-            actors[pid] = { ...actor, x: ps.x, y: ps.y, hp: ps.hp, alive: ps.alive };
+            actors[pid] = {
+              ...actor,
+              x: ps.x,
+              y: ps.y,
+              hp: ps.hp,
+              alive: ps.alive,
+            };
           }
         }
-        for (const mn of (update.monsters ?? [])) {
+        for (const mn of update.monsters ?? []) {
           const existing = actors[mn.id] as MonsterActor | undefined;
           if (existing) {
-            actors[mn.id] = { ...existing, x: mn.x, y: mn.z, hp: mn.hp, alive: mn.alive };
+            actors[mn.id] = {
+              ...existing,
+              x: mn.x,
+              y: mn.z,
+              hp: mn.hp,
+              alive: mn.alive,
+            };
           } else {
             actors[mn.id] = {
-              id: mn.id, kind: 'monster', name: mn.type ?? mn.spriteName, glyph: (mn.type ?? mn.spriteName)[0] ?? '?',
-              x: mn.x, y: mn.z, speed: mn.speed, alive: mn.alive,
+              id: mn.id,
+              kind: "monster",
+              name: mn.type ?? mn.spriteName,
+              glyph: (mn.type ?? mn.spriteName)[0] ?? "?",
+              x: mn.x,
+              y: mn.z,
+              speed: mn.speed,
+              alive: mn.alive,
               blocksMovement: mn.blocksMove,
-              hp: mn.hp, maxHp: mn.maxHp, attack: mn.attack, defense: mn.defense,
-              xp: 0, danger: 1, alertState: 'idle', rpsEffect: 'none',
-              searchTurnsLeft: 0, lastKnownPlayerPos: null,
+              hp: mn.hp,
+              maxHp: mn.maxHp,
+              attack: mn.attack,
+              defense: mn.defense,
+              xp: 0,
+              danger: 1,
+              alertState: "idle",
+              rpsEffect: "none",
+              searchTurnsLeft: 0,
+              lastKnownPlayerPos: null,
             } as MonsterActor;
           }
         }
@@ -1744,8 +2119,12 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
 
       syncAllEntitiesFromTurnState(internal);
       internal.turnCounter = update.turn;
+      if (isServerInit) internal.generationReady = true;
       internal.events.emit("turn", { turn: update.turn });
-      internal.events.emit("network-state" as Parameters<typeof internal.events.emit>[0], update as never);
+      internal.events.emit(
+        "network-state" as Parameters<typeof internal.events.emit>[0],
+        update as never,
+      );
       updateFovAndMinimap(internal);
     });
 
@@ -1760,13 +2139,27 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   }
 
   const game: GameHandle = {
-    get player() { return internal.playerHandle; },
-    get turns()  { return turnsHandle; },
-    get dungeon() { return dungeonHandle; },
-    get events()  { return events; },
-    get factions() { return internal.factions; },
-    get missions() { return internal.missions; },
-    get animations() { return internal.animationRegistry; },
+    get player() {
+      return internal.playerHandle;
+    },
+    get turns() {
+      return turnsHandle;
+    },
+    get dungeon() {
+      return dungeonHandle;
+    },
+    get events() {
+      return events;
+    },
+    get factions() {
+      return internal.factions;
+    },
+    get missions() {
+      return internal.missions;
+    },
+    get animations() {
+      return internal.animationRegistry;
+    },
 
     async generate() {
       if (generated) return;
@@ -1776,7 +2169,10 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
 
     async regenerate() {
       internal.entityById.clear();
-      internal.entityById.set(internal.playerActorId, internal.playerState.entity);
+      internal.entityById.set(
+        internal.playerActorId,
+        internal.playerState.entity,
+      );
       internal.decorations.length = 0;
       internal.objectPlacements.length = 0;
       internal.paintMap.clear();
@@ -1800,7 +2196,10 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     },
   };
 
-  Object.defineProperty(game, "_internal", { value: internal, enumerable: false });
+  Object.defineProperty(game, "_internal", {
+    value: internal,
+    enumerable: false,
+  });
 
   return game;
 }
@@ -1817,7 +2216,8 @@ export function attachMinimap(
   canvas: HTMLCanvasElement,
   opts: MinimapOptions = {},
 ): void {
-  const _internal: GameInternal | undefined = (game as Record<string, unknown>)._internal as GameInternal | undefined;
+  const _internal: GameInternal | undefined = (game as Record<string, unknown>)
+    ._internal as GameInternal | undefined;
   if (!_internal) return;
 
   function redraw() {
@@ -1825,6 +2225,7 @@ export function attachMinimap(
   }
 
   game.events.on("turn", redraw);
+  redraw();
 }
 
 /**
@@ -1834,7 +2235,9 @@ export function attachSpawner(
   game: GameHandle,
   opts: { onSpawn: SpawnCallback },
 ): void {
-  const _internal = (game as Record<string, unknown>)._internal as GameInternal | undefined;
+  const _internal = (game as Record<string, unknown>)._internal as
+    | GameInternal
+    | undefined;
   if (_internal) _internal.spawnerCb = opts.onSpawn;
 }
 
@@ -1845,7 +2248,9 @@ export function attachDecorator(
   game: GameHandle,
   opts: { onDecorate: DecoratorCallback },
 ): void {
-  const _internal = (game as Record<string, unknown>)._internal as GameInternal | undefined;
+  const _internal = (game as Record<string, unknown>)._internal as
+    | GameInternal
+    | undefined;
   if (_internal) _internal.decoratorCb = opts.onDecorate;
 }
 
@@ -1856,7 +2261,9 @@ export function attachSurfacePainter(
   game: GameHandle,
   opts: { onPaint: SurfacePainterCallback },
 ): void {
-  const _internal = (game as Record<string, unknown>)._internal as GameInternal | undefined;
+  const _internal = (game as Record<string, unknown>)._internal as
+    | GameInternal
+    | undefined;
   if (_internal) _internal.surfacePainterCb = opts.onPaint;
 }
 
@@ -1869,7 +2276,9 @@ export function attachKeybindings(
   opts: KeybindingsOptions,
 ): void {
   const handle = createKeybindings(opts);
-  const _internal = (game as Record<string, unknown>)._internal as GameInternal | undefined;
+  const _internal = (game as Record<string, unknown>)._internal as
+    | GameInternal
+    | undefined;
   if (_internal) {
     _internal.keybindingsHandles.push(handle);
   }

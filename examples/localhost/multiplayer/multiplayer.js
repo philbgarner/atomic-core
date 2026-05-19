@@ -33,7 +33,11 @@ function rogueSpriteMap() {
     frameSize: { w: 64, h: 64 },
     layers: [
       { tile: "mob_rogue_base.png", opacity: 1.0 },
-      { tile: "mob_rogue_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+      {
+        tile: "mob_rogue_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
     ],
   };
 }
@@ -43,7 +47,11 @@ function warriorSpriteMap() {
     frameSize: { w: 64, h: 64 },
     layers: [
       { tile: "mob_warrior_base.png", opacity: 1.0 },
-      { tile: "mob_warrior_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+      {
+        tile: "mob_warrior_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
     ],
   };
 }
@@ -53,7 +61,11 @@ function mageSpriteMap() {
     frameSize: { w: 128, h: 64 },
     layers: [
       { tile: "mob_mage_base.png", opacity: 1.0 },
-      { tile: "mob_mage_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+      {
+        tile: "mob_mage_head.png",
+        opacity: 1.0,
+        bob: { amplitudeY: 0.015, speed: 2 },
+      },
     ],
   };
 }
@@ -72,22 +84,22 @@ function spriteMapForKey(key) {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const minimapCanvas  = document.getElementById("minimap");
-const connectScreen  = document.getElementById("connect-screen");
-const connectBtn     = document.getElementById("connect-btn");
-const serverUrlEl    = document.getElementById("server-url");
-const connectError   = document.getElementById("connect-error");
-const viewportEl     = document.getElementById("viewport");
-const logEl          = document.getElementById("log");
-const hpEl           = document.getElementById("hp");
-const turnEl         = document.getElementById("turn");
-const posEl          = document.getElementById("pos");
-const playerCountEl  = document.getElementById("player-count");
-const playerListEl   = document.getElementById("player-list");
-const chatOverlayEl  = document.getElementById("chat-overlay");
-const chatModalEl    = document.getElementById("chat-modal");
-const chatInputEl    = document.getElementById("chat-input");
-const chatSendBtn    = document.getElementById("chat-send");
+const minimapCanvas = document.getElementById("minimap");
+const connectScreen = document.getElementById("connect-screen");
+const connectBtn = document.getElementById("connect-btn");
+const serverUrlEl = document.getElementById("server-url");
+const connectError = document.getElementById("connect-error");
+const viewportEl = document.getElementById("viewport");
+const logEl = document.getElementById("log");
+const hpEl = document.getElementById("hp");
+const turnEl = document.getElementById("turn");
+const posEl = document.getElementById("pos");
+const playerCountEl = document.getElementById("player-count");
+const playerListEl = document.getElementById("player-list");
+const chatOverlayEl = document.getElementById("chat-overlay");
+const chatModalEl = document.getElementById("chat-modal");
+const chatInputEl = document.getElementById("chat-input");
+const chatSendBtn = document.getElementById("chat-send");
 
 // ---------------------------------------------------------------------------
 // Connection flow
@@ -104,7 +116,12 @@ connectBtn.addEventListener("click", async () => {
 
   let info;
   try {
-    info = await transport.connect({ spriteName: chosenSprite, attack: 5, defense: 2, maxHp: 30 });
+    info = await transport.connect({
+      spriteName: chosenSprite,
+      attack: 5,
+      defense: 2,
+      maxHp: 30,
+    });
   } catch (err) {
     connectError.textContent = "Could not connect: " + (err?.message ?? err);
     connectError.style.display = "block";
@@ -138,11 +155,16 @@ async function startGame(
   { playerId, isHost, dungeonConfig },
   chosenSprite = "rogue",
 ) {
-  addLog(`Connected as ${playerId} (${isHost ? "host" : "peer"}) — ${chosenSprite}`, "turn");
+  addLog(
+    `Connected as ${playerId} (${isHost ? "host" : "peer"}) — ${chosenSprite}`,
+    "turn",
+  );
 
   // Non-host clients receive the dungeon config from the server so they
   // generate the identical dungeon (same seed). Host uses its own config.
-  const dungeon = isHost ? MY_DUNGEON_CONFIG : (dungeonConfig ?? MY_DUNGEON_CONFIG);
+  const dungeon = isHost
+    ? MY_DUNGEON_CONFIG
+    : (dungeonConfig ?? MY_DUNGEON_CONFIG);
 
   // ── Enemy / entity state ──────────────────────────────────────────────────
   // Only the host spawns enemies; peers receive positions via network-state.
@@ -174,7 +196,7 @@ async function startGame(
   const game = createGame(document.body, {
     dungeon,
     player: {
-      id: playerId,             // match server-assigned id so reconciliation aligns
+      id: playerId, // match server-assigned id so reconciliation aligns
       spriteName: chosenSprite, // synced to all peers on every action
       hp: 30,
       maxHp: 30,
@@ -194,8 +216,8 @@ async function startGame(
     el.className = "anim-float";
     el.style.color = color;
     const pos = renderer?.worldToScreen(gridX, gridZ);
-    el.style.left = (pos ? pos.x : canvasWrapEl.clientWidth  * 0.5) + "px";
-    el.style.top  = (pos ? pos.y : canvasWrapEl.clientHeight * 0.4) + "px";
+    el.style.left = (pos ? pos.x : canvasWrapEl.clientWidth * 0.5) + "px";
+    el.style.top = (pos ? pos.y : canvasWrapEl.clientHeight * 0.4) + "px";
     el.textContent = text;
     canvasWrapEl.appendChild(el);
     el.addEventListener("animationend", () => el.remove(), { once: true });
@@ -224,10 +246,10 @@ async function startGame(
     size: 196,
     showEntities: true,
     colors: {
-      floor:    "#aac",
+      floor: "#aac",
       floorDim: "#334",
-      player:   "#0f0",
-      enemy:    "#f44",
+      player: "#0f0",
+      enemy: "#f44",
     },
   });
 
@@ -245,8 +267,8 @@ async function startGame(
     packedAtlas: packed,
     tileNameResolver: resolver,
     floorTile: "flagstone_floor_stone.png",
-    ceilTile:  "plaster_ceiling.png",
-    wallTile:  "brick_wall_stone.png",
+    ceilTile: "plaster_ceiling.png",
+    wallTile: "brick_wall_stone.png",
   });
 
   // ── Spawner — must be registered before generate() ────────────────────────
@@ -276,7 +298,11 @@ async function startGame(
           frameSize: { w: 64, h: 64 },
           layers: [
             { tile: "mob_goblin_base.png", opacity: 1.0 },
-            { tile: "mob_goblin_happy_head.png", opacity: 1.0, bob: { amplitudeY: 0.015, speed: 2 } },
+            {
+              tile: "mob_goblin_happy_head.png",
+              opacity: 1.0,
+              bob: { amplitudeY: 0.015, speed: 2 },
+            },
           ],
         },
       });
@@ -306,7 +332,7 @@ async function startGame(
     const solid = Array.from(game.dungeon.outputs.textures.solid.image.data);
     transport.initDungeon({
       solid,
-      width:  game.dungeon.width,
+      width: game.dungeon.width,
       height: game.dungeon.height,
       config: MY_DUNGEON_CONFIG,
     });
@@ -317,8 +343,8 @@ async function startGame(
 
   game.events.on("turn", ({ turn }) => {
     turnEl.textContent = String(turn);
-    hpEl.textContent   = `${game.player.hp} / ${game.player.maxHp}`;
-    posEl.textContent  = `${game.player.x}, ${game.player.z}`;
+    hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
+    posEl.textContent = `${game.player.x}, ${game.player.z}`;
     if (renderer) renderer.setEntities([...enemies, ...otherPlayerEntities]);
   });
 
@@ -334,7 +360,13 @@ async function startGame(
         // ps carries the remote player's full entity state. The server uses 'y'
         // for the grid row; remap to 'z' for the renderer.
         const { y, ...rest } = ps;
-        return { ...rest, id: pid, kind: "npc", z: y, spriteMap: spriteMapForKey(ps.spriteName) };
+        return {
+          ...rest,
+          id: pid,
+          kind: "npc",
+          z: y,
+          spriteMap: spriteMapForKey(ps.spriteName),
+        };
       });
 
     // Server is authoritative for monster positions — sync all clients.
@@ -366,27 +398,39 @@ async function startGame(
   chatSendBtn.addEventListener("click", sendChat);
 
   chatInputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter")  { e.preventDefault(); sendChat(); }
-    if (e.key === "Escape") { e.preventDefault(); closeChatModal(); }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendChat();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeChatModal();
+    }
     e.stopPropagation(); // prevent game keybindings from firing while typing
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter"  && !chatModalOpen) { e.preventDefault(); openChatModal(); }
-    if (e.key === "Escape" &&  chatModalOpen) { e.preventDefault(); closeChatModal(); }
+    if (e.key === "Enter" && !chatModalOpen) {
+      e.preventDefault();
+      openChatModal();
+    }
+    if (e.key === "Escape" && chatModalOpen) {
+      e.preventDefault();
+      closeChatModal();
+    }
   });
 
   // ── Keybindings ───────────────────────────────────────────────────────────
 
   attachKeybindings(game, {
     bindings: {
-      moveForward:  ["w", "W", "ArrowUp"],
+      moveForward: ["w", "W", "ArrowUp"],
       moveBackward: ["s", "S", "ArrowDown"],
-      moveLeft:     ["a", "A", "ArrowLeft"],
-      moveRight:    ["d", "D", "ArrowRight"],
-      turnLeft:     ["q", "Q"],
-      turnRight:    ["e", "E"],
-      wait:         [" "],
+      moveLeft: ["a", "A", "ArrowLeft"],
+      moveRight: ["d", "D", "ArrowRight"],
+      turnLeft: ["q", "Q"],
+      turnRight: ["e", "E"],
+      wait: [" "],
     },
     onAction(action, event) {
       if (chatModalOpen) return;
@@ -400,20 +444,37 @@ async function startGame(
         const yaw = game.player.facing;
         const fx = Math.round(-Math.sin(yaw));
         const fz = Math.round(-Math.cos(yaw));
-        const sx = Math.round( Math.cos(yaw));
+        const sx = Math.round(Math.cos(yaw));
         const sz = Math.round(-Math.sin(yaw));
-        return game.player.move(forward * fx + strafe * sx, forward * fz + strafe * sz);
+        return game.player.move(
+          forward * fx + strafe * sx,
+          forward * fz + strafe * sz,
+        );
       }
 
       let a;
       switch (action) {
-        case "moveForward":  a = relativeMove(1,  0); break;
-        case "moveBackward": a = relativeMove(-1, 0); break;
-        case "moveLeft":     a = relativeMove(0, -1); break;
-        case "moveRight":    a = relativeMove(0,  1); break;
-        case "turnLeft":     a = game.player.rotate( Math.PI / 2); break;
-        case "turnRight":    a = game.player.rotate(-Math.PI / 2); break;
-        case "wait":         a = game.player.wait();               break;
+        case "moveForward":
+          a = relativeMove(1, 0);
+          break;
+        case "moveBackward":
+          a = relativeMove(-1, 0);
+          break;
+        case "moveLeft":
+          a = relativeMove(0, -1);
+          break;
+        case "moveRight":
+          a = relativeMove(0, 1);
+          break;
+        case "turnLeft":
+          a = game.player.rotate(Math.PI / 2);
+          break;
+        case "turnRight":
+          a = game.player.rotate(-Math.PI / 2);
+          break;
+        case "wait":
+          a = game.player.wait();
+          break;
       }
 
       if (a) game.turns.commit(a);
@@ -449,29 +510,31 @@ function updatePlayerList(players, myPlayerId) {
   for (const [pid, ps] of entries) {
     const isSelf = pid === myPlayerId;
     const div = document.createElement("div");
-    div.className = "player-entry" + (isSelf ? " self" : "") + (!ps.alive ? " dead" : "");
-    div.textContent = (isSelf ? "► " : "  ") + pid + "  " + ps.hp + "/" + ps.maxHp;
+    div.className =
+      "player-entry" + (isSelf ? " self" : "") + (!ps.alive ? " dead" : "");
+    div.textContent =
+      (isSelf ? "► " : "  ") + pid + "  " + ps.hp + "/" + ps.maxHp;
     playerListEl.appendChild(div);
   }
 }
 
 function monsterNetState(e) {
   return {
-    id:         e.id,
-    kind:       e.kind,
-    type:       e.type,
+    id: e.id,
+    kind: e.kind,
+    type: e.type,
     spriteName: e.spriteName,
-    x:          e.x,
-    z:          e.z,
-    hp:         e.hp,
-    maxHp:      e.maxHp,
-    alive:      e.alive,
-    attack:     e.attack,
-    defense:    e.defense,
-    speed:      e.speed,
+    x: e.x,
+    z: e.z,
+    hp: e.hp,
+    maxHp: e.maxHp,
+    alive: e.alive,
+    attack: e.attack,
+    defense: e.defense,
+    speed: e.speed,
     blocksMove: e.blocksMove,
-    faction:    e.faction,
-    tick:       e.tick,
-    spriteMap:  e.spriteMap,
+    faction: e.faction,
+    tick: e.tick,
+    spriteMap: e.spriteMap,
   };
 }

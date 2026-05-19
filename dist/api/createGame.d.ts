@@ -38,7 +38,7 @@ export type PassageList = {
     toggle(id: number): void;
     list: HiddenPassage[];
 };
-export type ApplyTarget = 'floor' | 'wall' | 'ceiling';
+export type ApplyTarget = "floor" | "wall" | "ceiling";
 export type ColliderFlags = {
     walkable?: boolean;
     blocked?: boolean;

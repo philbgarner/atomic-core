@@ -328,7 +328,9 @@ wss.on('connection', (ws) => {
 
       // Broadcast full state to ALL players (including the newcomer) so every
       // renderer immediately reflects the updated player list and positions.
-      broadcastAll(room, stateSnapshot(room))
+      // Skip if the dungeon hasn't been initialised yet — positions are meaningless
+      // defaults (1,1) and would be treated as the authoritative server init on the client.
+      if (room.solid !== null) broadcastAll(room, stateSnapshot(room))
 
       // Announce in chat so all clients can display it as a notification.
       broadcastAll(room, { type: 'chat', playerId: 'server', text: `${playerId} has entered the dungeon.` })

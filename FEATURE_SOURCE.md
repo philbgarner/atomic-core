@@ -248,7 +248,7 @@ Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture)
 ### Minimap with entity overlays
 
 **Files:**
-- `utils/minimap.ts` — `createMinimapState(dungeon)`, explored mask (`Uint8Array`), `updateExplored(fovResult)`; `AtomicCore.attachMinimap(game, canvas, opts)` renders to a 2D canvas
+- `utils/minimap.ts` — `createMinimapState(dungeon)`, dd mask (`Uint8Array`), `updateExplored(fovResult)`; `AtomicCore.attachMinimap(game, canvas, opts)` renders to a 2D canvas
 - `ai/fov.ts` — `computeFov()`, `createVisibilityMask()`; used for minimap reveal and AI line-of-sight
 
 ---
