@@ -3379,6 +3379,7 @@ async function runGenerate(internal, dungeonHandle, turnsHandle) {
 	updateFovAndMinimap(internal);
 	await internal.events.emit("generate");
 	internal.events.emit("turn", { turn: internal.turnCounter });
+	internal.generationReady = true;
 }
 function drawMinimap(internal, canvas, opts) {
 	const minimap = internal.minimapState;
@@ -3476,7 +3477,8 @@ function createGame(canvas, options) {
 		keybindingsHandles: [],
 		missions: missionsHandle,
 		animationRegistry,
-		destroyed: false
+		destroyed: false,
+		generationReady: false
 	};
 	let dungeonHandle;
 	let turnsHandle;
@@ -3505,6 +3507,7 @@ function createGame(canvas, options) {
 	if (options.transport) {
 		options.transport.onStateUpdate(async (update) => {
 			if (internal.destroyed) return;
+			if (!internal.generationReady) return;
 			if (internal.turnState) {
 				const oldActors = internal.turnState.actors;
 				for (const [pid, ps] of Object.entries(update.players)) {
@@ -3704,6 +3707,7 @@ function createGame(canvas, options) {
 			internal.playerState.facing = 0;
 			generated = false;
 			generated = true;
+			internal.generationReady = false;
 			return runGenerate(internal, dungeonHandle, turnsHandle);
 		},
 		destroy() {

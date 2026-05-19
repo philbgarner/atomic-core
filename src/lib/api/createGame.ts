@@ -617,6 +617,11 @@ type GameInternal = {
 
   // Cleanup
   destroyed: boolean;
+
+  // Set to true after the first runGenerate() fires its initial "turn" event.
+  // The transport onStateUpdate handler ignores incoming state until this is true,
+  // preventing pre-generation network state from overwriting the dungeon spawn.
+  generationReady: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -1415,6 +1420,9 @@ async function runGenerate(
 
   // 13. Emit initial turn event (renderer builds geometry on this).
   internal.events.emit("turn", { turn: internal.turnCounter });
+
+  // Unblock transport state updates now that the dungeon and player spawn are set.
+  internal.generationReady = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1581,6 +1589,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
     missions: missionsHandle,
     animationRegistry,
     destroyed: false,
+    generationReady: false,
   };
 
   let dungeonHandle: DungeonHandle;
@@ -1610,6 +1619,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
   if (options.transport) {
     options.transport.onStateUpdate(async (update) => {
       if (internal.destroyed) return;
+      if (!internal.generationReady) return;
 
       if (internal.turnState) {
         const oldActors = internal.turnState.actors;
@@ -1778,6 +1788,7 @@ export function createGame(canvas: HTMLElement, options: GameOptions): GameHandl
       internal.playerState.facing = 0;
       generated = false;
       generated = true;
+      internal.generationReady = false;
       return runGenerate(internal, dungeonHandle, turnsHandle);
     },
 

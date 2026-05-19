@@ -14,17 +14,12 @@ import {
 // Dungeon config (same seed → same dungeon on every client)
 // ---------------------------------------------------------------------------
 export const DUNGEON_CONFIG = {
-  // Cellular-specific options
-  generator: "cellular",
-  fillRatio: 0.5, // initial wall density (0-1); default 0.45
-  iterations: 5, // smoothing passes; default 5
-
   width: 64,
   height: 64,
   seed: 0xdeadcafe,
-  //roomMinSize: 3,
-  //roomMaxSize: 10,
-  //roomCount: 8,
+  roomMinSize: 5,
+  roomMaxSize: 14,
+  roomCount: 16,
 
   // onPlace runs after BSP generation with access to all rooms, startRoom,
   // endRoom, a seeded rng, and a place API for objects/enemies/decorations.

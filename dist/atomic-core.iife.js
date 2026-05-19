@@ -3403,6 +3403,7 @@ var AtomicCore = (function(exports, three) {
 		updateFovAndMinimap(internal);
 		await internal.events.emit("generate");
 		internal.events.emit("turn", { turn: internal.turnCounter });
+		internal.generationReady = true;
 	}
 	function drawMinimap(internal, canvas, opts) {
 		const minimap = internal.minimapState;
@@ -3500,7 +3501,8 @@ var AtomicCore = (function(exports, three) {
 			keybindingsHandles: [],
 			missions: missionsHandle,
 			animationRegistry,
-			destroyed: false
+			destroyed: false,
+			generationReady: false
 		};
 		let dungeonHandle;
 		let turnsHandle;
@@ -3529,6 +3531,7 @@ var AtomicCore = (function(exports, three) {
 		if (options.transport) {
 			options.transport.onStateUpdate(async (update) => {
 				if (internal.destroyed) return;
+				if (!internal.generationReady) return;
 				if (internal.turnState) {
 					const oldActors = internal.turnState.actors;
 					for (const [pid, ps] of Object.entries(update.players)) {
@@ -3728,6 +3731,7 @@ var AtomicCore = (function(exports, three) {
 				internal.playerState.facing = 0;
 				generated = false;
 				generated = true;
+				internal.generationReady = false;
 				return runGenerate(internal, dungeonHandle, turnsHandle);
 			},
 			destroy() {
