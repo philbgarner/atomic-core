@@ -5733,15 +5733,10 @@ function createDungeonRenderer(element, game, options = {}) {
 					}
 				}
 				if (isOpenSky) {
-					if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-					if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-					if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-					if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
-				} else {
-					if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-					if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-					if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, HALF_PI);
-					if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, Math.PI);
+					if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0);
+					if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI);
+					if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI);
 				}
 			}
 			const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
