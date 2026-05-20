@@ -1,7 +1,7 @@
-import { BspDungeonOptions, BspDungeonOutputs } from './bsp';
-import { SerializedDungeon } from './serialize';
-import { DungeonRendererOptions } from '../rendering/dungeonRenderer';
-import { ObjectPlacement } from '../entities/types';
+import type { BspDungeonOptions, BspDungeonOutputs } from "./bsp";
+import type { SerializedDungeon } from "./serialize";
+import type { DungeonRendererOptions } from "../rendering/dungeonRenderer";
+import type { ObjectPlacement } from "../entities/types";
 /** Optional author-supplied metadata embedded in the map file. */
 export type DungeonMapMeta = {
     title?: string;

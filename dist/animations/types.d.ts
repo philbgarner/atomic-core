@@ -1,4 +1,4 @@
-import { EntityBase } from '../entities/types';
+import type { EntityBase } from '../entities/types';
 /** All event kinds that can be queued during a turn for animation callbacks. */
 export type AnimationEventKind = 'damage' | 'heal' | 'death' | 'move' | 'attack' | 'miss' | 'xp-gain';
 export type AnimationEventMap = {

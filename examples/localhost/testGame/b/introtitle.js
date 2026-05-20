@@ -37,6 +37,7 @@ const TitleScreen = (() => {
 		// User interaction handler
 		window.addEventListener('keydown', handleKeys);
 		window.addEventListener('click', handleMouse);	// required because videos with audio won't autoplay in browsers
+		handleKeys(null);
 	}
 
 	function onExit() { 

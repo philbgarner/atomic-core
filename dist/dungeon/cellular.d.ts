@@ -1,5 +1,5 @@
-import { DungeonOutputs, RoomedDungeonOutputs } from './bsp';
 import * as THREE from "three";
+import type { DungeonOutputs, RoomedDungeonOutputs } from "./bsp";
 export type { DungeonOutputs, RoomedDungeonOutputs };
 export type CellularOptions = {
     width: number;

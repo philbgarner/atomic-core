@@ -320,69 +320,57 @@ export async function buildSkyboxFaces() {
   return { px, nx, py, ny, pz, nz };
 }
 
+const IS_WALKABLE = 0x01;	// 	Normal volitional movement (walk/run) is permitted
+const IS_BLOCKED = 0x02;	// 	No entity may enter by any means — forced or voluntary
+const IS_LIGHT_PASSABLE = 0x04; // 	Light and line-of - sight rays pass through
+const VOID = 0;		// solid	
+const FLOOR = 1;	// not-solid
+const WALL = 2;		// solid
+const DOOR = 3;		// solid
+const DECOR = 5;	// not-solid
+const colliderflags=[IS_BLOCKED, IS_WALKABLE|IS_LIGHT_PASSABLE, IS_BLOCKED, IS_BLOCKED, null, IS_WALKABLE|IS_LIGHT_PASSABLE];
+
 // ---------------------------------------------------------------------------
 // Sky panel pass — run once after generate()
 // ---------------------------------------------------------------------------
 export function applySkyPanels() {
-  // Place sky panels on ceiling cells that border a sky cell.
-  function isSky(cx, cz) {
-    if (cx < 0 || cz < 0 || cx >= width || cz >= height) return false;
-    const i = cz * width + cx;
-    a;
-    return solid[i] === 0;
-  }
+	const outputs = window.game.dungeon.outputs;
+	if (!outputs) return;
+	const { width, height, textures } = outputs;
+	const solid = textures.solid.image.data;
+	const dist = textures.distanceToWall.image.data;
+	const floorOff = textures.floorHeightOffset.image.data;
+	const ceilOff = textures.ceilingHeightOffset.image.data;
 
-  // game.dungeon.passages.list   // HiddenPassage[]
-  const outputs = window.game.dungeon.outputs;
-  if (!outputs) return;
+	for (let cz = 0; cz < DUNGEON_CONFIG.height; cz++) {
+		for (let cx = 0; cx < DUNGEON_CONFIG.width; cx++) {
+			const i = cz * DUNGEON_CONFIG.width + cx;
+			// set the walls based on some other procgen function
+			const r = (Math.random()<0.25) ? WALL : FLOOR;
 
-  showLevelTitle();
+			/* options we can set
+			applyTextureTo=['floor','wall','ceiling']
+			floorSkirt
+			ceilingSkirt
+			skyPanelCount
+			ceilingPanelCount
+			floorHeightOffset
+			ceilingHeightOffset
+			solid
+			colliderFlags
+			*/
+			const d = dist[i]; // distance to nearest wall (BFS steps)
+			const opts = {
+				solid: (colliderflags[r]&IS_BLOCKED) ? 1 : 0,
+				colliderFlags: colliderflags[r],
+				skyPanelCount: 2,
+				ceilingHeightOffset: 0,	// open sky
+				applyTextureTo: ['floor', 'wall'],
+			};
+			if (d > 1) opts.floorHeightOffset = 129 - (Math.random() * 4);
+			else opts.floorHeightOffset = 129 - (Math.random() * 2);
 
-  const { width, height, textures } = outputs;
-  const solid = textures.solid.image.data;
-  const dist = textures.distanceToWall.image.data;
-  const floorOff = textures.floorHeightOffset.image.data;
-  const ceilOff = textures.ceilingHeightOffset.image.data;
-
-  /*
-	var pillar = AtomicCore.createEntity({
-	kind: 'decoration', faction: 'none',
-	spriteName: 'stone-pillar',
-	x: 4, z: 6, blocksMove: true, alive: false,
-	})
-	game.dungeon.decorations.add(pillar)
-	game.dungeon.decorations.remove(pillar.id)
-	game.dungeon.decorations.list   // EntityBase[]
-	*/
-
-  //const flagsData = textures.colliderFlags.image.data;	// collision flags
-  // IS_WALKABLE 	0x01 	Normal volitional movement (walk/run) is permitted
-  // IS_BLOCKED 	0x02 	No entity may enter by any means — forced or voluntary
-  // IS_LIGHT_PASSABLE 	0x04 	Light and line-of-sight rays pass through
-  // eg. flagsData[4 * W + 6] = IS_BLOCKED | IS_LIGHT_PASSABLE;
-
-  for (let cz = 0; cz < height; cz++) {
-    for (let cx = 0; cx < width; cx++) {
-      const i = cz * width + cx;
-
-      if (solid[i] !== 0) {
-        continue; // skip wall cells
-      }
-
-      const d = dist[i]; // distance to nearest wall (BFS steps)
-      ceilOff[i] = 0; // open sky
-      if (d > 1) {
-        floorOff[i] = 129 - Math.random() * 4;
-      } else floorOff[i] = 129 - Math.random() * 2;
-      // else: leave as 128 (flat floor, set by default in generateBspDungeon)
-
-      //if (isSky(cx, cz - 1) || isSky(cx, cz + 1) || isSky(cx - 1, cz) || isSky(cx + 1, cz)) {
-      setSkyPanelCount(outputs, cx, cz, 2);
-      //}
-    }
-  }
-
-  // Mark textures as dirty so any future GPU upload picks up the changes.
-  textures.floorHeightOffset.needsUpdate = true;
-  textures.ceilingHeightOffset.needsUpdate = true;
+			window.game.dungeon.set(cx, cz, "fantasy/flagstone_floor_stone", opts);
+		}
+	}
 }
