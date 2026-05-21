@@ -67,6 +67,12 @@ export type SetCellOptions = {
     hazard?: number;
     /** Temperature value (0–255; 127 = neutral). Phase 4. */
     temperature?: number;
+    /**
+     * When true, skip syncing this change to the server. Defaults to false when a
+     * transport is configured. Set to true for bulk initialisation (e.g. generate
+     * callbacks) where the result is already deterministic across all clients.
+     */
+    skipSync?: boolean;
 };
 export type DungeonHandle = {
     readonly width: number;

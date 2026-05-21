@@ -3091,6 +3091,20 @@ function makeDungeonHandle(internal) {
 					...options.colliderFlags
 				});
 			} else if (options?.colliderFlags !== void 0) setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
+			if (!options?.skipSync && internal.options.transport?.sendDungeonSet) {
+				const { skipSync: _skip, ...syncOptions } = options ?? {};
+				const payload = Object.keys(syncOptions).length ? {
+					x,
+					y,
+					spriteName,
+					options: syncOptions
+				} : {
+					x,
+					y,
+					spriteName
+				};
+				internal.options.transport.sendDungeonSet(payload);
+			}
 		},
 		get paintMap() {
 			return internal.paintMap;
@@ -3523,6 +3537,13 @@ function createGame(canvas, options) {
 		});
 	});
 	if (options.transport) {
+		options.transport.onDungeonSet?.((payload) => {
+			if (internal.destroyed || !internal.dungeonOutputs) return;
+			dungeonHandle.set(payload.x, payload.y, payload.spriteName, {
+				...payload.options,
+				skipSync: true
+			});
+		});
 		options.transport.onStateUpdate(async (update) => {
 			if (internal.destroyed) return;
 			if (!internal.dungeonOutputs) return;
@@ -4657,6 +4678,9 @@ function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize
 				const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
 				entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .001);
 			}
+		},
+		setVisible(visible) {
+			group.visible = visible;
 		},
 		dispose() {
 			scene.remove(group);
@@ -5996,15 +6020,33 @@ function createDungeonRenderer(element, game, options = {}) {
 				const u = mat.uniforms["uCamDir"];
 				if (u) u.value.set(cfx, cfz);
 			}
+			const fogFar2 = fogFar * fogFar;
 			for (const e of currentEntities) {
-				if (!e.alive || !e.spriteMap) continue;
-				const handle = billboardMap.get(e.id);
-				if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+				if (!e.alive) continue;
+				const dx = (e.x + .5) * tileSize - curX;
+				const dz = (e.z + .5) * tileSize - curZ;
+				const inRange = dx * dx + dz * dz <= fogFar2;
+				if (e.spriteMap) {
+					const handle = billboardMap.get(e.id);
+					if (handle) {
+						handle.setVisible(inRange);
+						if (inRange) handle.update(e, curYaw, tileSize, ceilingH);
+					}
+				} else {
+					const mesh = entityMeshMap.get(e.id);
+					if (mesh) mesh.visible = inRange;
+				}
 			}
 			for (const obj of currentObjects) {
 				if (!obj.spriteMap) continue;
+				const dx = (obj.x + .5) * tileSize - curX;
+				const dz = (obj.z + .5) * tileSize - curZ;
+				const inRange = dx * dx + dz * dz <= fogFar2;
 				const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
-				if (handle) handle.update(obj, curYaw, tileSize, ceilingH);
+				if (handle) {
+					handle.setVisible(inRange);
+					if (inRange) handle.update(obj, curYaw, tileSize, ceilingH);
+				}
 			}
 		}
 		glRenderer.render(scene, camera);
@@ -6410,6 +6452,7 @@ function createWebSocketTransport(url) {
 	const updateHandlers = [];
 	const chatHandlers = [];
 	const missionCompleteHandlers = [];
+	const dungeonSetHandlers = [];
 	const bufferedUpdates = [];
 	function dispatch(raw) {
 		let msg;
@@ -6437,6 +6480,18 @@ function createWebSocketTransport(url) {
 				name: msg.name
 			};
 			for (const h of missionCompleteHandlers) h(payload);
+		}
+		if (msg.type === "dungeon_set") {
+			const base = {
+				x: msg.x,
+				y: msg.y,
+				spriteName: msg.spriteName
+			};
+			const payload = msg.options !== void 0 ? {
+				...base,
+				options: msg.options
+			} : base;
+			for (const h of dungeonSetHandlers) h(payload);
 		}
 	}
 	return {
@@ -6528,6 +6583,16 @@ function createWebSocketTransport(url) {
 		},
 		onMissionComplete(handler) {
 			missionCompleteHandlers.push(handler);
+		},
+		sendDungeonSet(payload) {
+			if (!ws || !_playerId) return;
+			ws.send(JSON.stringify({
+				type: "dungeon_set",
+				...payload
+			}));
+		},
+		onDungeonSet(handler) {
+			dungeonSetHandlers.push(handler);
 		}
 	};
 }
@@ -7311,7 +7376,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "0.9.6",
+		version: "0.9.7",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
@@ -7353,6 +7418,6 @@ function dungeonMapFromJson(json) {
 	return importDungeonMap(JSON.parse(json));
 }
 //#endregion
-export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingHeightOffset, setCeilingPanelCount, setFloorHeightOffset, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation };
+export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, makeRng, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingHeightOffset, setCeilingPanelCount, setFloorHeightOffset, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation };
 
 //# sourceMappingURL=atomic-core.js.map

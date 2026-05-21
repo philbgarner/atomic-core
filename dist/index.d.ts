@@ -13,7 +13,7 @@ export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, D
 export { loadSkybox } from './rendering/skybox';
 export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites';
 export { createWebSocketTransport } from './transport/websocket';
-export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload } from './transport/types';
+export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload, DungeonSetPayload } from './transport/types';
 export type { Mission, MissionStatus, MissionContext, MissionEvaluator, MissionCompleteCallback, MissionDef, MissionsHandle } from './missions/types';
 export { showInventory } from './ui/inventoryDialog';
 export type { InventoryOptions, InventoryHandle, InventoryHandleCore, EquipSlotDef, StatDef, IndicatorDef, ActionDef, IconDescriptor, BackgroundDef, DropTarget } from './ui/inventoryDialog';
@@ -33,4 +33,5 @@ export { IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE, buildColliderFlags, collide
 export type { EntityBase, HiddenPassage, ObjectPlacement } from './entities/types';
 export type { Item, InventorySlot } from './entities/inventory';
 export type { TurnAction, TurnActionKind } from './turn/types';
+export { makeRng } from './utils/rng';
 //# sourceMappingURL=index.d.ts.map
