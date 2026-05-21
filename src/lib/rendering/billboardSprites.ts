@@ -137,6 +137,8 @@ export interface BillboardHandle {
     tileSize: number,
     ceilingH: number,
   ): void;
+  /** Show or hide all meshes in this billboard without disposing GPU resources. */
+  setVisible(visible: boolean): void;
   /** Remove meshes from scene and dispose GPU resources. */
   dispose(): void;
 }
@@ -312,6 +314,10 @@ export function createBillboard(
           entry.layerIndex * 0.001,
         );
       }
+    },
+
+    setVisible(visible: boolean) {
+      group.visible = visible;
     },
 
     dispose() {

@@ -2113,17 +2113,35 @@ export function createDungeonRenderer(
         if (u) (u.value as THREE.Vector2).set(cfx, cfz);
       }
 
-      // Update all live billboard handles with current camera yaw.
+      // Update live entity billboards and box-geometry meshes; cull beyond fogFar.
+      const fogFar2 = fogFar * fogFar;
       for (const e of currentEntities) {
-        if (!e.alive || !e.spriteMap) continue;
-        const handle = billboardMap.get(e.id);
-        if (handle) handle.update(e, curYaw, tileSize, ceilingH);
+        if (!e.alive) continue;
+        const dx = (e.x + 0.5) * tileSize - curX;
+        const dz = (e.z + 0.5) * tileSize - curZ;
+        const inRange = dx * dx + dz * dz <= fogFar2;
+        if (e.spriteMap) {
+          const handle = billboardMap.get(e.id);
+          if (handle) {
+            handle.setVisible(inRange);
+            if (inRange) handle.update(e, curYaw, tileSize, ceilingH);
+          }
+        } else {
+          const mesh = entityMeshMap.get(e.id);
+          if (mesh) mesh.visible = inRange;
+        }
       }
-      // Update stationary object billboards (position is fixed; only yaw changes).
+      // Update stationary object billboards; cull beyond fogFar.
       for (const obj of currentObjects) {
         if (!obj.spriteMap) continue;
+        const dx = (obj.x + 0.5) * tileSize - curX;
+        const dz = (obj.z + 0.5) * tileSize - curZ;
+        const inRange = dx * dx + dz * dz <= fogFar2;
         const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
-        if (handle) handle.update(obj as unknown as EntityBase, curYaw, tileSize, ceilingH);
+        if (handle) {
+          handle.setVisible(inRange);
+          if (inRange) handle.update(obj as unknown as EntityBase, curYaw, tileSize, ceilingH);
+        }
       }
     }
 
