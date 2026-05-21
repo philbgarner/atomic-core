@@ -72,6 +72,30 @@ export type ServerStateUpdate = {
   monsters?: MonsterNetState[];
 };
 
+/**
+ * Payload for a single-cell dungeon modification sent via dungeon.set().
+ * Mirrors SetCellOptions (minus skipSync) so the transport layer stays
+ * independent of createGame's type definitions.
+ */
+export type DungeonSetPayload = {
+  x: number;
+  y: number;
+  spriteName: string;
+  options?: {
+    applyTextureTo?: string[];
+    solid?: boolean;
+    colliderFlags?: { walkable?: boolean; blocked?: boolean; lightPassable?: boolean };
+    floorHeightOffset?: number;
+    ceilingHeightOffset?: number;
+    skyPanelCount?: number;
+    ceilingPanelCount?: number;
+    floorSkirt?: (string | null)[];
+    ceilingSkirt?: (string | null)[];
+    hazard?: number;
+    temperature?: number;
+  };
+};
+
 /** Sent by the host client after generate() so the server can validate moves. */
 export type DungeonInitPayload = {
   /** Flat Uint8Array contents: 0 = walkable, >0 = solid. */
@@ -175,4 +199,22 @@ export type ActionTransport = {
    * Optional — if absent, peer mission events are never emitted.
    */
   onMissionComplete?(handler: (msg: { playerId: string; missionId: string; name: string }) => void): void;
+
+  /**
+   * Send a single-cell dungeon modification to the server so it can update its
+   * authoritative solid map and broadcast the change to all other connected clients.
+   * Called automatically by dungeon.set() when skipSync is not true.
+   *
+   * Optional — if absent, dungeon.set() applies changes locally only.
+   */
+  sendDungeonSet?(payload: DungeonSetPayload): void;
+
+  /**
+   * Register a handler that fires when the server relays a dungeon cell change
+   * from another client. createGame() wires this internally to apply the change
+   * locally with skipSync: true so it doesn't echo back to the server.
+   *
+   * Optional — if absent, remote dungeon.set() changes are never applied locally.
+   */
+  onDungeonSet?(handler: (payload: DungeonSetPayload) => void): void;
 };

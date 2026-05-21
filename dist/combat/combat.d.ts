@@ -1,6 +1,6 @@
-import type { EntityBase } from "../entities/types";
-import type { EventEmitter } from "../events/eventEmitter";
-import type { FactionRegistry } from "./factions";
+import { EntityBase } from '../entities/types';
+import { EventEmitter } from '../events/eventEmitter';
+import { FactionRegistry } from './factions';
 export type CombatResult = {
     outcome: "blocked";
 } | {

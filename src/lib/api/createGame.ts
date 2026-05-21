@@ -160,6 +160,12 @@ export type SetCellOptions = {
   hazard?: number;
   /** Temperature value (0–255; 127 = neutral). Phase 4. */
   temperature?: number;
+  /**
+   * When true, skip syncing this change to the server. Defaults to false when a
+   * transport is configured. Set to true for bulk initialisation (e.g. generate
+   * callbacks) where the result is already deterministic across all clients.
+   */
+  skipSync?: boolean;
 };
 
 export type DungeonHandle = {
@@ -1236,6 +1242,14 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
       } else if (options?.colliderFlags !== undefined) {
         setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
       }
+
+      if (!options?.skipSync && internal.options.transport?.sendDungeonSet) {
+        const { skipSync: _skip, ...syncOptions } = options ?? {};
+        const payload = Object.keys(syncOptions).length
+          ? { x, y, spriteName, options: syncOptions }
+          : { x, y, spriteName };
+        internal.options.transport.sendDungeonSet(payload);
+      }
     },
 
     get paintMap(): ReadonlyMap<string, SurfacePaintTarget> {
@@ -1949,6 +1963,14 @@ export function createGame(
   });
 
   if (options.transport) {
+    options.transport.onDungeonSet?.((payload) => {
+      if (internal.destroyed || !internal.dungeonOutputs) return;
+      dungeonHandle.set(payload.x, payload.y, payload.spriteName, {
+        ...(payload.options as SetCellOptions | undefined),
+        skipSync: true,
+      });
+    });
+
     options.transport.onStateUpdate(async (update) => {
       if (internal.destroyed) return;
       // Skip updates that arrive before the dungeon has been generated locally.

@@ -21,6 +21,7 @@ import type {
   ActionTransport,
   ServerStateUpdate,
   DungeonInitPayload,
+  DungeonSetPayload,
   MonsterNetState,
 } from './types';
 import type { TurnAction } from '../turn/types';
@@ -37,6 +38,7 @@ export function createWebSocketTransport(url: string): ActionTransport {
   const updateHandlers: Array<(update: ServerStateUpdate) => void> = [];
   const chatHandlers: Array<(msg: { playerId: string; text: string }) => void> = [];
   const missionCompleteHandlers: Array<(msg: { playerId: string; missionId: string; name: string }) => void> = [];
+  const dungeonSetHandlers: Array<(payload: DungeonSetPayload) => void> = [];
   // State messages that arrive before any onStateUpdate handler is registered
   // (e.g. the server's initial broadcast during connect()) are buffered and
   // replayed when the first handler registers so non-host clients receive the
@@ -72,6 +74,14 @@ export function createWebSocketTransport(url: string): ActionTransport {
         name: msg.name as string,
       };
       for (const h of missionCompleteHandlers) h(payload);
+    }
+
+    if (msg.type === 'dungeon_set') {
+      const base = { x: msg.x as number, y: msg.y as number, spriteName: msg.spriteName as string };
+      const payload: DungeonSetPayload = msg.options !== undefined
+        ? { ...base, options: msg.options as NonNullable<DungeonSetPayload['options']> }
+        : base;
+      for (const h of dungeonSetHandlers) h(payload);
     }
   }
 
@@ -159,6 +169,15 @@ export function createWebSocketTransport(url: string): ActionTransport {
 
     onMissionComplete(handler: (msg: { playerId: string; missionId: string; name: string }) => void) {
       missionCompleteHandlers.push(handler);
+    },
+
+    sendDungeonSet(payload: DungeonSetPayload) {
+      if (!ws || !_playerId) return;
+      ws.send(JSON.stringify({ type: 'dungeon_set', ...payload }));
+    },
+
+    onDungeonSet(handler: (payload: DungeonSetPayload) => void) {
+      dungeonSetHandlers.push(handler);
     },
   };
 }

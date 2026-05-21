@@ -1,18 +1,17 @@
-import type { BspDungeonOptions, DungeonOutputs } from "../dungeon/bsp";
-import type { CellularOptions } from "../dungeon/cellular";
-import type { TiledMapOptions } from "../dungeon/tiled";
-import type { TurnAction } from "../turn/types";
-import type { EventEmitter } from "../events/eventEmitter";
-import type { FactionRegistry } from "../combat/factions";
-import type { CombatResolver } from "../combat/combat";
-import type { HiddenPassage, ObjectPlacement } from "../entities/types";
-import type { EntityBase } from "../entities/types";
-import type { SpriteMap } from "../rendering/billboardSprites";
-import type { PlayerHandle } from "./player";
-import type { KeybindingsOptions } from "./keybindings";
-import type { ActionTransport } from "../transport/types";
-import type { MissionsHandle } from "../missions/types";
-import type { AnimationsHandle } from "../animations/types";
+import { BspDungeonOptions, DungeonOutputs } from '../dungeon/bsp';
+import { CellularOptions } from '../dungeon/cellular';
+import { TiledMapOptions } from '../dungeon/tiled';
+import { TurnAction } from '../turn/types';
+import { EventEmitter } from '../events/eventEmitter';
+import { FactionRegistry } from '../combat/factions';
+import { CombatResolver } from '../combat/combat';
+import { HiddenPassage, ObjectPlacement, EntityBase } from '../entities/types';
+import { SpriteMap } from '../rendering/billboardSprites';
+import { PlayerHandle } from './player';
+import { KeybindingsOptions } from './keybindings';
+import { ActionTransport } from '../transport/types';
+import { MissionsHandle } from '../missions/types';
+import { AnimationsHandle } from '../animations/types';
 export type PublicRoom = {
     /** Unique room identifier — pass this to `onChooseSpawn` to spawn the player here. */
     id: number;

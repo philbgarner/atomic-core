@@ -1,4 +1,4 @@
-import type { TurnAction } from '../turn/types';
+import { TurnAction } from '../turn/types';
 /**
  * Network state snapshot for a single player, broadcast in every `ServerStateUpdate`.
  *

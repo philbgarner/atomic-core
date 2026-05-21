@@ -32,7 +32,7 @@ export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboard
 
 // Transport
 export { createWebSocketTransport }                  from './transport/websocket'
-export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload } from './transport/types'
+export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload, DungeonSetPayload } from './transport/types'
 
 // Mission system
 export type { Mission, MissionStatus, MissionContext, MissionEvaluator, MissionCompleteCallback, MissionDef, MissionsHandle } from './missions/types'
@@ -64,3 +64,4 @@ export { IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE, buildColliderFlags, collide
 export type { EntityBase, HiddenPassage, ObjectPlacement } from './entities/types'
 export type { Item, InventorySlot }                  from './entities/inventory'
 export type { TurnAction, TurnActionKind }           from './turn/types'
+export { makeRng }                                   from './utils/rng'

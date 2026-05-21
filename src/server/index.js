@@ -346,13 +346,20 @@ wss.on('connection', (ws) => {
       const config = msg.config ?? {}
       room.dungeonConfig = config
 
-      // Generate the dungeon server-side so the solid map and spawn point are
-      // authoritative — clients cannot send bad solid data.
+      // Generate the dungeon server-side to derive the authoritative spawn point
+      // and map dimensions. Use the host's solid map (post-generation modifications
+      // such as deterministic applySkyPanels) rather than the raw BSP output so the
+      // server's collision data matches what every client independently renders.
       try {
         const dungeon = generateBspDungeon(config)
-        room.solid  = dungeon.textures.solid.image.data
         room.width  = dungeon.width
         room.height = dungeon.height
+        const providedSolid = msg.solid
+        if (Array.isArray(providedSolid) && providedSolid.length === dungeon.width * dungeon.height) {
+          room.solid = new Uint8Array(providedSolid)
+        } else {
+          room.solid = dungeon.textures.solid.image.data
+        }
 
         // Derive spawn from startRoomId centre (same logic as the client).
         const startRoom = dungeon.rooms.get(dungeon.startRoomId)
@@ -374,6 +381,26 @@ wss.on('connection', (ws) => {
       } catch (err) {
         console.error('dungeon_init: failed to generate dungeon', err)
       }
+      return
+    }
+
+    // ── dungeon_set ────────────────────────────────────────────────────────
+    if (msg.type === 'dungeon_set') {
+      const { x, y, options } = msg
+      // Update the authoritative solid map so late-arriving move validations
+      // and future joining clients (via re-generation) see the correct state.
+      if (room.solid && typeof x === 'number' && typeof y === 'number') {
+        if (typeof options?.solid === 'boolean') {
+          room.solid[y * room.width + x] = options.solid ? 1 : 0
+        }
+      }
+      // Relay to all other clients so they apply the same change locally.
+      broadcast(room, JSON.stringify({
+        type: 'dungeon_set',
+        x: msg.x, y: msg.y,
+        spriteName: msg.spriteName,
+        options: msg.options,
+      }), ws)
       return
     }
 

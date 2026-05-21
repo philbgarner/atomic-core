@@ -366,7 +366,7 @@ Per-cell shader overlay system. Up to 4 overlay tile names can be assigned per c
 - `ai/fov.ts` — field-of-view computation and visibility mask
 - `ai/spatial.ts` — spatial hash / proximity queries
 - `ai/monsterAI.ts` — default chase behaviours (`decideChasePlayer`, `computeChasePathToPlayer`, `monsterAlertConfig`); developers supply custom AI via per-entity state machines
-- `utils/rng.ts` — `makeRng(seed)` seeded PRNG
+- `utils/rng.ts` — `makeRng(seed)` seeded LCG PRNG; exported from public API for use in deterministic generate callbacks
 - `utils/geometry.ts` — `hasLineOfSight`, `cardinalDir`, `normalizeUvRect`, `MinHeap<T>`, `octile()`
 - `utils/minimap.ts` — explored mask state and minimap canvas rendering
 
@@ -397,12 +397,12 @@ Dependency-injection layer that makes the server authoritative for all player ac
 Developer-defined entity fields (e.g. `mp`, `stamina`, `spriteName`, `effects`) are automatically synced to all peers on every action: `turns.commit()` bundles all non-server-managed fields into the action message; the server strips protected fields (`x`, `y`, `hp`, `maxHp`, `alive`, `facing`) and relays the rest; the reconciliation handler spreads them back onto the entity so peers can access `entity.mp` etc. directly. The old `sendMeta` / `PlayerNetState.meta` pattern has been removed — `PlayerNetState` now carries an index signature for arbitrary fields.
 
 **Files:**
-- `transport/types.ts` — `ActionTransport` interface, `ServerStateUpdate`, `PlayerNetState` (index signature for developer-defined fields; server-authoritative fields explicitly typed), `DungeonInitPayload`, `MonsterNetState` (uses `spriteName`; deprecated `type`/`sprite` kept optional for backward compatibility with older save files)
-- `transport/websocket.ts` — `createWebSocketTransport(url)` browser-side factory; buffers `state` messages before `onStateUpdate` is registered and replays them on first handler registration; `send()` includes `entityState` with each action
-- `api/createGame.ts` — `GameOptions.transport`, `PlayerOptions.id`, commit intercept (collects entity extra fields and passes to `transport.send()`), reconciliation wiring (spreads all server state fields onto entity); auto-registers and syncs monster entities from state updates
+- `transport/types.ts` — `ActionTransport` interface, `ServerStateUpdate`, `PlayerNetState` (index signature for developer-defined fields; server-authoritative fields explicitly typed), `DungeonInitPayload`, `DungeonSetPayload`, `MonsterNetState` (uses `spriteName`; deprecated `type`/`sprite` kept optional for backward compatibility with older save files); optional `sendDungeonSet()`/`onDungeonSet()` methods for runtime cell sync
+- `transport/websocket.ts` — `createWebSocketTransport(url)` browser-side factory; buffers `state` messages before `onStateUpdate` is registered and replays them on first handler registration; `send()` includes `entityState` with each action; `sendDungeonSet()`/`onDungeonSet()` for `dungeon_set` messages
+- `api/createGame.ts` — `GameOptions.transport`, `PlayerOptions.id`, commit intercept (collects entity extra fields and passes to `transport.send()`), reconciliation wiring (spreads all server state fields onto entity); auto-registers and syncs monster entities from state updates; `dungeon.set()` sends `dungeon_set` to server unless `skipSync: true`; `onDungeonSet` handler applies remote cell changes locally; `SetCellOptions.skipSync` skips server sync (use for deterministic bulk init)
 
 **Server:**
-- `src/server/index.js` — Express + `ws` authoritative server; generates the dungeon server-side; validates player moves (including monster-blocking); resolves player→monster and monster→player melee combat; runs `runMonsterAI()` (4-directional chase, one step per player action) after each accepted action; stores developer-defined entity fields in `player.extra` (server-managed fields stripped); broadcasts `{ ...player.extra, x, y, hp, maxHp, alive, facing }` to all peers
+- `src/server/index.js` — Express + `ws` authoritative server; generates the dungeon server-side for spawn derivation; uses host's provided solid map from `dungeon_init` (post-generation modifications included); handles `dungeon_set` to update `room.solid` and broadcast to other clients; validates player moves (including monster-blocking); resolves player→monster and monster→player melee combat; runs `runMonsterAI()` (4-directional chase, one step per player action) after each accepted action; stores developer-defined entity fields in `player.extra` (server-managed fields stripped); broadcasts `{ ...player.extra, x, y, hp, maxHp, alive, facing }` to all peers
 - `src/server/dungeon-entry.ts` — thin build entry that re-exports `generateBspDungeon` for the server build
 - `src/server/three-shim.js` — minimal `THREE.DataTexture` shim so `bsp.ts` runs in Node without a real GPU or browser context; only `image.data` is needed server-side
 - `vite.config.server.ts` — separate Vite config that compiles the server dungeon module with `three` aliased to the shim; outputs `dist/server/dungeon.js`

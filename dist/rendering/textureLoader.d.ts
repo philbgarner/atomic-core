@@ -1,4 +1,4 @@
-import type { FaceRotation } from './tileAtlas';
+import { FaceRotation } from './tileAtlas';
 export type AtlasFrameRect = {
     x: number;
     y: number;

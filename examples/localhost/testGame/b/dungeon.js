@@ -8,6 +8,7 @@ import {
   createEntity,
   setSkyPanelCount,
   attachSurfacePainter,
+  makeRng,
 } from "atomic-core";
 
 // ---------------------------------------------------------------------------
@@ -332,44 +333,31 @@ const colliderflags=[IS_BLOCKED, IS_WALKABLE|IS_LIGHT_PASSABLE, IS_BLOCKED, IS_B
 
 // ---------------------------------------------------------------------------
 // Sky panel pass — run once after generate()
+// All randomness uses the dungeon seed so every client produces the same result.
+// All dungeon.set() calls use skipSync:true — the result is deterministic so
+// no server sync is needed; the host sends the final solid map via initDungeon.
 // ---------------------------------------------------------------------------
 export function applySkyPanels() {
 	const outputs = window.game.dungeon.outputs;
 	if (!outputs) return;
-	const { width, height, textures } = outputs;
-	const solid = textures.solid.image.data;
+	const { textures } = outputs;
 	const dist = textures.distanceToWall.image.data;
-	const floorOff = textures.floorHeightOffset.image.data;
-	const ceilOff = textures.ceilingHeightOffset.image.data;
+	const rng = makeRng(outputs.seed);
 
 	for (let cz = 0; cz < DUNGEON_CONFIG.height; cz++) {
 		for (let cx = 0; cx < DUNGEON_CONFIG.width; cx++) {
 			const i = cz * DUNGEON_CONFIG.width + cx;
-			// set the walls based on some other procgen function
-			const r = (Math.random()<0.25) ? WALL : FLOOR;
-
-			/* options we can set
-			applyTextureTo=['floor','wall','ceiling']
-			floorSkirt
-			ceilingSkirt
-			skyPanelCount
-			ceilingPanelCount
-			floorHeightOffset
-			ceilingHeightOffset
-			solid
-			colliderFlags
-			*/
+			const r = rng() < 0.25 ? WALL : FLOOR;
 			const d = dist[i]; // distance to nearest wall (BFS steps)
 			const opts = {
-				solid: (colliderflags[r]&IS_BLOCKED) ? 1 : 0,
+				solid: (colliderflags[r] & IS_BLOCKED) ? 1 : 0,
 				colliderFlags: colliderflags[r],
 				skyPanelCount: 2,
-				ceilingHeightOffset: 0,	// open sky
+				ceilingHeightOffset: 0,
 				applyTextureTo: ['floor', 'wall'],
+				floorHeightOffset: d > 1 ? 129 - (rng() * 4) : 129 - (rng() * 2),
+				skipSync: true,
 			};
-			if (d > 1) opts.floorHeightOffset = 129 - (Math.random() * 4);
-			else opts.floorHeightOffset = 129 - (Math.random() * 2);
-
 			window.game.dungeon.set(cx, cz, "fantasy/flagstone_floor_stone", opts);
 		}
 	}
