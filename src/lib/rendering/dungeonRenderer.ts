@@ -2091,8 +2091,12 @@ export function createDungeonRenderer(
 			while (dy < -Math.PI) dy += 2 * Math.PI;
 			curYaw += dy * k;
 
-			camera.position.set(curX, curY, curZ);
-			camera.rotation.set(0, curYaw, 0, "YXZ");
+			// fix camera position to center of tile
+			const PULLBACK=0.5*tileSize;
+			const backX = Math.sin(curYaw) * PULLBACK;
+			const backZ = Math.cos(curYaw) * PULLBACK;
+			camera.position.set(curX+backX, curY, curZ+backZ);
+			camera.rotation.set(-0.1, curYaw, 0, "YXZ");	// look down slightly to see floor!
 
 			// Update camera forward direction for directional surface lighting.
 			const cfx = -Math.sin(curYaw);

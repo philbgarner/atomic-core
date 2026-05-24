@@ -271,7 +271,7 @@ export function createBillboard(
 			group.position.set(wx, wy, wz);
 
 			// Rotate the group to always face the camera (Y-axis billboard).
-			group.rotation.set(0, cameraYaw, 0, "YXZ");
+			group.rotation.set(-0.1, cameraYaw, 0, "YXZ");	// must match camera slight downward tilt
 
 			// Scale layers to world-unit sprite size, preserving frameSize aspect ratio.
 			// no longer do this. the artist decides the scaling, which by default should be tilesize if it's a full-size monster

@@ -4682,7 +4682,7 @@ void main() {
 					y: 0
 				}).y) * tileSize + floorY;
 				group.position.set(wx, wy, wz);
-				group.rotation.set(0, cameraYaw, 0, "YXZ");
+				group.rotation.set(-.1, cameraYaw, 0, "YXZ");
 				const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
@@ -6029,8 +6029,11 @@ void main() {
 				while (dy > Math.PI) dy -= 2 * Math.PI;
 				while (dy < -Math.PI) dy += 2 * Math.PI;
 				curYaw += dy * k;
-				camera.position.set(curX, curY, curZ);
-				camera.rotation.set(0, curYaw, 0, "YXZ");
+				const PULLBACK = .5 * tileSize;
+				const backX = Math.sin(curYaw) * PULLBACK;
+				const backZ = Math.cos(curYaw) * PULLBACK;
+				camera.position.set(curX + backX, curY, curZ + backZ);
+				camera.rotation.set(-.1, curYaw, 0, "YXZ");
 				const cfx = -Math.sin(curYaw);
 				const cfz = -Math.cos(curYaw);
 				for (const mat of atlasMaterials) {
