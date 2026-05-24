@@ -4504,7 +4504,10 @@ void main() {
 				canvas = el;
 				ctx = el.getContext("2d");
 			}
-			for (const e of entries) blitSprite(ctx, source, e);
+			for (const e of entries) {
+				blitSprite(ctx, source, e);
+				if ((e.frame.frame.w > 64 || e.frame.frame.h > 64) && e.frame.pivot.y === .5) e.frame.pivot.y = 0;
+			}
 			source.close();
 			onProgress?.(2, 2);
 			const sprites = /* @__PURE__ */ new Map();
