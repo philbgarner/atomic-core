@@ -420,8 +420,8 @@ export async function loadTextureAtlas(
 			// fix extra large sprites
 			// due to a bug in the packer, the pivot is always 0.5,0.5
 			// oversize sprites should use y=0 so they sit on the ground
-			// if there's a const for "default size" I don't know where it's hiding, hence the hardcode 64
-			if ((e.frame.frame.w > 64 || e.frame.frame.h > 64) && e.frame.pivot.y === 0.5) e.frame.pivot.y = 0;
+			// if there's a const for "default size" I don't know where it's hiding, hence the hardcode values
+			e.frame.pivot.y = 1 - e.frame.sourceSize.h / 128;
 		}
 
 		source.close();

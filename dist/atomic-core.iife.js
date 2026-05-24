@@ -4506,7 +4506,7 @@ void main() {
 			}
 			for (const e of entries) {
 				blitSprite(ctx, source, e);
-				if ((e.frame.frame.w > 64 || e.frame.frame.h > 64) && e.frame.pivot.y === .5) e.frame.pivot.y = 0;
+				e.frame.pivot.y = 1 - e.frame.sourceSize.h / 128;
 			}
 			source.close();
 			onProgress?.(2, 2);
