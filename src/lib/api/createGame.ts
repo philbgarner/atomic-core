@@ -1005,10 +1005,7 @@ function makeApplyAction(
 const FOV_RADIUS = 12;
 
 function updateFovAndMinimap(internal: GameInternal): void {
-  console.trace(
-    "updateFovAndMinimap()",
-    JSON.stringify(internal?.entityById?.get("player_1") ?? null),
-  );
+  //console.trace("updateFovAndMinimap()",JSON.stringify(internal?.entityById?.get("player_1") ?? null),);
   if (!internal.minimapState) {
     console.warn("[minimap] no minimapState");
     return;
@@ -1043,14 +1040,10 @@ function updateFovAndMinimap(internal: GameInternal): void {
   });
 
   const visCount = fovMask.reduce((n, v) => n + v, 0);
-  if (visCount < 50)
-    console.trace(
-      `[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible (SUSPICIOUS)`,
-    );
-  else
-    console.trace(
-      `[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible`,
-    );
+  //if (visCount < 50)
+    //console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible (SUSPICIOUS)`,);
+  //else
+    //console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible`,);
   updateExplored(internal.minimapState, fovMask);
 }
 

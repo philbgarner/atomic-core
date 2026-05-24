@@ -2920,7 +2920,6 @@ function makeApplyAction(internal, combatOpts, onAnimEvent) {
 }
 var FOV_RADIUS = 12;
 function updateFovAndMinimap(internal) {
-	console.trace("updateFovAndMinimap()", JSON.stringify(internal?.entityById?.get("player_1") ?? null));
 	if (!internal.minimapState) {
 		console.warn("[minimap] no minimapState");
 		return;
@@ -2948,9 +2947,7 @@ function updateFovAndMinimap(internal) {
 		},
 		radius: FOV_RADIUS
 	});
-	const visCount = fovMask.reduce((n, v) => n + v, 0);
-	if (visCount < 50) console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible (SUSPICIOUS)`);
-	else console.trace(`[minimap] FOV at (${player.x},${player.z}) — ${visCount} cells visible`);
+	fovMask.reduce((n, v) => n + v, 0);
 	updateExplored(internal.minimapState, fovMask);
 }
 function syncAllEntitiesFromTurnState(internal) {
@@ -4606,9 +4603,10 @@ function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize
 	}
 	function getPivot(tile) {
 		const id = resolveTile(tile, resolver);
-		return packedAtlas.getById(id)?.pivot ?? {
-			x: .5,
-			y: .5
+		const sprite = packedAtlas.getById(id);
+		return {
+			x: sprite?.pivot?.x ?? .5,
+			y: sprite?.pivot?.y ?? 0
 		};
 	}
 	const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
@@ -4649,13 +4647,13 @@ function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize
 		};
 	});
 	return {
-		update(ent, cameraYaw, tileSize, ceilingH) {
+		update(ent, cameraYaw, tileSize, ceilingH, floorY) {
 			const wx = (ent.x + .5) * tileSize;
 			const wz = (ent.z + .5) * tileSize;
 			const wy = (1 - (spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : {
 				x: .5,
-				y: .5
-			}).y) * tileSize;
+				y: 0
+			}).y) * tileSize + floorY;
 			group.position.set(wx, wy, wz);
 			group.rotation.set(0, cameraYaw, 0, "YXZ");
 			const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
@@ -4952,7 +4950,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	const fogHex = options.fogColor ?? "#000000";
 	const lerpFactor = options.lerpFactor ?? .18;
 	const offsetStep = tileSize * (options.offsetFactor ?? .5);
-	let snapToFloor = options.snapCameraToFloor ?? false;
+	options.snapCameraToFloor;
 	const fogColor = new THREE.Color(fogHex);
 	const packedAtlas = options.packedAtlas;
 	const resolver = options.tileNameResolver;
@@ -5979,15 +5977,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		tgtX = (game.player.x + .5) * tileSize;
 		tgtZ = (game.player.z + .5) * tileSize;
 		tgtYaw = game.player.facing;
-		if (snapToFloor) {
-			const outputs = game.dungeon.outputs;
-			const floorOffData = outputs?.textures.floorHeightOffset?.image.data;
-			if (floorOffData && outputs) {
-				const floorVal = floorOffData[game.player.z * outputs.width + game.player.x] ?? 128;
-				const floorOffset = floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
-				tgtY = tileSize * eyeHeightFactor + floorOffset;
-			} else tgtY = tileSize * eyeHeightFactor;
-		} else tgtY = tileSize * eyeHeightFactor;
+		tgtY = tileSize * eyeHeightFactor + getFloorOffset(game.player.x, game.player.z);
 		if (!initialized) {
 			curX = tgtX;
 			curZ = tgtZ;
@@ -6025,12 +6015,13 @@ function createDungeonRenderer(element, game, options = {}) {
 				if (!e.alive) continue;
 				const dx = (e.x + .5) * tileSize - curX;
 				const dz = (e.z + .5) * tileSize - curZ;
+				const floorY = getFloorOffset(e.x, e.z);
 				const inRange = dx * dx + dz * dz <= fogFar2;
 				if (e.spriteMap) {
 					const handle = billboardMap.get(e.id);
 					if (handle) {
 						handle.setVisible(inRange);
-						if (inRange) handle.update(e, curYaw, tileSize, ceilingH);
+						if (inRange) handle.update(e, curYaw, tileSize, ceilingH, floorY);
 					}
 				} else {
 					const mesh = entityMeshMap.get(e.id);
@@ -6041,15 +6032,23 @@ function createDungeonRenderer(element, game, options = {}) {
 				if (!obj.spriteMap) continue;
 				const dx = (obj.x + .5) * tileSize - curX;
 				const dz = (obj.z + .5) * tileSize - curZ;
+				const floorY = getFloorOffset(obj.x, obj.z);
 				const inRange = dx * dx + dz * dz <= fogFar2;
 				const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
 				if (handle) {
 					handle.setVisible(inRange);
-					if (inRange) handle.update(obj, curYaw, tileSize, ceilingH);
+					if (inRange) handle.update(obj, curYaw, tileSize, ceilingH, floorY);
 				}
 			}
 		}
 		glRenderer.render(scene, camera);
+	}
+	function getFloorOffset(tx, tz) {
+		const outputs = game.dungeon.outputs;
+		const floorOffData = outputs?.textures.floorHeightOffset?.image.data;
+		if (!floorOffData || !outputs) return 0;
+		const floorVal = floorOffData[tz * outputs.width + tx] ?? 128;
+		return floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
 	}
 	function resize() {
 		const w = element.clientWidth || 1;
@@ -6253,7 +6252,6 @@ function createDungeonRenderer(element, game, options = {}) {
 			}
 		},
 		setSnapCameraToFloor(enabled) {
-			snapToFloor = enabled;
 			tgtY = tileSize * eyeHeightFactor;
 			if (enabled && initialized) {
 				const outputs = game.dungeon.outputs;

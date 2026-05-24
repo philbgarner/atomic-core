@@ -56,7 +56,7 @@ export interface SpriteMap {
 }
 export interface BillboardHandle {
     /** Update position, orientation, and angle-variant uniforms each frame. */
-    update(entity: EntityBase, cameraYaw: number, tileSize: number, ceilingH: number): void;
+    update(entity: EntityBase, cameraYaw: number, tileSize: number, ceilingH: number, floorY: number): void;
     /** Show or hide all meshes in this billboard without disposing GPU resources. */
     setVisible(visible: boolean): void;
     /** Remove meshes from scene and dispose GPU resources. */
