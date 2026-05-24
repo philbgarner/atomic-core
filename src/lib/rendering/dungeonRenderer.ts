@@ -1759,15 +1759,17 @@ export function createDungeonRenderer(
 						}
 					}
 					if (isOpenSky) {
-						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, Math.PI);
+						/* this is a duplicate, faces will fight with textures otherwise
+						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, Math.PI);
 						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0);
-						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI);
+						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, -HALF_PI);
 						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI);
+						*/
 					} else {
-						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, Math.PI);
-						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0);
-						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI);
-						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI);
+						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, 0);
+						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
+						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, +HALF_PI);
+						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
 					}
 				}
 
@@ -2092,10 +2094,10 @@ export function createDungeonRenderer(
 			curYaw += dy * k;
 
 			// fix camera position to center of tile
-			const PULLBACK=0.5*tileSize;
+			const PULLBACK = 0.5 * tileSize;
 			const backX = Math.sin(curYaw) * PULLBACK;
 			const backZ = Math.cos(curYaw) * PULLBACK;
-			camera.position.set(curX+backX, curY, curZ+backZ);
+			camera.position.set(curX + backX, curY, curZ + backZ);
 			camera.rotation.set(-0.1, curYaw, 0, "YXZ");	// look down slightly to see floor!
 
 			// Update camera forward direction for directional surface lighting.
