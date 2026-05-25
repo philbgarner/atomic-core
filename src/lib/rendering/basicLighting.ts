@@ -53,7 +53,7 @@ attribute vec4 aUvRect;
 //   .y = uvRotation     — UV rotation index: 0=0°, 1=90°CCW, 2=180°, 3=270°CCW
 //   .z = uvHeightScale  — fraction of tile height to show, top-aligned [0,1];
 //                         skirt panels use < 1 so brick rows keep aspect ratio
-attribute vec3 aSurface;
+attribute vec4 aSurface;
 
 // ── Per-instance overlay / lighting data ─────────────────────────────────────
 // Pre-baked ambient-occlusion corner values in face-local UV order:
@@ -119,7 +119,8 @@ void main() {
   // Scale the Y axis of the UV BEFORE any rotation so the clip always acts on
   // the physical vertical axis of the face, regardless of rotation.
   float hs = clamp(aSurface.z, 0.0, 1.0);
-  vec2 localUv = vec2(uv.x, uv.y * hs);
+  float uvOffset = aSurface.w;
+  vec2 localUv = vec2(uv.x, uv.y * hs + uvOffset);
 
   // ── 2. Select per-corner AO value for this vertex ─────────────────────────
   // aAoCorners stores one float per corner in face-local UV space.

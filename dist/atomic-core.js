@@ -3908,7 +3908,7 @@ attribute vec4 aUvRect;
 //   .y = uvRotation     — UV rotation index: 0=0°, 1=90°CCW, 2=180°, 3=270°CCW
 //   .z = uvHeightScale  — fraction of tile height to show, top-aligned [0,1];
 //                         skirt panels use < 1 so brick rows keep aspect ratio
-attribute vec3 aSurface;
+attribute vec4 aSurface;
 
 // ── Per-instance overlay / lighting data ─────────────────────────────────────
 // Pre-baked ambient-occlusion corner values in face-local UV order:
@@ -3974,7 +3974,8 @@ void main() {
   // Scale the Y axis of the UV BEFORE any rotation so the clip always acts on
   // the physical vertical axis of the face, regardless of rotation.
   float hs = clamp(aSurface.z, 0.0, 1.0);
-  vec2 localUv = vec2(uv.x, uv.y * hs);
+  float uvOffset = aSurface.w;
+  vec2 localUv = vec2(uv.x, uv.y * hs + uvOffset);
 
   // ── 2. Select per-corner AO value for this vertex ─────────────────────────
   // aAoCorners stores one float per corner in face-local UV space.
@@ -4881,7 +4882,7 @@ function makeFaceMatrix(x, y, z, rx, ry, rz, w, h) {
 * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
 * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
 */
-function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners, faceNormals, rowIndexes) {
+function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners, faceNormals, rowIndexes, uvOffsets) {
 	const geo = new THREE.PlaneGeometry(1, 1);
 	if (useAtlas) {
 		const n = matrices.length;
@@ -4893,13 +4894,14 @@ function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets
 			uvRectArr[i * 4 + 3] = r.h;
 		});
 		geo.setAttribute("aUvRect", new THREE.InstancedBufferAttribute(uvRectArr, 4));
-		const surfaceArr = new Float32Array(n * 3);
+		const surfaceArr = new Float32Array(n * 4);
 		for (let i = 0; i < n; i++) {
-			surfaceArr[i * 3] = heightOffsets ? heightOffsets[i] ?? 0 : 0;
-			surfaceArr[i * 3 + 1] = uvRotations ? uvRotations[i] ?? 0 : 0;
-			surfaceArr[i * 3 + 2] = uvHeightScales ? uvHeightScales[i] ?? 1 : 1;
+			surfaceArr[i * 4] = heightOffsets ? heightOffsets[i] ?? 0 : 0;
+			surfaceArr[i * 4 + 1] = uvRotations ? uvRotations[i] ?? 0 : 0;
+			surfaceArr[i * 4 + 2] = uvHeightScales ? uvHeightScales[i] ?? 1 : 1;
+			surfaceArr[i * 4 + 3] = uvOffsets ? uvOffsets[i] ?? 0 : 0;
 		}
-		geo.setAttribute("aSurface", new THREE.InstancedBufferAttribute(surfaceArr, 3));
+		geo.setAttribute("aSurface", new THREE.InstancedBufferAttribute(surfaceArr, 4));
 		const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1);
 		geo.setAttribute("aAoCorners", new THREE.InstancedBufferAttribute(aoArr, 4));
 		const cellFaceArr = new Float32Array(n * 4);
@@ -5454,6 +5456,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		const floorWallSkirtRects = [];
 		const floorWallSkirtRots = [];
 		const floorWallSkirtHeightScales = [];
+		const floorWallSkirtUvOffsets = [];
 		const floorWallSkirtRowIndexes = [];
 		const floorWallSkirtAo = [];
 		const ceilWallSkirtEdges = [];
@@ -5667,7 +5670,9 @@ function createDungeonRenderer(element, game, options = {}) {
 						floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
 						floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 						floorWallSkirtRots.push(s.rotation ?? 0);
-						floorWallSkirtHeightScales.push(rem / tileSize);
+						const scale = rem / tileSize;
+						floorWallSkirtHeightScales.push(scale);
+						floorWallSkirtUvOffsets.push(1 - scale);
 						floorWallSkirtRowIndexes.push(fullPanels);
 						floorWallSkirtCellMap.push({
 							cx,
@@ -5838,7 +5843,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		meshToCellMap.set(ceilEdgeMesh, ceilEdgeCellMap);
 		if (floorWallSkirtEdges.length > 0) {
 			const [fwsCX, fwsCZ] = cellArrays(floorWallSkirtCellMap);
-			floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, aoEnabled && floorWallSkirtAo.length ? new Float32Array(floorWallSkirtAo) : void 0, void 0, floorWallSkirtRowIndexes);
+			floorWallSkirtMesh = buildInstancedMesh(floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas, void 0, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ, aoEnabled && floorWallSkirtAo.length ? new Float32Array(floorWallSkirtAo) : void 0, void 0, floorWallSkirtRowIndexes, floorWallSkirtUvOffsets);
 			scene.add(floorWallSkirtMesh);
 			meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
 		}

@@ -560,6 +560,7 @@ function buildInstancedMesh(
 	aoCorners?: Float32Array,
 	faceNormals?: Float32Array,
 	rowIndexes?: number[],
+	uvOffsets?: number[],
 ): THREE.InstancedMesh {
 	const geo = new THREE.PlaneGeometry(1, 1);
 
@@ -576,14 +577,15 @@ function buildInstancedMesh(
 		});
 		geo.setAttribute("aUvRect", new THREE.InstancedBufferAttribute(uvRectArr, 4));
 
-		// aSurface (vec3, 1 slot): .x=heightOffset, .y=uvRotation, .z=uvHeightScale.
-		const surfaceArr = new Float32Array(n * 3);
+		// aSurface (vec4, 1 slot): .x=heightOffset, .y=uvRotation, .z=uvHeightScale.
+		const surfaceArr = new Float32Array(n * 4);
 		for (let i = 0; i < n; i++) {
-			surfaceArr[i * 3] = heightOffsets ? (heightOffsets[i] ?? 0) : 0;
-			surfaceArr[i * 3 + 1] = uvRotations ? (uvRotations[i] ?? 0) : 0;
-			surfaceArr[i * 3 + 2] = uvHeightScales ? (uvHeightScales[i] ?? 1.0) : 1.0;
+			surfaceArr[i * 4] = heightOffsets ? (heightOffsets[i] ?? 0) : 0;
+			surfaceArr[i * 4 + 1] = uvRotations ? (uvRotations[i] ?? 0) : 0;
+			surfaceArr[i * 4 + 2] = uvHeightScales ? (uvHeightScales[i] ?? 1.0) : 1.0;
+			surfaceArr[i * 4 + 3] = uvOffsets ? (uvOffsets[i] ?? 0.0) : 0.0;
 		}
-		geo.setAttribute("aSurface", new THREE.InstancedBufferAttribute(surfaceArr, 3));
+		geo.setAttribute("aSurface", new THREE.InstancedBufferAttribute(surfaceArr, 4));
 
 		// aAoCorners (vec4, 1 slot): [tl, tr, bl, br] in [0,1]; all-ones = fully lit.
 		const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1.0);
@@ -1390,6 +1392,7 @@ export function createDungeonRenderer(
 		const floorWallSkirtRects: UvRect[] = [];
 		const floorWallSkirtRots: number[] = [];
 		const floorWallSkirtHeightScales: number[] = [];
+		const floorWallSkirtUvOffsets: number[] = [];
 		const floorWallSkirtRowIndexes: number[] = [];
 		const floorWallSkirtAo: number[] = [];
 		const ceilWallSkirtEdges: THREE.Matrix4[] = [];
@@ -1618,6 +1621,11 @@ export function createDungeonRenderer(
 				// Wall-adjacent floor skirts: when floor is sunken below y=0 and the
 				// neighbour is solid, fill the gap between y=0 and the sunken floor
 				// using the wall tile repeated downward.
+
+				// this (<128) is a BUG but a useful one, so i left it.
+				// floors may be higher than 128 but will end up floating if they are -
+				// this can be used to create deliberate crevices or floating blocks potentially.
+				// chances are there will be other "surface not rendering" problems which make it unusable. i haven't tested it.
 				if (floorVal < 128 && floorVal !== 0) {
 					const gapH = (128 - floorVal) * offsetStep;
 					function addWallFloorSkirt(
@@ -1635,7 +1643,7 @@ export function createDungeonRenderer(
 							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
-							floorWallSkirtHeightScales.push(1.0);
+							floorWallSkirtHeightScales.push(1.0);							
 							floorWallSkirtRowIndexes.push(i);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
@@ -1645,7 +1653,9 @@ export function createDungeonRenderer(
 							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
-							floorWallSkirtHeightScales.push(rem / tileSize);
+							const scale = rem / tileSize;
+							floorWallSkirtHeightScales.push(scale);	// was rem / tileSize);
+							floorWallSkirtUvOffsets.push(1.0 - scale);
 							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
@@ -1813,7 +1823,7 @@ export function createDungeonRenderer(
 		floorMesh = buildInstancedMesh(
 			floors, floorRects, floorMat, !!packedAtlas,
 			new Float32Array(floorOffsets), undefined, undefined, floorCX, floorCZ,
-			aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined,
+			aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined, 
 		);
 		scene.add(floorMesh);
 		meshToCellMap.set(floorMesh, floorCellMap);
@@ -1821,7 +1831,7 @@ export function createDungeonRenderer(
 		ceilMesh = buildInstancedMesh(
 			ceils, ceilRects, ceilMat, !!packedAtlas,
 			new Float32Array(ceilOffsets), undefined, undefined, ceilCX, ceilCZ,
-			aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined,
+			aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined, 
 		);
 		scene.add(ceilMesh);
 		meshToCellMap.set(ceilMesh, ceilCellMap);
@@ -1857,7 +1867,7 @@ export function createDungeonRenderer(
 				floorWallSkirtEdges, floorWallSkirtRects, floorWallSkirtMat, !!packedAtlas,
 				undefined, floorWallSkirtRots, floorWallSkirtHeightScales, fwsCX, fwsCZ,
 				aoEnabled && floorWallSkirtAo.length ? new Float32Array(floorWallSkirtAo) : undefined,
-				undefined, floorWallSkirtRowIndexes,
+				undefined, floorWallSkirtRowIndexes, floorWallSkirtUvOffsets,
 			);
 			scene.add(floorWallSkirtMesh);
 			meshToCellMap.set(floorWallSkirtMesh, floorWallSkirtCellMap);
