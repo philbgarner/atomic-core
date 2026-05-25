@@ -1643,7 +1643,8 @@ export function createDungeonRenderer(
 							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
-							floorWallSkirtHeightScales.push(1.0);							
+							floorWallSkirtHeightScales.push(1.0);	
+							floorWallSkirtUvOffsets.push(0);						
 							floorWallSkirtRowIndexes.push(i);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);

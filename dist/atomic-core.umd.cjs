@@ -5684,6 +5684,7 @@ void main() {
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							floorWallSkirtHeightScales.push(1);
+							floorWallSkirtUvOffsets.push(0);
 							floorWallSkirtRowIndexes.push(i);
 							floorWallSkirtCellMap.push({
 								cx,
