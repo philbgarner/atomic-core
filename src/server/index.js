@@ -107,9 +107,9 @@ function isOccupied(room, x, y, excludeId) {
   return false
 }
 
-/** Return the first alive monster at grid (x, z) or null. */
+/** Return the first alive, attackable (non-decoration) entity at grid (x, z) or null. */
 function monsterAt(room, x, z) {
-  return room.monsters.find(m => m.alive && m.x === x && m.z === z) ?? null
+  return room.monsters.find(m => m.alive && m.x === x && m.z === z && m.kind !== 'decoration') ?? null
 }
 
 /** Return the first alive player at grid (x, y) or null. */
@@ -239,6 +239,9 @@ function applyAction(room, playerId, action) {
     const ny = player.y + Number(dy)
     if (!isWalkable(room, nx, ny)) return false
     if (isOccupied(room, nx, ny, playerId)) return false
+
+    // Block movement for any entity flagged as blocksMove (regardless of alive state).
+    if (room.monsters.some(m => m.blocksMove && m.x === nx && m.z === ny)) return false
 
     // Attack monster if one occupies the target cell (ny == monster z axis).
     const monster = monsterAt(room, nx, ny)
