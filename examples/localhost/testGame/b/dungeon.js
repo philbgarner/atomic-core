@@ -190,8 +190,8 @@ export function makeDungeon() {
 
       // Puddle near room centre
       if (Math.abs(x - room.cx) + Math.abs(y - room.cz) <= 1) {
-		return { floor: ['natural/fx_burning'], wall: ['natural/fx_burning'] };
-	}
+        return { floor: ["natural/fx_burning"], wall: ["natural/fx_burning"] };
+      }
 
       return null;
     },
@@ -235,29 +235,33 @@ export function makeDungeon() {
   window.renderer = renderer;
 
   attachDecorator(window.game, {
-	onDecorate({ dungeon, roomId, x, y }) {
-		let room = dungeon.rooms[roomId];
-		if (!room) return null;
+    onDecorate({ dungeon, roomId, x, y }) {
+      let room = dungeon.rooms[roomId];
+      if (!room) return null;
 
-		if (Math.random() < 0.25) {
-			const e = createEntity({	
-				id: `decor${x}${y}`,
-				type: "decor",
-				kind: 'decoration', faction: 'none',
-				spriteMap: {frameSize: { w: 64, h: 64 },layers: [{ tile: "natural/rose", opacity: 1.0 },],},
-				x: x,
-				z: y,
-				blocksMove: false,
-				yaw: 1,       // rotation in radians
-				scale: 2,       // uniform scale multiplier
-			});
-			globs.entities.push(e);
-			return e;
-		}
+      if (Math.random() < 0.25) {
+        const e = createEntity({
+          id: `decor${x}${y}`,
+          type: "decor",
+          kind: "decoration",
+          faction: "none",
+          spriteMap: {
+            frameSize: { w: 64, h: 64 },
+            layers: [{ tile: "natural/rose", opacity: 1.0 }],
+          },
+          x: x,
+          z: y,
+          blocksMove: true,
+          yaw: 1, // rotation in radians
+          scale: 2, // uniform scale multiplier
+        });
+        globs.entities.push(e);
+        return e;
+      }
 
-		return null;
-	},
-});
+      return null;
+    },
+  });
 }
 
 function makeFaceUrl(w, h, stops, starCount = 0) {
@@ -321,15 +325,22 @@ export async function buildSkyboxFaces() {
   return { px, nx, py, ny, pz, nz };
 }
 
-const IS_WALKABLE = 0x01;	// 	Normal volitional movement (walk/run) is permitted
-const IS_BLOCKED = 0x02;	// 	No entity may enter by any means — forced or voluntary
+const IS_WALKABLE = 0x01; // 	Normal volitional movement (walk/run) is permitted
+const IS_BLOCKED = 0x02; // 	No entity may enter by any means — forced or voluntary
 const IS_LIGHT_PASSABLE = 0x04; // 	Light and line-of - sight rays pass through
-const VOID = 0;		// solid	
-const FLOOR = 1;	// not-solid
-const WALL = 2;		// solid
-const DOOR = 3;		// solid
-const DECOR = 5;	// not-solid
-const colliderflags=[IS_BLOCKED, IS_WALKABLE|IS_LIGHT_PASSABLE, IS_BLOCKED, IS_BLOCKED, null, IS_WALKABLE|IS_LIGHT_PASSABLE];
+const VOID = 0; // solid
+const FLOOR = 1; // not-solid
+const WALL = 2; // solid
+const DOOR = 3; // solid
+const DECOR = 5; // not-solid
+const colliderflags = [
+  IS_BLOCKED,
+  IS_WALKABLE | IS_LIGHT_PASSABLE,
+  IS_BLOCKED,
+  IS_BLOCKED,
+  null,
+  IS_WALKABLE | IS_LIGHT_PASSABLE,
+];
 
 // ---------------------------------------------------------------------------
 // Sky panel pass — run once after generate()
@@ -338,27 +349,27 @@ const colliderflags=[IS_BLOCKED, IS_WALKABLE|IS_LIGHT_PASSABLE, IS_BLOCKED, IS_B
 // no server sync is needed; the host sends the final solid map via initDungeon.
 // ---------------------------------------------------------------------------
 export function applySkyPanels() {
-	const outputs = window.game.dungeon.outputs;
-	if (!outputs) return;
-	const { textures } = outputs;
-	const dist = textures.distanceToWall.image.data;
-	const rng = makeRng(outputs.seed);
+  const outputs = window.game.dungeon.outputs;
+  if (!outputs) return;
+  const { textures } = outputs;
+  const dist = textures.distanceToWall.image.data;
+  const rng = makeRng(outputs.seed);
 
-	for (let cz = 0; cz < DUNGEON_CONFIG.height; cz++) {
-		for (let cx = 0; cx < DUNGEON_CONFIG.width; cx++) {
-			const i = cz * DUNGEON_CONFIG.width + cx;
-			const r = rng() < 0.25 ? WALL : FLOOR;
-			const d = dist[i]; // distance to nearest wall (BFS steps)
-			const opts = {
-				solid: (colliderflags[r] & IS_BLOCKED) ? 1 : 0,
-				colliderFlags: colliderflags[r],
-				skyPanelCount: 2,
-				ceilingHeightOffset: 0,
-				applyTextureTo: ['floor', 'wall'],
-				floorHeightOffset: d > 1 ? 129 - (rng() * 4) : 129 - (rng() * 2),
-				skipSync: true,
-			};
-			window.game.dungeon.set(cx, cz, "fantasy/flagstone_floor_stone", opts);
-		}
-	}
+  for (let cz = 0; cz < DUNGEON_CONFIG.height; cz++) {
+    for (let cx = 0; cx < DUNGEON_CONFIG.width; cx++) {
+      const i = cz * DUNGEON_CONFIG.width + cx;
+      const r = rng() < 0.25 ? WALL : FLOOR;
+      const d = dist[i]; // distance to nearest wall (BFS steps)
+      const opts = {
+        solid: colliderflags[r] & IS_BLOCKED ? 1 : 0,
+        colliderFlags: colliderflags[r],
+        skyPanelCount: 2,
+        ceilingHeightOffset: 0,
+        applyTextureTo: ["floor", "wall"],
+        floorHeightOffset: d > 1 ? 129 - rng() * 4 : 129 - rng() * 2,
+        skipSync: true,
+      };
+      window.game.dungeon.set(cx, cz, "fantasy/flagstone_floor_stone", opts);
+    }
+  }
 }
