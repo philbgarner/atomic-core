@@ -917,7 +917,9 @@ export function createDungeonRenderer(
 			const u = mat.uniforms;
 			if (u['uBaseOverride']) u['uBaseOverride'].value = tex;
 		}
+		set(ceilEdgeMat, overrideCeilSkirt.tex);
 		set(ceilWallSkirtMat, overrideCeilSkirt.tex);
+		set(floorEdgeMat, overrideFloorSkirt.tex);
 		set(floorWallSkirtMat, overrideFloorSkirt.tex);
 		set(skyPanelMat, overrideSkyPanels.tex);
 		set(ceilingPanelMat, overrideCeilPanels.tex);
