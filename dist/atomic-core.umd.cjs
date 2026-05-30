@@ -3432,9 +3432,9 @@
 			internal.turnState = tickUntilPlayer(internal.turnState, deps);
 		}
 		syncAllEntitiesFromTurnState(internal);
-		updateFovAndMinimap(internal);
 		await internal.events.emit("generate");
 		internal.events.emit("turn", { turn: internal.turnCounter });
+		updateFovAndMinimap(internal);
 		if (!internal.options.transport) internal.generationReady = true;
 	}
 	function drawMinimap(internal, canvas, opts) {
@@ -5278,7 +5278,9 @@ void main() {
 				const u = mat.uniforms;
 				if (u["uBaseOverride"]) u["uBaseOverride"].value = tex;
 			}
+			set(ceilEdgeMat, overrideCeilSkirt.tex);
 			set(ceilWallSkirtMat, overrideCeilSkirt.tex);
+			set(floorEdgeMat, overrideFloorSkirt.tex);
 			set(floorWallSkirtMat, overrideFloorSkirt.tex);
 			set(skyPanelMat, overrideSkyPanels.tex);
 			set(ceilingPanelMat, overrideCeilPanels.tex);
