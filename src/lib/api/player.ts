@@ -74,7 +74,7 @@ export function createPlayerHandle(state: PlayerState): PlayerHandle {
     },
 
     rotate(angle) {
-      return { kind: "interact", meta: { rotate: angle } };
+      return { kind: "rotate", meta: { rotate: angle } };
     },
 
     interact(entityId) {

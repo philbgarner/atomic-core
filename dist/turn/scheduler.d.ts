@@ -1,5 +1,6 @@
 import { ActorId } from './types';
 export declare class TurnScheduler {
+    private generation;
     private heap;
     private now;
     private seq;

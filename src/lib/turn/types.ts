@@ -56,7 +56,7 @@ export type MonsterActor = ActorBase & {
   lastKnownPlayerPos: { x: number; y: number } | null;
 };
 
-export type TurnActionKind = "wait" | "move" | "attack" | "interact";
+export type TurnActionKind = "wait" | "move" | "attack" | "interact" | "rotate";
 
 export type TurnAction = {
   kind: TurnActionKind;

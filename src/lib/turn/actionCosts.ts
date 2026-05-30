@@ -13,6 +13,7 @@ const ACTION_MULTIPLIER: Record<TurnAction["kind"], number> = {
   move: 1.0,
   attack: 2.0,
   interact: 1.5,
+  rotate: 0,	// rotate is free
 };
 
 /**

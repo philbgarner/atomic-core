@@ -47,7 +47,7 @@ export type MonsterActor = ActorBase & {
         y: number;
     } | null;
 };
-export type TurnActionKind = "wait" | "move" | "attack" | "interact";
+export type TurnActionKind = "wait" | "move" | "attack" | "interact" | "rotate";
 export type TurnAction = {
     kind: TurnActionKind;
     dx?: number;

@@ -1686,22 +1686,20 @@ var AtomicCore = (function(exports, three) {
 	//#endregion
 	//#region src/lib/turn/scheduler.ts
 	var MinHeap$1 = class {
-		constructor() {
+		constructor(compare) {
+			this.compare = compare;
 			this._heap = [];
 		}
 		get size() {
 			return this._heap.length;
 		}
-		push(priority, value) {
-			this._heap.push({
-				priority,
-				value
-			});
+		push(value) {
+			this._heap.push(value);
 			this._bubbleUp(this._heap.length - 1);
 		}
 		pop() {
 			if (this._heap.length === 0) return void 0;
-			const top = this._heap[0].value;
+			const top = this._heap[0];
 			const last = this._heap.pop();
 			if (this._heap.length > 0) {
 				this._heap[0] = last;
@@ -1712,10 +1710,8 @@ var AtomicCore = (function(exports, three) {
 		_bubbleUp(i) {
 			while (i > 0) {
 				const parent = i - 1 >> 1;
-				if (this._heap[parent].priority <= this._heap[i].priority) break;
-				const tmp = this._heap[parent];
-				this._heap[parent] = this._heap[i];
-				this._heap[i] = tmp;
+				if (this.compare(this._heap[parent], this._heap[i]) <= 0) break;
+				[this._heap[parent], this._heap[i]] = [this._heap[i], this._heap[parent]];
 				i = parent;
 			}
 		}
@@ -1725,32 +1721,34 @@ var AtomicCore = (function(exports, three) {
 				let smallest = i;
 				const l = 2 * i + 1;
 				const r = 2 * i + 2;
-				if (l < n && this._heap[l].priority < this._heap[smallest].priority) smallest = l;
-				if (r < n && this._heap[r].priority < this._heap[smallest].priority) smallest = r;
+				if (l < n && this.compare(this._heap[l], this._heap[smallest]) < 0) smallest = l;
+				if (r < n && this.compare(this._heap[r], this._heap[smallest]) < 0) smallest = r;
 				if (smallest === i) break;
-				const tmp = this._heap[smallest];
-				this._heap[smallest] = this._heap[i];
-				this._heap[i] = tmp;
+				[this._heap[smallest], this._heap[i]] = [this._heap[i], this._heap[smallest]];
 				i = smallest;
 			}
 		}
 	};
 	var TurnScheduler = class {
 		constructor() {
-			this.heap = new MinHeap$1();
+			this.generation = 0;
+			this.heap = new MinHeap$1((a, b) => {
+				if (a.generation !== b.generation) return a.generation - b.generation;
+				if (a.at !== b.at) return a.at - b.at;
+				return a.seq - b.seq;
+			});
 			this.now = 0;
 			this.seq = 0;
 			this.cancelled = /* @__PURE__ */ new Set();
 		}
 		/** Schedule an actor to act at now + delay. */
 		add(actorId, delay) {
-			const at = this.now + delay;
-			const seq = this.seq++;
-			const priority = at + seq % 1e6 / 1e6;
-			this.heap.push(priority, {
+			const generation = delay === 0 ? --this.generation : 0;
+			this.heap.push({
 				actorId,
-				at,
-				seq
+				at: this.now + delay,
+				seq: this.seq++,
+				generation
 			});
 		}
 		/** Lazily remove an actor from the schedule. */
@@ -1797,7 +1795,8 @@ var AtomicCore = (function(exports, three) {
 		wait: 1,
 		move: 1,
 		attack: 2,
-		interact: 1.5
+		interact: 1.5,
+		rotate: 0
 	};
 	/**
 	* Compute the scheduler delay for an actor with the given speed performing the given action.
@@ -1885,14 +1884,24 @@ var AtomicCore = (function(exports, three) {
 	*/
 	function commitPlayerAction(state, deps, action) {
 		if (!state.awaitingPlayerInput) return state;
-		const cost = deps.computeCost(state.playerId, action);
+		const cost_time = deps.computeCost(state.playerId, action).time;
 		let next = deps.applyAction(state, state.playerId, action, deps);
+		if (action.kind === "rotate") {
+			const t = next.scheduler.getNow();
+			deps.onTimeAdvanced?.({
+				prevTime: t,
+				nextTime: t,
+				activeActorId: state.playerId,
+				state: next
+			});
+			return next;
+		}
 		next = {
 			...next,
 			awaitingPlayerInput: false,
 			activeActorId: null
 		};
-		next.scheduler.reschedule(state.playerId, cost.time);
+		next.scheduler.reschedule(state.playerId, cost_time);
 		return tickUntilPlayer(next, deps);
 	}
 	/**
@@ -2524,7 +2533,7 @@ var AtomicCore = (function(exports, three) {
 			},
 			rotate(angle) {
 				return {
-					kind: "interact",
+					kind: "rotate",
 					meta: { rotate: angle }
 				};
 			},
@@ -2776,7 +2785,7 @@ var AtomicCore = (function(exports, three) {
 	}
 	function makeApplyAction(internal, combatOpts, onAnimEvent) {
 		return function customApplyAction(state, actorId, action, deps) {
-			if (action.kind === "interact" && action.meta?.rotate !== void 0) {
+			if (action.kind === "rotate" && action.meta?.rotate !== void 0) {
 				if (actorId === internal.playerActorId) internal.playerState.facing = internal.playerState.facing + action.meta.rotate;
 				return state;
 			}
@@ -3172,16 +3181,14 @@ var AtomicCore = (function(exports, three) {
 					computeCost: (actorId, a) => defaultComputeCost(actorId, a, internal.turnState.actors),
 					applyAction: makeApplyAction(internal, internal.options.combat, onAnimEvent),
 					onTimeAdvanced: ({ nextTime, prevTime, state }) => {
-						if (nextTime > prevTime) {
-							internal.turnCounter += 1;
-							const playerActor = state.actors[internal.playerActorId];
-							if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
-							internal.events.emit("turn", { turn: internal.turnCounter });
-							internal.options.turns?.onAdvance?.({
-								turn: internal.turnCounter,
-								dt: nextTime - prevTime
-							});
-						}
+						if (nextTime > prevTime) internal.turnCounter += 1;
+						const playerActor = state.actors[internal.playerActorId];
+						if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
+						internal.events.emit("turn", { turn: internal.turnCounter });
+						internal.options.turns?.onAdvance?.({
+							turn: internal.turnCounter,
+							dt: nextTime - prevTime
+						});
 					}
 				};
 				internal.turnState = commitPlayerAction(internal.turnState, deps, action);
@@ -3478,7 +3485,6 @@ var AtomicCore = (function(exports, three) {
 	* after attaching callbacks.
 	*/
 	function createGame(canvas, options) {
-		console.trace("[minimap] createGame()", Date.now());
 		const events = createEventEmitter();
 		const factions = createFactionRegistry();
 		const playerOpts = options.player ?? {};

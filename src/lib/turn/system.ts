@@ -12,11 +12,11 @@
 import { TurnScheduler } from "./scheduler";
 import { actionDelay } from "./actionCosts";
 import type {
-  ActorId,
-  PlayerActor,
-  MonsterActor,
-  TurnAction,
-  ActionCost,
+	ActorId,
+	PlayerActor,
+	MonsterActor,
+	TurnAction,
+	ActionCost,
 } from "./types";
 import type { TurnEvent } from "./events";
 
@@ -25,9 +25,9 @@ import type { TurnEvent } from "./events";
 // ---------------------------------------------------------------------------
 
 export type DecideResult = {
-  action: TurnAction;
-  /** Partial patch applied to the monster before the action executes. */
-  monsterPatch: Partial<MonsterActor>;
+	action: TurnAction;
+	/** Partial patch applied to the monster before the action executes. */
+	monsterPatch: Partial<MonsterActor>;
 };
 
 // ---------------------------------------------------------------------------
@@ -35,11 +35,11 @@ export type DecideResult = {
 // ---------------------------------------------------------------------------
 
 export type TurnSystemState = {
-  actors: Record<ActorId, PlayerActor | MonsterActor>;
-  playerId: ActorId;
-  scheduler: TurnScheduler;
-  awaitingPlayerInput: boolean;
-  activeActorId: ActorId | null;
+	actors: Record<ActorId, PlayerActor | MonsterActor>;
+	playerId: ActorId;
+	scheduler: TurnScheduler;
+	awaitingPlayerInput: boolean;
+	activeActorId: ActorId | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -47,32 +47,32 @@ export type TurnSystemState = {
 // ---------------------------------------------------------------------------
 
 export type TurnSystemDeps = {
-  isWalkable: (x: number, y: number) => boolean;
-  /** AI callback: decide what a monster does this turn. */
-  monsterDecide: (state: TurnSystemState, monsterId: ActorId) => DecideResult;
-  /** Cost callback: how much time does this action cost? */
-  computeCost: (actorId: ActorId, action: TurnAction) => ActionCost;
-  /** Apply an action: returns new TurnSystemState. */
-  applyAction: (
-    state: TurnSystemState,
-    actorId: ActorId,
-    action: TurnAction,
-    deps: TurnSystemDeps,
-  ) => TurnSystemState;
-  /**
-   * Called whenever the scheduler advances to a new time (between actor turns).
-   */
-  onTimeAdvanced?: (args: {
-    prevTime: number;
-    nextTime: number;
-    activeActorId: ActorId;
-    state: TurnSystemState;
-  }) => void;
-  /**
-   * Emit a game event (damage, death, xp gain, etc.) to the React layer.
-   * Called synchronously — callers must NOT setState directly from here.
-   */
-  onEvent?: (event: TurnEvent) => void;
+	isWalkable: (x: number, y: number) => boolean;
+	/** AI callback: decide what a monster does this turn. */
+	monsterDecide: (state: TurnSystemState, monsterId: ActorId) => DecideResult;
+	/** Cost callback: how much time does this action cost? */
+	computeCost: (actorId: ActorId, action: TurnAction) => ActionCost;
+	/** Apply an action: returns new TurnSystemState. */
+	applyAction: (
+		state: TurnSystemState,
+		actorId: ActorId,
+		action: TurnAction,
+		deps: TurnSystemDeps,
+	) => TurnSystemState;
+	/**
+	 * Called whenever the scheduler advances to a new time (between actor turns).
+	 */
+	onTimeAdvanced?: (args: {
+		prevTime: number;
+		nextTime: number;
+		activeActorId: ActorId;
+		state: TurnSystemState;
+	}) => void;
+	/**
+	 * Emit a game event (damage, death, xp gain, etc.) to the React layer.
+	 * Called synchronously — callers must NOT setState directly from here.
+	 */
+	onEvent?: (event: TurnEvent) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -83,27 +83,27 @@ export type TurnSystemDeps = {
  * Build the initial TurnSystemState from a player + monster list.
  */
 export function createTurnSystemState(
-  player: PlayerActor,
-  monsters: MonsterActor[],
+	player: PlayerActor,
+	monsters: MonsterActor[],
 ): TurnSystemState {
-  const actors: Record<ActorId, PlayerActor | MonsterActor> = {};
-  const scheduler = new TurnScheduler();
+	const actors: Record<ActorId, PlayerActor | MonsterActor> = {};
+	const scheduler = new TurnScheduler();
 
-  actors[player.id] = player;
-  scheduler.add(player.id, actionDelay(player.speed, { kind: "move" }));
+	actors[player.id] = player;
+	scheduler.add(player.id, actionDelay(player.speed, { kind: "move" }));
 
-  for (const m of monsters) {
-    actors[m.id] = m;
-    scheduler.add(m.id, actionDelay(m.speed, { kind: "move" }));
-  }
+	for (const m of monsters) {
+		actors[m.id] = m;
+		scheduler.add(m.id, actionDelay(m.speed, { kind: "move" }));
+	}
 
-  return {
-    actors,
-    playerId: player.id,
-    scheduler,
-    awaitingPlayerInput: false,
-    activeActorId: null,
-  };
+	return {
+		actors,
+		playerId: player.id,
+		scheduler,
+		awaitingPlayerInput: false,
+		activeActorId: null,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -117,48 +117,48 @@ const MAX_MONSTER_TICKS_PER_CALL = 500;
  * Mutates the scheduler in-place; returns new state for actors/flags.
  */
 export function tickUntilPlayer(
-  state: TurnSystemState,
-  deps: TurnSystemDeps,
+	state: TurnSystemState,
+	deps: TurnSystemDeps,
 ): TurnSystemState {
-  let current: TurnSystemState = { ...state, awaitingPlayerInput: false, activeActorId: null };
-  let safetyCounter = 0;
+	let current: TurnSystemState = { ...state, awaitingPlayerInput: false, activeActorId: null };
+	let safetyCounter = 0;
 
-  while (safetyCounter++ < MAX_MONSTER_TICKS_PER_CALL) {
-    const prevT = current.scheduler.getNow();
-    const evt = current.scheduler.next();
-    if (!evt) break;
+	while (safetyCounter++ < MAX_MONSTER_TICKS_PER_CALL) {
+		const prevT = current.scheduler.getNow();
+		const evt = current.scheduler.next();
+		if (!evt) break;
 
-    const { actorId } = evt;
-    const nextT = evt.now;
+		const { actorId } = evt;
+		const nextT = evt.now;
 
-    if (nextT !== prevT) {
-      deps.onTimeAdvanced?.({ prevTime: prevT, nextTime: nextT, activeActorId: actorId, state: current });
-    }
+		if (nextT !== prevT) {
+			deps.onTimeAdvanced?.({ prevTime: prevT, nextTime: nextT, activeActorId: actorId, state: current });
+		}
 
-    const actor = current.actors[actorId];
-    if (!actor || !actor.alive) continue;
+		const actor = current.actors[actorId];
+		if (!actor || !actor.alive) continue;
 
-    // Player's turn — pause and hand control back to UI.
-    if (actorId === current.playerId) {
-      return { ...current, awaitingPlayerInput: true, activeActorId: actorId };
-    }
+		// Player's turn — pause and hand control back to UI.
+		if (actorId === current.playerId) {
+			return { ...current, awaitingPlayerInput: true, activeActorId: actorId };
+		}
 
-    // Monster's turn.
-    const { action, monsterPatch } = deps.monsterDecide(current, actorId);
-    const cost = deps.computeCost(actorId, action);
+		// Monster's turn.
+		const { action, monsterPatch } = deps.monsterDecide(current, actorId);
+		const cost = deps.computeCost(actorId, action);
 
-    if (Object.keys(monsterPatch).length > 0) {
-      current = {
-        ...current,
-        actors: { ...current.actors, [actorId]: { ...actor, ...monsterPatch } as MonsterActor },
-      };
-    }
+		if (Object.keys(monsterPatch).length > 0) {
+			current = {
+				...current,
+				actors: { ...current.actors, [actorId]: { ...actor, ...monsterPatch } as MonsterActor },
+			};
+		}
 
-    current = deps.applyAction(current, actorId, action, deps);
-    current.scheduler.reschedule(actorId, cost.time);
-  }
+		current = deps.applyAction(current, actorId, action, deps);
+		current.scheduler.reschedule(actorId, cost.time);
+	}
 
-  return current;
+	return current;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,18 +172,27 @@ export function tickUntilPlayer(
  * Precondition: state.awaitingPlayerInput === true
  */
 export function commitPlayerAction(
-  state: TurnSystemState,
-  deps: TurnSystemDeps,
-  action: TurnAction,
+	state: TurnSystemState,
+	deps: TurnSystemDeps,
+	action: TurnAction,
 ): TurnSystemState {
-  if (!state.awaitingPlayerInput) return state;
+	if (!state.awaitingPlayerInput) return state;
 
-  const cost = deps.computeCost(state.playerId, action);
-  let next = deps.applyAction(state, state.playerId, action, deps);
-  next = { ...next, awaitingPlayerInput: false, activeActorId: null };
-  next.scheduler.reschedule(state.playerId, cost.time);
+	const cost_time = deps.computeCost(state.playerId, action).time;
+	let next = deps.applyAction(state, state.playerId, action, deps);
 
-  return tickUntilPlayer(next, deps);
+	if (action.kind === "rotate") {
+		// when rotating, time does not advance, thus the turn counter remains static
+		const t=next.scheduler.getNow();
+		deps.onTimeAdvanced?.({ prevTime: t, nextTime: t, activeActorId: state.playerId, state: next });
+
+		return next;	// this *should* be correct..
+	}
+
+	next = { ...next, awaitingPlayerInput: false, activeActorId: null };
+	next.scheduler.reschedule(state.playerId, cost_time);
+
+	return tickUntilPlayer(next, deps);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,12 +203,12 @@ export function commitPlayerAction(
  * Default computeCost using actionDelay.
  */
 export function defaultComputeCost(
-  actorId: ActorId,
-  action: TurnAction,
-  actors: Record<ActorId, PlayerActor | MonsterActor>,
+	actorId: ActorId,
+	action: TurnAction,
+	actors: Record<ActorId, PlayerActor | MonsterActor>,
 ): ActionCost {
-  const actor = actors[actorId];
-  return { time: actionDelay(actor?.speed ?? 1, action) };
+	const actor = actors[actorId];
+	return { time: actionDelay(actor?.speed ?? 1, action) };
 }
 
 /**
@@ -208,35 +217,35 @@ export function defaultComputeCost(
  * register an ActionPipeline middleware (see api/actions.ts) for those.
  */
 export function defaultApplyAction(
-  state: TurnSystemState,
-  actorId: ActorId,
-  action: TurnAction,
-  deps: TurnSystemDeps,
+	state: TurnSystemState,
+	actorId: ActorId,
+	action: TurnAction,
+	deps: TurnSystemDeps,
 ): TurnSystemState {
-  if (action.kind !== "move" || action.dx == null || action.dy == null) return state;
+	if (action.kind !== "move" || action.dx == null || action.dy == null) return state;
 
-  const actor = state.actors[actorId];
-  if (!actor) return state;
+	const actor = state.actors[actorId];
+	if (!actor) return state;
 
-  const nx = actor.x + action.dx;
-  const ny = actor.y + action.dy;
+	const nx = actor.x + action.dx;
+	const ny = actor.y + action.dy;
 
-  if (!deps.isWalkable(nx, ny)) return state;
+	if (!deps.isWalkable(nx, ny)) return state;
 
-  for (const other of Object.values(state.actors)) {
-    if (other.id === actorId) continue;
-    if (other.alive && other.blocksMove && other.x === nx && other.y === ny) return state;
-  }
+	for (const other of Object.values(state.actors)) {
+		if (other.id === actorId) continue;
+		if (other.alive && other.blocksMove && other.x === nx && other.y === ny) return state;
+	}
 
-  return { ...state, actors: { ...state.actors, [actorId]: { ...actor, x: nx, y: ny } } };
+	return { ...state, actors: { ...state.actors, [actorId]: { ...actor, x: nx, y: ny } } };
 }
 
 /**
  * Stub monster AI: always waits. Replace with Phase 5 AI via deps.monsterDecide.
  */
 export function waitAI(
-  _state: TurnSystemState,
-  _monsterId: ActorId,
+	_state: TurnSystemState,
+	_monsterId: ActorId,
 ): DecideResult {
-  return { action: { kind: "wait" }, monsterPatch: {} };
+	return { action: { kind: "wait" }, monsterPatch: {} };
 }
