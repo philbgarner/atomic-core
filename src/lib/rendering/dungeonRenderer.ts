@@ -179,6 +179,26 @@ export type DungeonRendererOptions = {
 	 */
 	openSkyLighting?: number;
 	/**
+	 * Lighting applied to sky-panel faces — the vertical panels that appear on
+	 * walls adjacent to open-sky (no-ceiling) cells, simulating a view of the
+	 * outside. Setting this makes sky panels appear naturally brighter (and
+	 * optionally tinted) as if they are receiving daylight from above, without
+	 * requiring a placed scene light.
+	 *
+	 * - `brightness` — flat surface-light multiplier for sky-panel faces.
+	 *   Values above 1.0 make panels brighter than regular walls.
+	 *   Default: `1.3`.
+	 * - `color` — RGB light added to sky-panel faces and open-sky floor/skirt
+	 *   cells after surface lighting, simulating sky illumination cast onto the
+	 *   surface (additive blend). Keep values small — `[0.15, 0.2, 0.35]` for
+	 *   a subtle cool daylight, `[0.3, 0.2, 0.1]` for warm torchlight.
+	 *   Default: `[0, 0, 0]` (no addition — no visible effect).
+	 */
+	outsideLight?: {
+		brightness?: number;
+		color?: [number, number, number];
+	};
+	/**
 	 * Optional 6-texture cube-map skybox. When provided the plain fog-colour
 	 * scene background is replaced by the cube map. Fog still applies to dungeon
 	 * geometry as normal. Supply either six image URL strings via `faces`, or a
@@ -385,6 +405,15 @@ export type DungeonRenderer = {
 		ceiling?: number;
 		wallMin?: number;
 		wallMax?: number;
+	}): void;
+	/**
+	 * Update outside / sky-panel lighting at runtime. All fields are optional —
+	 * omit any field to leave its current value unchanged.
+	 * Takes effect on the next rendered frame; no geometry rebuild required.
+	 */
+	setOutsideLight(opts: {
+		brightness?: number;
+		color?: [number, number, number];
 	}): void;
 	/**
 	 * Enable or disable floor-height camera tracking at runtime without
@@ -672,6 +701,9 @@ export function createDungeonRenderer(
 	const ceilLight = sl.ceiling ?? 0.95;
 	const wallLightMin = sl.wallMin ?? 0.9;
 	const wallLightMax = sl.wallMax ?? 1.1;
+	const outsideLight = options.outsideLight ?? {};
+	const skyPanelBrightness = outsideLight.brightness ?? 1.3;
+	const skyPanelLightColor = new THREE.Color(...(outsideLight.color ?? [0, 0, 0] as [number, number, number]));
 	const atlasMaterials: THREE.ShaderMaterial[] = [];
 
 	function getUvRect(id: number): UvRect {
@@ -947,7 +979,7 @@ export function createDungeonRenderer(
 		set(ceilingPanelMat, overlayWall.tex);
 	}
 
-	function makeAtlasMaterial(surfaceLight = 1.0): THREE.ShaderMaterial {
+	function makeAtlasMaterial(surfaceLight = 1.0, skyLightColor?: THREE.Color, skyFromLookup = false): THREE.ShaderMaterial {
 		const canvas = packedAtlas!.texture as HTMLCanvasElement;
 		const mat = new THREE.ShaderMaterial({
 			vertexShader: BASIC_ATLAS_VERT,
@@ -968,6 +1000,8 @@ export function createDungeonRenderer(
 					surfaceLight,
 					wallLightMin,
 					wallLightMax,
+					...(skyLightColor ? { skyLightColor } : {}),
+					skyFromLookup,
 				}),
 			]),
 			side: THREE.FrontSide,
@@ -983,8 +1017,12 @@ export function createDungeonRenderer(
 	}
 
 	// ── Plain (fallback) materials ────────────────────────────────────────────
+	// Floor and floor-adjacent skirt/edge materials use skyFromLookup=true so
+	// the sky tint is applied only to cells whose ceilingHeightOffset is 0
+	// (open-sky sentinel). The uCeilHeightLookup uniform is patched in
+	// buildDungeon() once the dungeon data is available.
 	const floorMat = packedAtlas
-		? makeAtlasMaterial(floorLight)
+		? makeAtlasMaterial(floorLight, skyPanelLightColor, true)
 		: new THREE.MeshStandardMaterial({ color: 0x555566 });
 	const ceilMat = packedAtlas
 		? makeAtlasMaterial(ceilLight)
@@ -993,7 +1031,7 @@ export function createDungeonRenderer(
 		? makeAtlasMaterial(-1.0)
 		: new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 	const floorEdgeMat = packedAtlas
-		? makeAtlasMaterial(-1.0)
+		? makeAtlasMaterial(-1.0, skyPanelLightColor, true)
 		: new THREE.MeshStandardMaterial({ color: 0x555566 });
 	const ceilEdgeMat = packedAtlas
 		? makeAtlasMaterialDoubleSide(-1.0)
@@ -1002,13 +1040,13 @@ export function createDungeonRenderer(
 			side: THREE.DoubleSide,
 		});
 	const floorWallSkirtMat = packedAtlas
-		? makeAtlasMaterial(-1.0)
+		? makeAtlasMaterial(-1.0, skyPanelLightColor, true)
 		: new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 	const ceilWallSkirtMat = packedAtlas
 		? makeAtlasMaterial(-1.0)
 		: new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 	const skyPanelMat = packedAtlas
-		? makeAtlasMaterial(-1.0)
+		? makeAtlasMaterial(skyPanelBrightness, skyPanelLightColor)
 		: new THREE.MeshStandardMaterial({ color: 0x6b6070 });
 	const ceilingPanelMat = packedAtlas
 		? makeAtlasMaterial(-1.0)
@@ -1330,6 +1368,16 @@ export function createDungeonRenderer(
 		const outputs = game.dungeon.outputs;
 		if (!outputs) return;
 		dungeonBuilt = true;
+
+		// Push the ceilingHeightOffset texture into floor/skirt materials so the
+		// shader can gate sky tinting to open-sky cells only (raw byte 0 = sentinel).
+		const ceilHeightTex = outputs.textures.ceilingHeightOffset;
+		if (ceilHeightTex) {
+			for (const mat of [floorMat, floorEdgeMat, floorWallSkirtMat]) {
+				if (mat instanceof THREE.ShaderMaterial)
+					(mat.uniforms["uCeilHeightLookup"] as { value: THREE.Texture }).value = ceilHeightTex;
+			}
+		}
 
 		const { width, height } = outputs;
 		const solid = outputs.textures.solid.image.data as Uint8Array;
@@ -2397,6 +2445,18 @@ export function createDungeonRenderer(
 						(mat.uniforms["uWallLightMin"] as { value: number }).value = opts.wallMin;
 					if (opts.wallMax !== undefined)
 						(mat.uniforms["uWallLightMax"] as { value: number }).value = opts.wallMax;
+				}
+			}
+		},
+		setOutsideLight(opts) {
+			if (opts.brightness !== undefined && skyPanelMat instanceof THREE.ShaderMaterial)
+				(skyPanelMat.uniforms["uSurfaceLight"] as { value: number }).value = opts.brightness;
+			if (opts.color !== undefined) {
+				const [r, g, b] = opts.color;
+				// Sky panels: always tinted. Floor/skirt: tinted only under open sky (gated by shader).
+				for (const mat of [skyPanelMat, floorMat, floorEdgeMat, floorWallSkirtMat]) {
+					if (mat instanceof THREE.ShaderMaterial)
+						(mat.uniforms["uSkyLightColor"] as { value: THREE.Color }).value.setRGB(r, g, b);
 				}
 			}
 		},

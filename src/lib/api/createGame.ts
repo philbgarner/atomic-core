@@ -1739,8 +1739,10 @@ async function runGenerate(
     internal.turnState = tickUntilPlayer(internal.turnState, deps);
   }
 
-  // 12. Initial FOV + minimap
-  //updateFovAndMinimap(internal);
+  // 12. Sync entity positions from turn state + initial FOV + minimap.
+  // Must run before "generate" so subscribers and the renderer see correct state.
+  syncAllEntitiesFromTurnState(internal);
+  updateFovAndMinimap(internal);
 
   // 13. Let subscribers post-process dungeon data before geometry is built.
   await internal.events.emit("generate");

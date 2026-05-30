@@ -162,6 +162,26 @@ export type DungeonRendererOptions = {
      */
     openSkyLighting?: number;
     /**
+     * Lighting applied to sky-panel faces — the vertical panels that appear on
+     * walls adjacent to open-sky (no-ceiling) cells, simulating a view of the
+     * outside. Setting this makes sky panels appear naturally brighter (and
+     * optionally tinted) as if they are receiving daylight from above, without
+     * requiring a placed scene light.
+     *
+     * - `brightness` — flat surface-light multiplier for sky-panel faces.
+     *   Values above 1.0 make panels brighter than regular walls.
+     *   Default: `1.3`.
+     * - `color` — RGB light added to sky-panel faces and open-sky floor/skirt
+     *   cells after surface lighting, simulating sky illumination cast onto the
+     *   surface (additive blend). Keep values small — `[0.15, 0.2, 0.35]` for
+     *   a subtle cool daylight, `[0.3, 0.2, 0.1]` for warm torchlight.
+     *   Default: `[0, 0, 0]` (no addition — no visible effect).
+     */
+    outsideLight?: {
+        brightness?: number;
+        color?: [number, number, number];
+    };
+    /**
      * Optional 6-texture cube-map skybox. When provided the plain fog-colour
      * scene background is replaced by the cube map. Fog still applies to dungeon
      * geometry as normal. Supply either six image URL strings via `faces`, or a
@@ -347,6 +367,15 @@ export type DungeonRenderer = {
         ceiling?: number;
         wallMin?: number;
         wallMax?: number;
+    }): void;
+    /**
+     * Update outside / sky-panel lighting at runtime. All fields are optional —
+     * omit any field to leave its current value unchanged.
+     * Takes effect on the next rendered frame; no geometry rebuild required.
+     */
+    setOutsideLight(opts: {
+        brightness?: number;
+        color?: [number, number, number];
     }): void;
     /**
      * Enable or disable floor-height camera tracking at runtime without
