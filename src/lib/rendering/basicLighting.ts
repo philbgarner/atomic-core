@@ -189,6 +189,8 @@ void main() {
  *      (uSkirtLookup, same RGBA encoding as the surface-painter lookup).
  *   4. Ambient occlusion   — corner-darkening via vAo × uAoIntensity.
  *   5. Directional lighting — surface-orientation brightness via vFacingLight.
+ *   5.5 Sky light tint     — multiplicative RGB tint (uSkyLightColor); white = no-op.
+ *                            Non-white only on sky-panel faces (outsideLight option).
  *   6. Fog                 — linear blend to uFogColor over [uFogNear, uFogFar].
  */
 export const BASIC_ATLAS_FRAG = /* glsl */ `
@@ -210,6 +212,19 @@ uniform float uFogFar;
 //   1   = fully-occluded corners go black.
 // Applied as: color *= mix(1 - uAoIntensity, 1.0, vAo)
 uniform float uAoIntensity;
+
+// Sky / outside light color tint applied at step 5.5.
+// Non-white only when outsideLight.color is set by the caller.
+uniform vec3 uSkyLightColor;
+
+// Per-cell ceiling height lookup for floor/skirt materials.
+// Carries ceilingHeightOffset (R8 DataTexture): raw 0 = open-sky sentinel → 0.0 in sampler.
+// Defaults to a 1×1 full-value (1.0) pixel — never triggers tinting on materials
+// that don't need it (walls, ceiling, sky panels already handle their own tinting).
+uniform sampler2D uCeilHeightLookup;
+// 0.0 = apply uSkyLightColor unconditionally (sky panels — always tinted).
+// 1.0 = gate by uCeilHeightLookup: only tint cells where ceilHeight ≈ 0 (open sky).
+uniform float uSkyFromLookup;
 
 // ── Surface-painter overlay system ───────────────────────────────────────────
 // Each grid cell can have up to 4 atlas tile IDs composited over the base tile.
@@ -333,7 +348,26 @@ void main() {
   //                  defaults: min=0.9 (side walls), max=1.1 (facing walls)
   color.rgb *= vFacingLight;
 
-  // ── 5.5. Scene lights ──────────────────────────────────────────────────────
+  // ── 5.5. Sky light (additive) ─────────────────────────────────────────────
+  // Adds uSkyLightColor to the surface, simulating light cast from the sky.
+  // Additive rather than multiplicative: preserves the base texture colour and
+  // brightens toward the sky tint instead of shifting/darkening it.
+  // Default uSkyLightColor is vec3(0) — a no-op when no outside light is set.
+  // uSkyFromLookup=0 (sky panels): always add — faces are exclusively sky-facing.
+  // uSkyFromLookup=1 (floor/skirt): add only where ceilingHeightOffset ≈ 0
+  //   (open-sky sentinel, raw byte 0 → 0.0 in sampler).
+  {
+    float skyFactor;
+    if (uSkyFromLookup > 0.5) {
+      float ceilH = texture2D(uCeilHeightLookup, vOverlayUv).r;
+      skyFactor = 1.0 - step(0.01, ceilH);
+    } else {
+      skyFactor = 1.0;
+    }
+    color.rgb = clamp(color.rgb + uSkyLightColor * skyFactor, 0.0, 1.0);
+  }
+
+  // ── 6. Scene lights ────────────────────────────────────────────────────────
   // Requires lights: true on the ShaderMaterial. Three.js injects ambientLightColor
   // (sum of all AmbientLights) and pointLights[] (view-space position + color +
   // attenuation params) automatically. With the default AmbientLight(white, 1.0)
@@ -354,7 +388,7 @@ void main() {
     color.rgb *= lightAccum;
   }
 
-  // ── 6. Fog ────────────────────────────────────────────────────────────────
+  // ── 7. Fog ────────────────────────────────────────────────────────────────
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
 }
@@ -460,6 +494,24 @@ export function makeBasicAtlasUniforms(params: {
    * Only consumed by wall/skirt materials (surfaceLight < 0).
    */
   wallLightMax?: number;
+  /**
+   * Sky / outside light color tint applied after directional surface lighting.
+   * Defaults to white (no-op) for all materials except sky panels, which carry
+   * the `outsideLight.color` renderer option.
+   */
+  skyLightColor?: THREE.Color;
+  /**
+   * W×H R8 DataTexture carrying `ceilingHeightOffset` data. Sampled at the
+   * cell UV to determine whether a floor/skirt face is under open sky (raw
+   * byte 0 = open-sky sentinel → 0.0 in the sampler → tint applied).
+   * Defaults to a 1×1 full-value pixel (never triggers tinting).
+   */
+  ceilHeightLookup?: THREE.Texture;
+  /**
+   * When `true`, sky tinting is gated by `uCeilHeightLookup` (floor/skirt
+   * materials). When `false` (default), tinting is always applied (sky panels).
+   */
+  skyFromLookup?: boolean;
 }): Record<string, { value: unknown }> {
   const defaultTex = makeSinglePixelTex();
   return {
@@ -477,14 +529,30 @@ export function makeBasicAtlasUniforms(params: {
     uTileUvCount:    { value: params.tileUvCount ?? 1 },
     uOverlayLookup:  { value: params.overlayLookup ?? defaultTex },
     uSkirtLookup:    { value: params.skirtLookup ?? defaultTex },
-    uBaseOverride:   { value: params.baseOverride ?? defaultTex },
-    uDungeonSize:    { value: params.dungeonSize ?? new THREE.Vector2(1, 1) },
+    uBaseOverride:      { value: params.baseOverride ?? defaultTex },
+    uDungeonSize:       { value: params.dungeonSize ?? new THREE.Vector2(1, 1) },
+    uSkyLightColor:     { value: params.skyLightColor ?? new THREE.Color(0, 0, 0) },
+    uCeilHeightLookup:  { value: params.ceilHeightLookup ?? makeFullPixelTex() },
+    uSkyFromLookup:     { value: params.skyFromLookup ? 1.0 : 0.0 },
   };
 }
 
 /** Returns a 1×1 transparent black DataTexture used as a no-op default. */
 function makeSinglePixelTex(): THREE.DataTexture {
   const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Returns a 1×1 fully-lit (value=255) DataTexture used as the default for
+ * `uCeilHeightLookup`. A sampled value of 1.0 means "not open sky" — the
+ * sky tint step is a no-op for materials that receive this default.
+ */
+function makeFullPixelTex(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
   tex.needsUpdate = true;

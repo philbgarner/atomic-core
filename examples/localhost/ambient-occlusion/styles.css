@@ -160,6 +160,25 @@ body::before {
   padding-top: 12px;
 }
 
+/* ── Sky / outside light controls ───────────────────────────────────────── */
+#sky-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.lighting-row input[type="color"] {
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ── Tooltip ─────────────────────────────────────────────────────────────── */
 .tip {
   display: inline-flex;

@@ -139,10 +139,16 @@ Both encodings use raw value `128` for no offset. Floor encoding: `+(floorVal - 
 
 Open-sky cells omit their ceiling face and instead render a thin rim (one `offsetStep` tall) around hole edges for visible depth. Normal ceil-skirt neighbours skip drawing steps toward open-sky cells. The `openSkyLighting` renderer option (`[0,1]`) blends pre-baked AO corner values toward fully lit for floor tiles directly below open-sky cells and their cardinal neighbours, simulating diffuse daylight through the opening.
 
+Sky-panel faces (vertical panels on walls adjacent to open-sky cells) receive additional illumination via the `outsideLight` renderer option: `brightness` sets a flat surface-light multiplier (default `1.3`, making panels visibly brighter than regular walls without a placed scene light), and `color` (`[r,g,b]` in `[0,1]`) applies a multiplicative tint after surface lighting to simulate a sky colour cast (e.g. `[0.6, 0.75, 1.0]` for cool daylight).
+
+Floor tiles (and their wall-skirt/edge geometry) directly under open-sky cells are also tinted with the same `outsideLight.color`. This is driven by the existing `ceilingHeightOffset` DataTexture: cells whose ceiling value is `0` (the open-sky sentinel) receive the tint; cells with a real ceiling value do not. The shader checks `uCeilHeightLookup` (the ceiling texture) at the cell UV and gates the tint accordingly via `uSkyFromLookup=1` on floor/skirt materials. Sky-panel material keeps `uSkyFromLookup=0` (always tinted). All other mesh types (walls, ceiling) leave `uSkyLightColor` at `vec3(1.0)` (no-op).
+
 **Files:**
 - `dungeon/bsp.ts` — generates `floorHeightOffset` and `ceilingHeightOffset` R8 DataTextures; encoding and sentinel values described in `DungeonOutputs` JSDoc
 - `dungeon/cellular.ts` — generates `floorHeightOffset` (when `vaultedFloor` is enabled) using sub-voronoi region distance fields; always generates `ceilingHeightOffset`
-- `rendering/dungeonRenderer.ts` — reads offset textures in `buildDungeon()`; floor tiles with `floorVal === 0` are omitted (pit); ceiling tiles with `ceilVal === 0` are omitted (open sky) and replaced with a rim skirt; `isOpenSkyCeil()` helper predicate used for both rim generation and `openSkyLighting` AO boost; `openSkyLighting` option (`DungeonRendererOptions`) controls AO brightening near sky holes; `buildLayerMesh()` also guards `ceil` and `ceilSkirt` layer targets against open-sky cells
+- `rendering/dungeonRenderer.ts` — reads offset textures in `buildDungeon()`; floor tiles with `floorVal === 0` are omitted (pit); ceiling tiles with `ceilVal === 0` are omitted (open sky) and replaced with a rim skirt; `isOpenSkyCeil()` helper predicate used for both rim generation and `openSkyLighting` AO boost; `openSkyLighting` option (`DungeonRendererOptions`) controls AO brightening near sky holes; `outsideLight` option (`{ brightness?, color? }`) controls sky-panel face brightness and tint; `buildLayerMesh()` also guards `ceil` and `ceilSkirt` layer targets against open-sky cells
+- `rendering/basicLighting.ts` — `uSkyLightColor` (vec3), `uCeilHeightLookup` (sampler2D), `uSkyFromLookup` (float) uniforms added to `BASIC_ATLAS_FRAG`; step 5.5 applies sky tint unconditionally when `uSkyFromLookup=0` (sky panels) or only to open-sky cells when `uSkyFromLookup=1` (floor/skirt, gated by `uCeilHeightLookup`); `makeBasicAtlasUniforms()` accepts `skyLightColor?`, `ceilHeightLookup?`, `skyFromLookup?`; `makeFullPixelTex()` helper provides the no-op default for `uCeilHeightLookup`
+- `rendering/dungeonRenderer.ts` — `buildDungeon()` patches `uCeilHeightLookup` on `floorMat`/`floorEdgeMat`/`floorWallSkirtMat` with the `ceilingHeightOffset` texture after dungeon data is available; `setOutsideLight()` pushes color to all four sky-lit material types
 
 ---
 
@@ -205,6 +211,8 @@ Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture)
 
 ### Turn-based scheduler with priority queue
 
+Generation (`runGenerate`) advances through `tickUntilPlayer()` (step 11), then immediately calls `syncAllEntitiesFromTurnState()` and `updateFovAndMinimap()` (step 12) so that entity positions and minimap exploration are fully populated before the "generate" and first "turn" events fire. This means turn 0 already shows correct entity placement and explored minimap state — no player action is needed to trigger the first update.
+
 **Files:**
 - `turn/scheduler.ts` — `TurnScheduler` class with priority queue; no game dependencies
 - `turn/system.ts` — `createTurnSystemState()`, `tickUntilPlayer()`, `commitPlayerAction()`, `defaultComputeCost()`
@@ -212,6 +220,7 @@ Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture)
 - `turn/actionCosts.ts` — default action cost table
 - `turn/events.ts` — `TurnEvent` union including `damage`, `death`, `chest-open`, `item-pickup`, `turn`, `win`, `lose`, `audio`
 - `api/actions.ts` — `createActionPipeline()`, `ActionMiddleware`, `ActionContext`; extension point for `turns.commit()`
+- `api/createGame.ts` — `runGenerate()` step 12 calls `syncAllEntitiesFromTurnState()` + `updateFovAndMinimap()` before the "generate" event
 
 ---
 
