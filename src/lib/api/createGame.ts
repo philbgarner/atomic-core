@@ -729,7 +729,7 @@ function buildPlayerActor(id: string, opts: PlayerOptions): PlayerActor {
     y: opts.z ?? 1,
     speed: opts.speed ?? 5,
     alive: true,
-    blocksMovement: true,
+    blocksMove: true,
     hp: opts.hp ?? 30,
     maxHp: opts.maxHp ?? opts.hp ?? 30,
     attack: opts.attack ?? 3,
@@ -748,7 +748,7 @@ function entityToMonsterActor(e: EntityBase): MonsterActor {
     y: e.z,
     speed: e.speed > 0 ? e.speed : 5,
     alive: e.alive,
-    blocksMovement: e.blocksMove,
+    blocksMove: e.blocksMove,
     hp: (ev.hp as number | undefined) ?? 0,
     maxHp: (ev.maxHp as number | undefined) ?? 0,
     attack: (ev.attack as number | undefined) ?? 0,
@@ -859,7 +859,7 @@ function makeApplyAction(
       (a) =>
         a.id !== actorId &&
         a.alive &&
-        a.blocksMovement &&
+        a.blocksMove &&
         a.x === nx &&
         a.y === ny,
     );
@@ -2100,7 +2100,7 @@ export function createGame(
               y: mn.z,
               speed: mn.speed,
               alive: mn.alive,
-              blocksMovement: mn.blocksMove,
+              blocksMove: mn.blocksMove,
               hp: mn.hp,
               maxHp: mn.maxHp,
               attack: mn.attack,

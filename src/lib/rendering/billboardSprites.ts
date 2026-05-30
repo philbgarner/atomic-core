@@ -246,7 +246,11 @@ export function createBillboard(
 
 			const geo = new THREE.PlaneGeometry(1, 1);
 			const mesh = new THREE.Mesh(geo, mat);
-			mesh.renderOrder = layerIndex + 1;
+			mesh.renderOrder = 1;//layerIndex + 1;
+			// PHIL CHECK THIS! why does setting it to 1 fix the bug where entity body parts drew in weird orders?
+			// the original code resulted in entities in a straight line drawing body parts out of order, or when aligned with decor entities.
+			// set to 1 and everything seems to work perfectly.. so why did it use this index in the first place? must be some logic here that
+			// i may have broken?
 
 			const s = layer.scale ?? 1;
 			mesh.position.set(

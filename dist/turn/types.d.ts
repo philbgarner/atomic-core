@@ -10,7 +10,7 @@ export type ActorBase = {
     /** >0; higher speed = acts more often. */
     speed: number;
     alive: boolean;
-    blocksMovement: boolean;
+    blocksMove: boolean;
 };
 export type PlayerActor = ActorBase & {
     kind: "player";

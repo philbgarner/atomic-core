@@ -2741,7 +2741,7 @@
 			y: opts.z ?? 1,
 			speed: opts.speed ?? 5,
 			alive: true,
-			blocksMovement: true,
+			blocksMove: true,
 			hp: opts.hp ?? 30,
 			maxHp: opts.maxHp ?? opts.hp ?? 30,
 			attack: opts.attack ?? 3,
@@ -2759,7 +2759,7 @@
 			y: e.z,
 			speed: e.speed > 0 ? e.speed : 5,
 			alive: e.alive,
-			blocksMovement: e.blocksMove,
+			blocksMove: e.blocksMove,
 			hp: ev.hp ?? 0,
 			maxHp: ev.maxHp ?? 0,
 			attack: ev.attack ?? 0,
@@ -2824,7 +2824,7 @@
 			if (!actor || !actor.alive) return state;
 			const nx = actor.x + action.dx;
 			const ny = actor.y + action.dy;
-			const targetActor = Object.values(state.actors).find((a) => a.id !== actorId && a.alive && a.blocksMovement && a.x === nx && a.y === ny);
+			const targetActor = Object.values(state.actors).find((a) => a.id !== actorId && a.alive && a.blocksMove && a.x === nx && a.y === ny);
 			if (targetActor) {
 				const attackerEntity = internal.entityById.get(actorId);
 				const defenderEntity = internal.entityById.get(targetActor.id);
@@ -3685,7 +3685,7 @@
 							y: mn.z,
 							speed: mn.speed,
 							alive: mn.alive,
-							blocksMovement: mn.blocksMove,
+							blocksMove: mn.blocksMove,
 							hp: mn.hp,
 							maxHp: mn.maxHp,
 							attack: mn.attack,
@@ -4720,7 +4720,7 @@ void main() {
 			});
 			const geo = new three.PlaneGeometry(1, 1);
 			const mesh = new three.Mesh(geo, mat);
-			mesh.renderOrder = layerIndex + 1;
+			mesh.renderOrder = 1;
 			const s = layer.scale ?? 1;
 			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, layerIndex * .001);
 			mesh.scale.set(s, s, 1);

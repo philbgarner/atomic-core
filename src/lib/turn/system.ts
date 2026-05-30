@@ -225,7 +225,7 @@ export function defaultApplyAction(
 
   for (const other of Object.values(state.actors)) {
     if (other.id === actorId) continue;
-    if (other.alive && other.blocksMovement && other.x === nx && other.y === ny) return state;
+    if (other.alive && other.blocksMove && other.x === nx && other.y === ny) return state;
   }
 
   return { ...state, actors: { ...state.actors, [actorId]: { ...actor, x: nx, y: ny } } };
