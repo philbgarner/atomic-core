@@ -5520,7 +5520,7 @@ void main() {
 			const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 			const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
 			const skyPanelCountData = outputs.textures.skyPanelCount?.image.data;
-			const ceilingPanelCountData = outputs.textures.ceilingPanelCount?.image.data;
+			outputs.textures.ceilingPanelCount?.image.data;
 			function spec(map, dir, fallbackId) {
 				return map?.[dir] ?? {
 					tile: fallbackId,
@@ -5611,11 +5611,13 @@ void main() {
 				const wz = (cz + .5) * tileSize;
 				const floorVal = floorOffData ? floorOffData[idx] ?? 128 : 128;
 				const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
+				const fvo = (floorVal - 128) * offsetStep;
+				const cvo = -(ceilVal - 128) * offsetStep;
 				const isOpenSky = ceilVal === 0;
 				if (floorVal !== 0) {
 					floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
 					floorRects.push(getUvRect(floorId));
-					floorOffsets.push((floorVal - 128) * offsetStep);
+					floorOffsets.push(fvo);
 					floorCellMap.push({
 						cx,
 						cz
@@ -5638,7 +5640,7 @@ void main() {
 				if (!isOpenSky) {
 					ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
 					ceilRects.push(getUvRect(ceilId));
-					ceilOffsets.push(-(ceilVal - 128) * offsetStep);
+					ceilOffsets.push(cvo);
 					ceilCellMap.push({
 						cx,
 						cz
@@ -5650,7 +5652,7 @@ void main() {
 				}
 				if (isSolid(cx, cz - 1)) {
 					const s = spec(wallTiles, "north", wallId);
-					walls.push(makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
+					walls.push(makeFaceMatrix(wx, fvo + wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH));
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(0, 1);
@@ -5665,7 +5667,7 @@ void main() {
 				}
 				if (isSolid(cx, cz + 1)) {
 					const s = spec(wallTiles, "south", wallId);
-					walls.push(makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH));
+					walls.push(makeFaceMatrix(wx, fvo + wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH));
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(0, -1);
@@ -5680,7 +5682,7 @@ void main() {
 				}
 				if (isSolid(cx - 1, cz)) {
 					const s = spec(wallTiles, "west", wallId);
-					walls.push(makeFaceMatrix(cx * tileSize, wallMidY, wz, 0, HALF_PI, 0, tileSize, ceilingH));
+					walls.push(makeFaceMatrix(cx * tileSize, fvo + wallMidY, wz, 0, HALF_PI, 0, tileSize, ceilingH));
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(1, 0);
@@ -5695,7 +5697,7 @@ void main() {
 				}
 				if (isSolid(cx + 1, cz)) {
 					const s = spec(wallTiles, "east", wallId);
-					walls.push(makeFaceMatrix((cx + 1) * tileSize, wallMidY, wz, 0, -HALF_PI, 0, tileSize, ceilingH));
+					walls.push(makeFaceMatrix((cx + 1) * tileSize, fvo + wallMidY, wz, 0, -HALF_PI, 0, tileSize, ceilingH));
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(-1, 0);
@@ -5709,7 +5711,7 @@ void main() {
 					}
 				}
 				if (floorVal !== 0) {
-					const currentFloorY = (floorVal - 128) * offsetStep;
+					const currentFloorY = fvo;
 					function addFloorSkirt(nfVal, mx, mz, ry, dir) {
 						const s = spec(floorSkirtTiles, dir, floorId);
 						const neighborFloorY = (nfVal - 128) * offsetStep;
@@ -5752,16 +5754,16 @@ void main() {
 					const nfE = openFloorVal(cx + 1, cz);
 					if (nfE !== null && nfE < floorVal) addFloorSkirt(nfE, (cx + 1) * tileSize, wz, HALF_PI, "east");
 				}
-				if (floorVal < 128 && floorVal !== 0) {
-					const gapH = (128 - floorVal) * offsetStep;
-					function addWallFloorSkirt(mx, mz, ry, dir) {
+				if (floorVal !== 0) {
+					function addWallFloorSkirt(mx, mz, ry, dir, gapH, floor) {
+						if (gapH <= .001) return;
 						const s = spec(wallTiles, dir, wallId);
 						const fullPanels = Math.floor(gapH / tileSize);
 						const rem = gapH - fullPanels * tileSize;
 						const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 						for (let i = 0; i < fullPanels; i++) {
-							const midY = -(i * tileSize + tileSize / 2);
-							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
+							const midY = i * tileSize + tileSize / 2;
+							floorWallSkirtEdges.push(makeFaceMatrix(mx, floor + tileSize + midY, mz, 0, ry, 0, tileSize, tileSize));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							floorWallSkirtHeightScales.push(1);
@@ -5774,13 +5776,13 @@ void main() {
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 						if (rem > .001) {
-							const midY = -(fullPanels * tileSize + rem / 2);
-							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
+							const midY = fullPanels * tileSize + rem / 2;
+							floorWallSkirtEdges.push(makeFaceMatrix(mx, floor + tileSize + midY, mz, 0, ry, 0, tileSize, rem));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							const scale = rem / tileSize;
 							floorWallSkirtHeightScales.push(scale);
-							floorWallSkirtUvOffsets.push(1 - scale);
+							floorWallSkirtUvOffsets.push(0);
 							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({
 								cx,
@@ -5789,10 +5791,34 @@ void main() {
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 					}
-					if (isSolid(cx, cz - 1)) addWallFloorSkirt(wx, cz * tileSize, 0, "north");
-					if (isSolid(cx, cz + 1)) addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
-					if (isSolid(cx - 1, cz)) addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west");
-					if (isSolid(cx + 1, cz)) addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
+					if (isSolid(cx, cz - 1)) {
+						const nfloorVal = floorOffData ? floorOffData[idx - width] ?? 128 : 128;
+						const nceilVal = ceilOffData ? ceilOffData[idx - width] ?? 128 : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = isOpenSky ? nceilVal ? -(nceilVal - 128) * offsetStep : nfvo - tileSize : cvo;
+						addWallFloorSkirt(wx, cz * tileSize, 0, "north", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx, cz + 1)) {
+						const nfloorVal = floorOffData ? floorOffData[idx + width] ?? 128 : 128;
+						const nceilVal = ceilOffData ? ceilOffData[idx + width] ?? 128 : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = isOpenSky ? nceilVal ? -(nceilVal - 128) * offsetStep : nfvo - tileSize : cvo;
+						addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx - 1, cz)) {
+						const nfloorVal = floorOffData ? floorOffData[idx - 1] ?? 128 : 128;
+						const nceilVal = ceilOffData ? ceilOffData[idx - 1] ?? 128 : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = isOpenSky ? nceilVal ? -(nceilVal - 128) * offsetStep : nfvo - tileSize : cvo;
+						addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx + 1, cz)) {
+						const nfloorVal = floorOffData ? floorOffData[idx + 1] ?? 128 : 128;
+						const nceilVal = ceilOffData ? ceilOffData[idx + 1] ?? 128 : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = isOpenSky ? nceilVal ? -(nceilVal - 128) * offsetStep : nfvo - tileSize : cvo;
+						addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east", ncvo - fvo, fvo);
+					}
 				}
 				if (!isOpenSky) {
 					const yCurrent = ceilingH - (ceilVal - 128) * offsetStep;
@@ -5836,51 +5862,12 @@ void main() {
 					if (ncW !== null && ncW !== 0 && ncW > ceilVal) addCeilSkirt(ncW, cx * tileSize, wz, -HALF_PI, "west");
 					const ncE = openCeilVal(cx + 1, cz);
 					if (ncE !== null && ncE !== 0 && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
-					if (ceilVal < 128) {
-						const gapH = (128 - ceilVal) * offsetStep;
-						function addWallCeilSkirt(mx, mz, ry, dir) {
-							const s = spec(wallTiles, dir, wallId);
-							const fullPanels = Math.floor(gapH / tileSize);
-							const rem = gapH - fullPanels * tileSize;
-							const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
-							for (let i = 0; i < fullPanels; i++) {
-								const midY = ceilingH + i * tileSize + tileSize / 2;
-								ceilWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
-								ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
-								ceilWallSkirtRots.push(s.rotation ?? 0);
-								ceilWallSkirtHeightScales.push(1);
-								ceilWallSkirtRowIndexes.push(i);
-								ceilWallSkirtCellMap.push({
-									cx,
-									cz
-								});
-								if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
-							}
-							if (rem > .001) {
-								const midY = ceilingH + fullPanels * tileSize + rem / 2;
-								ceilWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
-								ceilWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
-								ceilWallSkirtRots.push(s.rotation ?? 0);
-								ceilWallSkirtHeightScales.push(rem / tileSize);
-								ceilWallSkirtRowIndexes.push(fullPanels);
-								ceilWallSkirtCellMap.push({
-									cx,
-									cz
-								});
-								if (ao) ceilWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
-							}
-						}
-						if (isSolid(cx, cz - 1)) addWallCeilSkirt(wx, cz * tileSize, 0, "north");
-						if (isSolid(cx, cz + 1)) addWallCeilSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
-						if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
-						if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
-					}
 				}
 				const skyCount = skyPanelCountData ? skyPanelCountData[idx] ?? 0 : 0;
 				if (skyCount > 0) {
-					function emitSkyPanels(mx, mz, ry) {
+					function emitSkyPanels(mx, mz, ry, offs) {
 						for (let i = 0; i < skyCount; i++) {
-							skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
+							skyPanelEdges.push(makeFaceMatrix(mx, offs + tileSize + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
 							skyPanelRects.push(getUvRect(wallId));
 							skyPanelRots.push(0);
 							skyPanelHeightScales.push(1);
@@ -5891,32 +5878,17 @@ void main() {
 							});
 						}
 					}
-					if (isOpenSky) {} else {
-						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0);
-						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, +HALF_PI);
-						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					if (isOpenSky) {
+						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, Math.PI, fvo);
+						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0, fvo);
+						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI, fvo);
+						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, fvo);
+					} else {
+						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0, cvo);
+						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI, cvo);
+						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, +HALF_PI, cvo);
+						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI, cvo);
 					}
-				}
-				const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
-				if (ceilPanelCount > 0) {
-					function emitCeilPanels(mx, mz, ry) {
-						for (let i = 0; i < ceilPanelCount; i++) {
-							ceilPanelEdges.push(makeFaceMatrix(mx, ceilingH - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
-							ceilPanelRects.push(getUvRect(wallId));
-							ceilPanelRots.push(0);
-							ceilPanelHeightScales.push(1);
-							ceilPanelRowIndexes.push(i);
-							ceilingPanelCellMap.push({
-								cx,
-								cz
-							});
-						}
-					}
-					if (isSolid(cx, cz - 1)) emitCeilPanels(wx, cz * tileSize, 0);
-					if (isSolid(cx, cz + 1)) emitCeilPanels(wx, (cz + 1) * tileSize, Math.PI);
-					if (isSolid(cx - 1, cz)) emitCeilPanels(cx * tileSize, wz, HALF_PI);
-					if (isSolid(cx + 1, cz)) emitCeilPanels((cx + 1) * tileSize, wz, -HALF_PI);
 				}
 			}
 			meshToCellMap.clear();

@@ -1489,7 +1489,7 @@ export function createDungeonRenderer(
 
 		for (let cz = 0; cz < height; cz++) {
 			for (let cx = 0; cx < width; cx++) {
-				if (isSolid(cx, cz)) continue;
+				if (isSolid(cx, cz)) continue;	// the dungeon is inside-out - empty cells emit walls!?
 
 				const idx = cz * width + cx;
 				const wx = (cx + 0.5) * tileSize;
@@ -1498,6 +1498,8 @@ export function createDungeonRenderer(
 				// Read both offset values first so isOpenSky is available to the floor AO pass.
 				const floorVal = floorOffData ? (floorOffData[idx] ?? 128) : 128;
 				const ceilVal = ceilOffData ? (ceilOffData[idx] ?? 128) : 128;
+				const fvo = (floorVal - 128) * offsetStep;
+				const cvo = -(ceilVal - 128) * offsetStep;
 				// ceilVal === 0: open sky — ceiling tile omitted, thin rim skirt rendered instead.
 				const isOpenSky = ceilVal === 0;
 
@@ -1507,7 +1509,7 @@ export function createDungeonRenderer(
 						makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize),
 					);
 					floorRects.push(getUvRect(floorId));
-					floorOffsets.push((floorVal - 128) * offsetStep);
+					floorOffsets.push(fvo);
 					floorCellMap.push({ cx, cz });
 					if (aoEnabled) {
 						const v = computeFaceAO(isSolid, cx, cz, "floor");
@@ -1533,7 +1535,7 @@ export function createDungeonRenderer(
 						makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
 					);
 					ceilRects.push(getUvRect(ceilId));
-					ceilOffsets.push(-(ceilVal - 128) * offsetStep);
+					ceilOffsets.push(cvo);
 					ceilCellMap.push({ cx, cz });
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "ceil"); ceilsAo.push(v[0], v[1], v[2], v[3]); }
 				}
@@ -1544,7 +1546,7 @@ export function createDungeonRenderer(
 					walls.push(
 						makeFaceMatrix(
 							wx,
-							wallMidY,
+							fvo + wallMidY,
 							cz * tileSize,
 							0,
 							0,
@@ -1564,7 +1566,7 @@ export function createDungeonRenderer(
 					walls.push(
 						makeFaceMatrix(
 							wx,
-							wallMidY,
+							fvo + wallMidY,
 							(cz + 1) * tileSize,
 							0,
 							Math.PI,
@@ -1584,7 +1586,7 @@ export function createDungeonRenderer(
 					walls.push(
 						makeFaceMatrix(
 							cx * tileSize,
-							wallMidY,
+							fvo + wallMidY,
 							wz,
 							0,
 							HALF_PI,
@@ -1604,7 +1606,7 @@ export function createDungeonRenderer(
 					walls.push(
 						makeFaceMatrix(
 							(cx + 1) * tileSize,
-							wallMidY,
+							fvo + wallMidY,
 							wz,
 							0,
 							-HALF_PI,
@@ -1623,7 +1625,7 @@ export function createDungeonRenderer(
 				// Voxel-style floor edge skirts: tiled panels covering the full step height.
 				// Only emit when the open neighbour has a lower floor level.
 				if (floorVal !== 0) {
-					const currentFloorY = (floorVal - 128) * offsetStep;
+					const currentFloorY = fvo;
 					function addFloorSkirt(
 						nfVal: number,
 						mx: number,
@@ -1670,52 +1672,76 @@ export function createDungeonRenderer(
 
 				// Wall-adjacent floor skirts: when floor is sunken below y=0 and the
 				// neighbour is solid, fill the gap between y=0 and the sunken floor
-				// using the wall tile repeated downward.
-
-				// this (<128) is a BUG but a useful one, so i left it.
-				// floors may be higher than 128 but will end up floating if they are -
-				// this can be used to create deliberate crevices or floating blocks potentially.
-				// chances are there will be other "surface not rendering" problems which make it unusable. i haven't tested it.
-				if (floorVal < 128 && floorVal !== 0) {
-					const gapH = (128 - floorVal) * offsetStep;
+				// using the wall tile repeated downward.	
+				// rewritten to handle sunken tiles with any height or adjacency
+				if (floorVal !== 0) {
 					function addWallFloorSkirt(
 						mx: number,
 						mz: number,
 						ry: number,
 						dir: "north" | "south" | "east" | "west",
+						gapH: number,
+						floor: number,
 					) {
+						if (gapH <= 0.001) return;
 						const s = spec(wallTiles, dir, wallId);
 						const fullPanels = Math.floor(gapH / tileSize);
 						const rem = gapH - fullPanels * tileSize;
 						const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 						for (let i = 0; i < fullPanels; i++) {
-							const midY = -(i * tileSize + tileSize / 2);
-							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
+							const midY = (i * tileSize + tileSize / 2);
+							floorWallSkirtEdges.push(makeFaceMatrix(mx, floor + tileSize + midY, mz, 0, ry, 0, tileSize, tileSize));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
-							floorWallSkirtHeightScales.push(1.0);	
-							floorWallSkirtUvOffsets.push(0);						
+							floorWallSkirtHeightScales.push(1.0);
+							floorWallSkirtUvOffsets.push(0);
 							floorWallSkirtRowIndexes.push(i);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 						if (rem > 0.001) {
-							const midY = -(fullPanels * tileSize + rem / 2);
-							floorWallSkirtEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
+							const midY = (fullPanels * tileSize + rem / 2);
+							floorWallSkirtEdges.push(makeFaceMatrix(mx, floor + tileSize + midY, mz, 0, ry, 0, tileSize, rem));
 							floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							const scale = rem / tileSize;
 							floorWallSkirtHeightScales.push(scale);	// was rem / tileSize);
-							floorWallSkirtUvOffsets.push(1.0 - scale);
+							floorWallSkirtUvOffsets.push(0);	//1.0 - scale);
 							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
 						}
 					}
-					if (isSolid(cx, cz - 1)) addWallFloorSkirt(wx, cz * tileSize, 0, "north");
-					if (isSolid(cx, cz + 1)) addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
-					if (isSolid(cx - 1, cz)) addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west");
-					if (isSolid(cx + 1, cz)) addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
+					if (isSolid(cx, cz - 1)) {
+						// either my ceiling, OR neighbor ceiling OR neighbor floor
+						const nfloorVal = floorOffData ? (floorOffData[idx - width] ?? 128) : 128;
+						const nceilVal = ceilOffData ? (ceilOffData[idx - width] ?? 128) : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
+
+						addWallFloorSkirt(wx, cz * tileSize, 0, "north", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx, cz + 1)) {
+						const nfloorVal = floorOffData ? (floorOffData[idx + width] ?? 128) : 128;
+						const nceilVal = ceilOffData ? (ceilOffData[idx + width] ?? 128) : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
+						addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx - 1, cz)) {
+						const nfloorVal = floorOffData ? (floorOffData[idx - 1] ?? 128) : 128;
+						const nceilVal = ceilOffData ? (ceilOffData[idx - 1] ?? 128) : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
+						addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west", ncvo - fvo, fvo);
+					}
+					if (isSolid(cx + 1, cz)) {
+						const nfloorVal = floorOffData ? (floorOffData[idx + 1] ?? 128) : 128;
+						const nceilVal = ceilOffData ? (ceilOffData[idx + 1] ?? 128) : 128;
+						const nfvo = (nfloorVal - 128) * offsetStep;
+						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
+						addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east", ncvo - fvo, fvo);
+					}
 				}
 
 				// Ceiling skirts and wall-adjacent gap fillers — skipped entirely for open-sky cells.
@@ -1764,6 +1790,7 @@ export function createDungeonRenderer(
 					const ncE = openCeilVal(cx + 1, cz);
 					if (ncE !== null && ncE !== 0 && ncE > ceilVal) addCeilSkirt(ncE, (cx + 1) * tileSize, wz, HALF_PI, "east");
 
+					/* don't think we need this now, but kept it just in case there's a case i overlooked
 					// Wall-adjacent ceiling skirts: fill the gap between the wall top and a
 					// raised ceiling using the wall tile repeated upward.
 					if (ceilVal < 128) {
@@ -1803,15 +1830,15 @@ export function createDungeonRenderer(
 						if (isSolid(cx, cz + 1)) addWallCeilSkirt(wx, (cz + 1) * tileSize, Math.PI, "south");
 						if (isSolid(cx - 1, cz)) addWallCeilSkirt(cx * tileSize, wz, HALF_PI, "west");
 						if (isSolid(cx + 1, cz)) addWallCeilSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east");
-					}
+					}*/
 				}
 
 				// Sky panels: open-sky cells emit toward non-sky neighbours; non-sky cells emit toward open-sky neighbours.
 				const skyCount = skyPanelCountData ? (skyPanelCountData[idx] ?? 0) : 0;
 				if (skyCount > 0) {
-					function emitSkyPanels(mx: number, mz: number, ry: number) {
+					function emitSkyPanels(mx: number, mz: number, ry: number, offs: number) {
 						for (let i = 0; i < skyCount; i++) {
-							skyPanelEdges.push(makeFaceMatrix(mx, ceilingH + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
+							skyPanelEdges.push(makeFaceMatrix(mx, offs + tileSize + i * tileSize + tileSize / 2, mz, 0, ry + Math.PI, 0, tileSize, tileSize));
 							skyPanelRects.push(getUvRect(wallId));
 							skyPanelRots.push(0);
 							skyPanelHeightScales.push(1.0);
@@ -1819,21 +1846,20 @@ export function createDungeonRenderer(
 							skyPanelCellMap.push({ cx, cz });
 						}
 					}
-					if (isOpenSky) {
-						/* this is a duplicate, faces will fight with textures otherwise
-						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, Math.PI);
-						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0);
-						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, -HALF_PI);
-						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI);
-						*/
-					} else {
-						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, 0);
-						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI);
-						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, +HALF_PI);
-						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI);
+					if (isOpenSky) {	// handles skylight to interior
+						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, Math.PI, fvo);
+						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0, fvo);
+						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, -HALF_PI, fvo);
+						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, fvo);
+					} else {	// handles interior to skylight
+						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, 0, cvo);
+						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI, cvo);
+						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, +HALF_PI, cvo);
+						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI, cvo);
 					}
 				}
 
+				// haven't tested or debugged this one yet. the vertical offset is almost certainly wrong.
 				// Ceiling panels — stacked below ceilingH on wall faces of cells with ceilingPanelCount > 0.
 				const ceilPanelCount = ceilingPanelCountData ? (ceilingPanelCountData[idx] ?? 0) : 0;
 				if (ceilPanelCount > 0) {
@@ -1874,7 +1900,7 @@ export function createDungeonRenderer(
 		floorMesh = buildInstancedMesh(
 			floors, floorRects, floorMat, !!packedAtlas,
 			new Float32Array(floorOffsets), undefined, undefined, floorCX, floorCZ,
-			aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined, 
+			aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined,
 		);
 		scene.add(floorMesh);
 		meshToCellMap.set(floorMesh, floorCellMap);
@@ -1882,7 +1908,7 @@ export function createDungeonRenderer(
 		ceilMesh = buildInstancedMesh(
 			ceils, ceilRects, ceilMat, !!packedAtlas,
 			new Float32Array(ceilOffsets), undefined, undefined, ceilCX, ceilCZ,
-			aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined, 
+			aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined,
 		);
 		scene.add(ceilMesh);
 		meshToCellMap.set(ceilMesh, ceilCellMap);
