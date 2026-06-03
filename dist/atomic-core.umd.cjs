@@ -3509,7 +3509,7 @@
 		};
 		const playerState = {
 			entity: playerEntity,
-			facing: 0,
+			facing: playerOpts.facing ?? 0,
 			inventory: []
 		};
 		const missionsHandle = createMissionSystem(events, options.transport);
@@ -4734,9 +4734,8 @@ void main() {
 					y: 0
 				}).y) * tileSize + floorY;
 				group.position.set(wx, wy, wz);
-				const flipx = ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1;
 				group.rotation.set(0, useYaw, 0, "YXZ");
-				const sprW = flipx * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
+				const sprW = (ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1) * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
 				for (const entry of layerEntries) {
 					const s = entry.baseLayer.scale ?? 1;

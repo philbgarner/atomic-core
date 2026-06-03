@@ -264,6 +264,7 @@ export type PlayerOptions = {
     spriteName?: string;
     faction?: string;
     blocksMove?: boolean;
+    facing?: number;
 };
 export type OnPlaceContext = {
     rooms: PublicRoom[];

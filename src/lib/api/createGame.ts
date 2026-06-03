@@ -368,6 +368,7 @@ export type PlayerOptions = {
 	spriteName?: string;
 	faction?: string;
 	blocksMove?: boolean;
+	facing?: number;
 };
 
 export type OnPlaceContext = {
@@ -1894,7 +1895,7 @@ export function createGame(
 
 	const playerState: PlayerState = {
 		entity: playerEntity,
-		facing: 0,
+		facing: playerOpts.facing ?? 0,
 		inventory: [],
 	};
 
