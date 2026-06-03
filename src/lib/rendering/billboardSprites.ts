@@ -267,6 +267,8 @@ export function createBillboard(
 
 	return {
 		update(ent, cameraYaw, tileSize, ceilingH, floorY) {
+			const useYaw=(ent.forcedYaw ?? cameraYaw) as number;	// support facades with fixed angle
+
 			// Position group at entity world coordinates.
 			const wx = (ent.x + 0.5) * tileSize;
 			const wz = (ent.z + 0.5) * tileSize;
@@ -274,8 +276,8 @@ export function createBillboard(
 			const wy = (1 - basePivot.y) * tileSize + floorY;
 			group.position.set(wx, wy, wz);
 
-			// Rotate the group to always face the camera (Y-axis billboard).
-			group.rotation.set(-0.1, cameraYaw, 0, "YXZ");	// must match camera slight downward tilt
+			// Rotate the group to always face the camera (Y-axis billboard). unless it's a facade with fixed angle
+			group.rotation.set(0, useYaw, 0, "YXZ");	
 
 			// Scale layers to world-unit sprite size, preserving frameSize aspect ratio.
 			// no longer do this. the artist decides the scaling, which by default should be tilesize if it's a full-size monster
@@ -286,7 +288,7 @@ export function createBillboard(
 
 			// Determine active angle key for override lookup.
 			const facing = (ent as { facing?: number }).facing ?? 0;
-			const angleKey = selectAngleKey(facing, cameraYaw);
+			const angleKey = selectAngleKey(facing, useYaw);
 			const overrides = spriteMap.angles?.[angleKey];
 
 			for (const entry of layerEntries) {

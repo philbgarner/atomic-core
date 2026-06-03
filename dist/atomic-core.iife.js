@@ -4738,6 +4738,7 @@ void main() {
 		});
 		return {
 			update(ent, cameraYaw, tileSize, ceilingH, floorY) {
+				const useYaw = ent.forcedYaw ?? cameraYaw;
 				const wx = (ent.x + .5) * tileSize;
 				const wz = (ent.z + .5) * tileSize;
 				const wy = (1 - (spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : {
@@ -4745,10 +4746,10 @@ void main() {
 					y: 0
 				}).y) * tileSize + floorY;
 				group.position.set(wx, wy, wz);
-				group.rotation.set(-.1, cameraYaw, 0, "YXZ");
+				group.rotation.set(0, useYaw, 0, "YXZ");
 				const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
-				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
+				const angleKey = selectAngleKey(ent.facing ?? 0, useYaw);
 				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {
 					const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
@@ -5518,7 +5519,7 @@ void main() {
 			const floorOffData = outputs.textures.floorHeightOffset?.image.data;
 			const ceilOffData = outputs.textures.ceilingHeightOffset?.image.data;
 			const skyPanelCountData = outputs.textures.skyPanelCount?.image.data;
-			outputs.textures.ceilingPanelCount?.image.data;
+			const ceilingPanelCountData = outputs.textures.ceilingPanelCount?.image.data;
 			function spec(map, dir, fallbackId) {
 				return map?.[dir] ?? {
 					tile: fallbackId,
@@ -5887,6 +5888,26 @@ void main() {
 						if (isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, +HALF_PI, cvo);
 						if (isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, -HALF_PI, cvo);
 					}
+				}
+				const ceilPanelCount = ceilingPanelCountData ? ceilingPanelCountData[idx] ?? 0 : 0;
+				if (ceilPanelCount > 0) {
+					function emitCeilPanels(mx, mz, ry) {
+						for (let i = 0; i < ceilPanelCount; i++) {
+							ceilPanelEdges.push(makeFaceMatrix(mx, ceilingH - i * tileSize - tileSize / 2, mz, 0, ry, 0, tileSize, tileSize));
+							ceilPanelRects.push(getUvRect(wallId));
+							ceilPanelRots.push(0);
+							ceilPanelHeightScales.push(1);
+							ceilPanelRowIndexes.push(i);
+							ceilingPanelCellMap.push({
+								cx,
+								cz
+							});
+						}
+					}
+					if (isSolid(cx, cz - 1)) emitCeilPanels(wx, cz * tileSize, 0);
+					if (isSolid(cx, cz + 1)) emitCeilPanels(wx, (cz + 1) * tileSize, Math.PI);
+					if (isSolid(cx - 1, cz)) emitCeilPanels(cx * tileSize, wz, HALF_PI);
+					if (isSolid(cx + 1, cz)) emitCeilPanels((cx + 1) * tileSize, wz, -HALF_PI);
 				}
 			}
 			meshToCellMap.clear();
