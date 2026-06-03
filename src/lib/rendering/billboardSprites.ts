@@ -267,7 +267,7 @@ export function createBillboard(
 
 	return {
 		update(ent, cameraYaw, tileSize, ceilingH, floorY) {
-			const useYaw=(ent.forcedYaw ?? cameraYaw) as number;	// support facades with fixed angle
+			const useYaw=(ent.forcedYaw as number) ?? cameraYaw;	// support facades with fixed angle
 
 			// Position group at entity world coordinates.
 			const wx = (ent.x + 0.5) * tileSize;
@@ -283,19 +283,22 @@ export function createBillboard(
 			// no longer do this. the artist decides the scaling, which by default should be tilesize if it's a full-size monster
 			// we should probably use the actual sprite sizes, but we'll use the passed frameSize and thus allow tiny and large-sized monsters
 			// to exist. Expected tile size is 64 pixels (anything less just looks bad)
-			const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
+			// added a simple flip timer here for fire and other basic animating effects
+			const flipx = ent.flipTimer ? (Math.floor((performance.now() / 1000) / (ent.flipTimer as number)) % 2 === 0 ? 1 : -1) : 1;
+			const sprW = flipx*tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 			const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
 
-			// Determine active angle key for override lookup.
-			const facing = (ent as { facing?: number }).facing ?? 0;
-			const angleKey = selectAngleKey(facing, useYaw);
-			const overrides = spriteMap.angles?.[angleKey];
-
+			// Determine active angle key for override lookup. doesn't seem to work. disabled for now for speed.
+			//const facing = (ent as { facing?: number }).facing ?? 0;
+			//const angleKey = selectAngleKey(facing, useYaw);
+			//const overrides = spriteMap.angles?.[angleKey];
+			
 			for (const entry of layerEntries) {
+				/* disabled because this code seems overriden somewhere else. it has no effect currently. it's just slowing us down rn.
 				const override = overrides?.find(
 					(o) => o.layerIndex === entry.layerIndex,
 				);
-				const rawTile = override?.tile ?? entry.baseLayer.tile;
+				const rawTile = override?.tile ?? entry.baseLayer.tile;				 
 				const rect = getRect(rawTile);
 				entry.uniforms.uUvX.value = rect.x;
 				entry.uniforms.uUvY.value = rect.y;
@@ -303,21 +306,20 @@ export function createBillboard(
 				entry.uniforms.uUvH.value = rect.h;
 				entry.uniforms.uOpacity.value =
 					override?.opacity ?? entry.baseLayer.opacity ?? 1;
+				*/
 
 				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
 
 				const bob = entry.baseLayer.bob;
-				const bobTheta = bob
-					? (performance.now() / 1000) * (bob.speed ?? 2) + (bob.phase ?? 0)
-					: 0;
+				const bobTheta = bob ? (performance.now() / 1000) * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
 				const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
 
 				entry.mesh.position.set(
 					(entry.baseLayer.offsetX ?? 0) + bobX,
 					(entry.baseLayer.offsetY ?? 0) + bobY,
-					entry.layerIndex * 0.001,
+					entry.layerIndex * 0.01,	// was 0.001 but occasionally order was observed to be wrong
 				);
 			}
 		},

@@ -4657,20 +4657,6 @@ void main() {
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a * uOpacity);
 }
 `;
-	var ANGLE_KEYS = [
-		"N",
-		"NE",
-		"E",
-		"SE",
-		"S",
-		"SW",
-		"W",
-		"NW"
-	];
-	function selectAngleKey(entityFacing, cameraYaw) {
-		const rel = ((entityFacing - cameraYaw) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-		return ANGLE_KEYS[Math.round(rel / (Math.PI / 4)) % 8] ?? "N";
-	}
 	/**
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
@@ -4748,26 +4734,18 @@ void main() {
 					y: 0
 				}).y) * tileSize + floorY;
 				group.position.set(wx, wy, wz);
+				const flipx = ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1;
 				group.rotation.set(0, useYaw, 0, "YXZ");
-				const sprW = tileSize * (spriteMap.frameSize.w / expectedFrameSize);
+				const sprW = flipx * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
-				const angleKey = selectAngleKey(ent.facing ?? 0, useYaw);
-				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {
-					const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
-					const rect = getRect(override?.tile ?? entry.baseLayer.tile);
-					entry.uniforms.uUvX.value = rect.x;
-					entry.uniforms.uUvY.value = rect.y;
-					entry.uniforms.uUvW.value = rect.w;
-					entry.uniforms.uUvH.value = rect.h;
-					entry.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
 					const s = entry.baseLayer.scale ?? 1;
 					entry.mesh.scale.set(sprW * s, sprH * s, 1);
 					const bob = entry.baseLayer.bob;
 					const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 					const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
 					const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
-					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .001);
+					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .01);
 				}
 			},
 			setVisible(visible) {
