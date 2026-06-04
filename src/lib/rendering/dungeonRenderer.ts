@@ -1542,11 +1542,15 @@ export function createDungeonRenderer(
 
 				// Walls — north/south/west/east with per-direction tile + rotation.
 				if (isSolid(cx, cz - 1)) {
+					// if a neighbor wall is lower, align with it so tiling works. otherwise prefer the current cell floor height
+					const nfloorVal = floorOffData ? (floorOffData[idx - width] ?? 128) : 128;
+					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+				
 					const s = spec(wallTiles, "north", wallId);
 					walls.push(
 						makeFaceMatrix(
 							wx,
-							fvo + wallMidY,
+							nfvo + wallMidY,
 							cz * tileSize,
 							0,
 							0,
@@ -1562,11 +1566,14 @@ export function createDungeonRenderer(
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "north"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx, cz + 1)) {
+					const nfloorVal = floorOffData ? (floorOffData[idx + width] ?? 128) : 128;
+					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+
 					const s = spec(wallTiles, "south", wallId);
 					walls.push(
 						makeFaceMatrix(
 							wx,
-							fvo + wallMidY,
+							nfvo + wallMidY,
 							(cz + 1) * tileSize,
 							0,
 							Math.PI,
@@ -1582,11 +1589,14 @@ export function createDungeonRenderer(
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "south"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx - 1, cz)) {
+					const nfloorVal = floorOffData ? (floorOffData[idx - 1] ?? 128) : 128;
+					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+
 					const s = spec(wallTiles, "west", wallId);
 					walls.push(
 						makeFaceMatrix(
 							cx * tileSize,
-							fvo + wallMidY,
+							nfvo + wallMidY,
 							wz,
 							0,
 							HALF_PI,
@@ -1602,11 +1612,14 @@ export function createDungeonRenderer(
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "west"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx + 1, cz)) {
+					const nfloorVal = floorOffData ? (floorOffData[idx +1] ?? 128) : 128;
+					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+
 					const s = spec(wallTiles, "east", wallId);
 					walls.push(
 						makeFaceMatrix(
 							(cx + 1) * tileSize,
-							fvo + wallMidY,
+							nfvo + wallMidY,
 							wz,
 							0,
 							-HALF_PI,
@@ -1716,31 +1729,30 @@ export function createDungeonRenderer(
 						// either my ceiling, OR neighbor ceiling OR neighbor floor
 						const nfloorVal = floorOffData ? (floorOffData[idx - width] ?? 128) : 128;
 						const nceilVal = ceilOffData ? (ceilOffData[idx - width] ?? 128) : 128;
-						const nfvo = (nfloorVal - 128) * offsetStep;
+						const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
-
-						addWallFloorSkirt(wx, cz * tileSize, 0, "north", ncvo - fvo, fvo);
+						addWallFloorSkirt(wx, cz * tileSize, 0, "north", ncvo - nfvo, nfvo);
 					}
 					if (isSolid(cx, cz + 1)) {
 						const nfloorVal = floorOffData ? (floorOffData[idx + width] ?? 128) : 128;
 						const nceilVal = ceilOffData ? (ceilOffData[idx + width] ?? 128) : 128;
-						const nfvo = (nfloorVal - 128) * offsetStep;
+						const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
-						addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south", ncvo - fvo, fvo);
+						addWallFloorSkirt(wx, (cz + 1) * tileSize, Math.PI, "south", ncvo - nfvo, nfvo);
 					}
 					if (isSolid(cx - 1, cz)) {
 						const nfloorVal = floorOffData ? (floorOffData[idx - 1] ?? 128) : 128;
 						const nceilVal = ceilOffData ? (ceilOffData[idx - 1] ?? 128) : 128;
-						const nfvo = (nfloorVal - 128) * offsetStep;
+						const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
-						addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west", ncvo - fvo, fvo);
+						addWallFloorSkirt(cx * tileSize, wz, HALF_PI, "west", ncvo - nfvo, nfvo);
 					}
 					if (isSolid(cx + 1, cz)) {
 						const nfloorVal = floorOffData ? (floorOffData[idx + 1] ?? 128) : 128;
 						const nceilVal = ceilOffData ? (ceilOffData[idx + 1] ?? 128) : 128;
-						const nfvo = (nfloorVal - 128) * offsetStep;
+						const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 						const ncvo = (isOpenSky) ? ((nceilVal) ? -(nceilVal - 128) * offsetStep : nfvo - tileSize) : cvo;
-						addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east", ncvo - fvo, fvo);
+						addWallFloorSkirt((cx + 1) * tileSize, wz, -HALF_PI, "east", ncvo - nfvo, nfvo);
 					}
 				}
 
