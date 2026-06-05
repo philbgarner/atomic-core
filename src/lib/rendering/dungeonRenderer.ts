@@ -609,7 +609,7 @@ function buildInstancedMesh(
 		// aSurface (vec4, 1 slot): .x=heightOffset, .y=uvRotation, .z=uvHeightScale.
 		const surfaceArr = new Float32Array(n * 4);
 		for (let i = 0; i < n; i++) {
-			surfaceArr[i * 4] = heightOffsets ? (heightOffsets[i] ?? 0) : 0;
+			surfaceArr[i * 4] = 0;	// was heightOffsets ? (heightOffsets[i] ?? 0) : 0; we now bake offset into the mesh so raycasting works correctly
 			surfaceArr[i * 4 + 1] = uvRotations ? (uvRotations[i] ?? 0) : 0;
 			surfaceArr[i * 4 + 2] = uvHeightScales ? (uvHeightScales[i] ?? 1.0) : 1.0;
 			surfaceArr[i * 4 + 3] = uvOffsets ? (uvOffsets[i] ?? 0.0) : 0.0;
@@ -1147,7 +1147,7 @@ export function createDungeonRenderer(
 			const id = result.tile !== undefined ? resolveTile(result.tile, resolver) : 0;
 			uvRects.push(getUvRect(id));
 			rotations.push(result.rotation ?? 0);
-			offsets.push(offset);
+			//offsets.push(offset);	// NO, mod the geometry instead so raycasting works
 			heightScales.push(hs);
 			cellXs.push(faceCx);
 			cellZs.push(faceCz);
@@ -1173,8 +1173,8 @@ export function createDungeonRenderer(
 				if (spec.target === "floor" && floorVal !== 0) {
 					tryAdd(
 						filter(cx, cz, undefined),
-						makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize),
-						(floorVal - 128) * offsetStep,
+						makeFaceMatrix(wx, (floorVal - 128) * offsetStep, wz, -HALF_PI, 0, 0, tileSize, tileSize),
+						undefined,
 						1.0, cx, cz, "floor",
 					);
 				}
@@ -1182,8 +1182,8 @@ export function createDungeonRenderer(
 				if (spec.target === "ceil" && ceilVal !== 0) {
 					tryAdd(
 						filter(cx, cz, undefined),
-						makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
-						-(ceilVal - 128) * offsetStep,
+						makeFaceMatrix(wx, -(ceilVal - 128) * offsetStep + ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
+						undefined,
 						1.0, cx, cz, "ceil",
 					);
 				}
@@ -1192,16 +1192,7 @@ export function createDungeonRenderer(
 					if (isSolid(cx, cz - 1))
 						tryAdd(
 							filter(cx, cz, "north"),
-							makeFaceMatrix(
-								wx,
-								wallMidY,
-								cz * tileSize,
-								0,
-								0,
-								0,
-								tileSize,
-								ceilingH,
-							),
+							makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH,),
 							0, 1.0, cx, cz, "north", 0, 1,
 						);
 					if (isSolid(cx, cz + 1))
@@ -1327,7 +1318,7 @@ export function createDungeonRenderer(
 			uvRects,
 			spec.material,
 			useAtlas,
-			new Float32Array(offsets),
+			undefined/*new Float32Array(offsets)*/,
 			rotations,
 			(spec.target === "ceilSkirt" || spec.target === "floorSkirt") ? heightScales : undefined,
 			new Float32Array(cellXs),
@@ -1423,8 +1414,8 @@ export function createDungeonRenderer(
 		const wallRects: UvRect[] = [];
 		const floorEdgeRects: UvRect[] = [];
 		const ceilEdgeRects: UvRect[] = [];
-		const floorOffsets: number[] = [];
-		const ceilOffsets: number[] = [];
+		//const floorOffsets: number[] = [];
+		//const ceilOffsets: number[] = [];
 		// AO corner data packed as [tl, tr, bl, br] per face (4 floats per entry).
 		const floorsAo: number[] = [];
 		const ceilsAo: number[] = [];
@@ -1506,10 +1497,10 @@ export function createDungeonRenderer(
 				// Floor — skip tile if floorHeightOffset === 0 (pit marker).
 				if (floorVal !== 0) {
 					floors.push(
-						makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize),
+						makeFaceMatrix(wx, fvo, wz, -HALF_PI, 0, 0, tileSize, tileSize),
 					);
 					floorRects.push(getUvRect(floorId));
-					floorOffsets.push(fvo);
+					//floorOffsets.push(0);//fvo);	we don't need this. why did it exist? we can send fvo with the mesh and then it works with raycasting correctly???
 					floorCellMap.push({ cx, cz });
 					if (aoEnabled) {
 						const v = computeFaceAO(isSolid, cx, cz, "floor");
@@ -1532,10 +1523,10 @@ export function createDungeonRenderer(
 				// value === 0 = open sky: face omitted entirely.
 				if (!isOpenSky) {
 					ceils.push(
-						makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
+						makeFaceMatrix(wx, cvo + ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize),
 					);
 					ceilRects.push(getUvRect(ceilId));
-					ceilOffsets.push(cvo);
+					//ceilOffsets.push(cvo); not needed. push cvo thru with the mesh instead so raycasting works
 					ceilCellMap.push({ cx, cz });
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "ceil"); ceilsAo.push(v[0], v[1], v[2], v[3]); }
 				}
@@ -1545,7 +1536,7 @@ export function createDungeonRenderer(
 					// if a neighbor wall is lower, align with it so tiling works. otherwise prefer the current cell floor height
 					const nfloorVal = floorOffData ? (floorOffData[idx - width] ?? 128) : 128;
 					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
-				
+
 					const s = spec(wallTiles, "north", wallId);
 					walls.push(
 						makeFaceMatrix(
@@ -1612,7 +1603,7 @@ export function createDungeonRenderer(
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "west"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx + 1, cz)) {
-					const nfloorVal = floorOffData ? (floorOffData[idx +1] ?? 128) : 128;
+					const nfloorVal = floorOffData ? (floorOffData[idx + 1] ?? 128) : 128;
 					const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 
 					const s = spec(wallTiles, "east", wallId);
@@ -1859,10 +1850,26 @@ export function createDungeonRenderer(
 						}
 					}
 					if (isOpenSky) {	// handles skylight to interior
-						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, Math.PI, fvo);
-						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0, fvo);
-						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels((cx) * tileSize, wz, -HALF_PI, fvo);
-						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, fvo);
+						if (!isOpenSkyCeil(cx, cz - 1)) {
+							const nfloorVal = floorOffData ? (floorOffData[idx - width] ?? 128) : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels(wx, (cz) * tileSize, Math.PI, nfvo);
+						}
+						if (!isOpenSkyCeil(cx, cz + 1)) {
+							const nfloorVal = floorOffData ? (floorOffData[idx + width] ?? 128) : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels(wx, (cz + 1) * tileSize, 0, nfvo);
+						}
+						if (!isOpenSkyCeil(cx - 1, cz)) {
+							const nfloorVal=floorOffData ? (floorOffData[idx -1] ?? 128) : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels((cx) * tileSize, wz, -HALF_PI, nfvo);
+						}
+						if (!isOpenSkyCeil(cx + 1, cz)) {
+							const nfloorVal=floorOffData ? (floorOffData[idx +1] ?? 128) : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, nfvo);
+						}
 					} else {	// handles interior to skylight
 						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, (cz) * tileSize, 0, cvo);
 						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI, cvo);
@@ -1911,7 +1918,7 @@ export function createDungeonRenderer(
 
 		floorMesh = buildInstancedMesh(
 			floors, floorRects, floorMat, !!packedAtlas,
-			new Float32Array(floorOffsets), undefined, undefined, floorCX, floorCZ,
+			undefined/*new Float32Array(floorOffsets)*/, undefined, undefined, floorCX, floorCZ,
 			aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : undefined,
 		);
 		scene.add(floorMesh);
@@ -1919,7 +1926,7 @@ export function createDungeonRenderer(
 
 		ceilMesh = buildInstancedMesh(
 			ceils, ceilRects, ceilMat, !!packedAtlas,
-			new Float32Array(ceilOffsets), undefined, undefined, ceilCX, ceilCZ,
+			undefined/*new Float32Array(ceilOffsets)*/, undefined, undefined, ceilCX, ceilCZ,
 			aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : undefined,
 		);
 		scene.add(ceilMesh);

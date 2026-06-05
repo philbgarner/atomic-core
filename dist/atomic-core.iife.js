@@ -3923,7 +3923,7 @@ var AtomicCore = (function(exports, three) {
 	*   3. Rotate the tile UV in 90° steps (aSurface.y = uvRotation).
 	*   4. Map local UV into the atlas rect (aUvRect.xy = origin, aUvRect.zw = size).
 	*   5. Compute cell-relative overlay UV (aCellFace.xy / uDungeonSize).
-	*   6. Apply height offset in world space (aSurface.x = heightOffset).
+	*   6. Apply height offset in world space (aSurface.x = heightOffset).	!DISABLED!
 	*   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
 	*   8. Output fog distance as eye-space length.
 	*/
@@ -4038,7 +4038,7 @@ void main() {
 
   // ── 6. World position + height offset ─────────────────────────────────────
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-  worldPos.y   += aSurface.x;
+  //worldPos.y   += aSurface.x;
 
   // ── 7. Fog distance (eye-space length) ────────────────────────────────────
   vec4 eyePos = viewMatrix * worldPos;
@@ -4960,7 +4960,7 @@ void main() {
 			geo.setAttribute("aUvRect", new three.InstancedBufferAttribute(uvRectArr, 4));
 			const surfaceArr = new Float32Array(n * 4);
 			for (let i = 0; i < n; i++) {
-				surfaceArr[i * 4] = heightOffsets ? heightOffsets[i] ?? 0 : 0;
+				surfaceArr[i * 4] = 0;
 				surfaceArr[i * 4 + 1] = uvRotations ? uvRotations[i] ?? 0 : 0;
 				surfaceArr[i * 4 + 2] = uvHeightScales ? uvHeightScales[i] ?? 1 : 1;
 				surfaceArr[i * 4 + 3] = uvOffsets ? uvOffsets[i] ?? 0 : 0;
@@ -5369,7 +5369,6 @@ void main() {
 			const matrices = [];
 			const uvRects = [];
 			const rotations = [];
-			const offsets = [];
 			const heightScales = [];
 			const cellXs = [];
 			const cellZs = [];
@@ -5396,7 +5395,6 @@ void main() {
 				const id = result.tile !== void 0 ? resolveTile(result.tile, resolver) : 0;
 				uvRects.push(getUvRect(id));
 				rotations.push(result.rotation ?? 0);
-				offsets.push(offset);
 				heightScales.push(hs);
 				cellXs.push(faceCx);
 				cellZs.push(faceCz);
@@ -5413,8 +5411,8 @@ void main() {
 				const wz = (cz + .5) * tileSize;
 				const floorVal = floorOffData ? floorOffData[idx] ?? 128 : 128;
 				const ceilVal = ceilOffData ? ceilOffData[idx] ?? 128 : 128;
-				if (spec.target === "floor" && floorVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize), (floorVal - 128) * offsetStep, 1, cx, cz, "floor");
-				if (spec.target === "ceil" && ceilVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize), -(ceilVal - 128) * offsetStep, 1, cx, cz, "ceil");
+				if (spec.target === "floor" && floorVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, (floorVal - 128) * offsetStep, wz, -HALF_PI, 0, 0, tileSize, tileSize), void 0, 1, cx, cz, "floor");
+				if (spec.target === "ceil" && ceilVal !== 0) tryAdd(filter(cx, cz, void 0), makeFaceMatrix(wx, -(ceilVal - 128) * offsetStep + ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize), void 0, 1, cx, cz, "ceil");
 				if (spec.target === "wall") {
 					if (isSolid(cx, cz - 1)) tryAdd(filter(cx, cz, "north"), makeFaceMatrix(wx, wallMidY, cz * tileSize, 0, 0, 0, tileSize, ceilingH), 0, 1, cx, cz, "north", 0, 1);
 					if (isSolid(cx, cz + 1)) tryAdd(filter(cx, cz, "south"), makeFaceMatrix(wx, wallMidY, (cz + 1) * tileSize, 0, Math.PI, 0, tileSize, ceilingH), 0, 1, cx, cz, "south", 0, -1);
@@ -5462,7 +5460,7 @@ void main() {
 			}
 			if (matrices.length === 0) return null;
 			const useAtlas = spec.useAtlas ?? !!packedAtlas;
-			const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, new Float32Array(offsets), rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0, new Float32Array(cellXs), new Float32Array(cellZs), aoCornerArr.length ? new Float32Array(aoCornerArr) : void 0, faceNormals.length ? new Float32Array(faceNormals) : void 0);
+			const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, void 0, rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0, new Float32Array(cellXs), new Float32Array(cellZs), aoCornerArr.length ? new Float32Array(aoCornerArr) : void 0, faceNormals.length ? new Float32Array(faceNormals) : void 0);
 			if (spec.polygonOffset !== false) {
 				spec.material.polygonOffset = true;
 				spec.material.polygonOffsetFactor = -1;
@@ -5522,8 +5520,6 @@ void main() {
 			const wallRects = [];
 			const floorEdgeRects = [];
 			const ceilEdgeRects = [];
-			const floorOffsets = [];
-			const ceilOffsets = [];
 			const floorsAo = [];
 			const ceilsAo = [];
 			const wallsAo = [];
@@ -5591,9 +5587,8 @@ void main() {
 				const cvo = -(ceilVal - 128) * offsetStep;
 				const isOpenSky = ceilVal === 0;
 				if (floorVal !== 0) {
-					floors.push(makeFaceMatrix(wx, 0, wz, -HALF_PI, 0, 0, tileSize, tileSize));
+					floors.push(makeFaceMatrix(wx, fvo, wz, -HALF_PI, 0, 0, tileSize, tileSize));
 					floorRects.push(getUvRect(floorId));
-					floorOffsets.push(fvo);
 					floorCellMap.push({
 						cx,
 						cz
@@ -5614,9 +5609,8 @@ void main() {
 					}
 				}
 				if (!isOpenSky) {
-					ceils.push(makeFaceMatrix(wx, ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
+					ceils.push(makeFaceMatrix(wx, cvo + ceilingH, wz, HALF_PI, 0, 0, tileSize, tileSize));
 					ceilRects.push(getUvRect(ceilId));
-					ceilOffsets.push(cvo);
 					ceilCellMap.push({
 						cx,
 						cz
@@ -5863,10 +5857,26 @@ void main() {
 						}
 					}
 					if (isOpenSky) {
-						if (!isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, Math.PI, fvo);
-						if (!isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, 0, fvo);
-						if (!isOpenSkyCeil(cx - 1, cz)) emitSkyPanels(cx * tileSize, wz, -HALF_PI, fvo);
-						if (!isOpenSkyCeil(cx + 1, cz)) emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, fvo);
+						if (!isOpenSkyCeil(cx, cz - 1)) {
+							const nfloorVal = floorOffData ? floorOffData[idx - width] ?? 128 : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels(wx, cz * tileSize, Math.PI, nfvo);
+						}
+						if (!isOpenSkyCeil(cx, cz + 1)) {
+							const nfloorVal = floorOffData ? floorOffData[idx + width] ?? 128 : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels(wx, (cz + 1) * tileSize, 0, nfvo);
+						}
+						if (!isOpenSkyCeil(cx - 1, cz)) {
+							const nfloorVal = floorOffData ? floorOffData[idx - 1] ?? 128 : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels(cx * tileSize, wz, -HALF_PI, nfvo);
+						}
+						if (!isOpenSkyCeil(cx + 1, cz)) {
+							const nfloorVal = floorOffData ? floorOffData[idx + 1] ?? 128 : 128;
+							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
+							emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, nfvo);
+						}
 					} else {
 						if (isOpenSkyCeil(cx, cz - 1)) emitSkyPanels(wx, cz * tileSize, 0, cvo);
 						if (isOpenSkyCeil(cx, cz + 1)) emitSkyPanels(wx, (cz + 1) * tileSize, Math.PI, cvo);
@@ -5910,10 +5920,10 @@ void main() {
 			const [wallCX, wallCZ] = cellArrays(wallCellMap);
 			const [fEdgeCX, fEdgeCZ] = cellArrays(floorEdgeCellMap);
 			const [cEdgeCX, cEdgeCZ] = cellArrays(ceilEdgeCellMap);
-			floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, new Float32Array(floorOffsets), void 0, void 0, floorCX, floorCZ, aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : void 0);
+			floorMesh = buildInstancedMesh(floors, floorRects, floorMat, !!packedAtlas, void 0, void 0, void 0, floorCX, floorCZ, aoEnabled && floorsAo.length ? new Float32Array(floorsAo) : void 0);
 			scene.add(floorMesh);
 			meshToCellMap.set(floorMesh, floorCellMap);
-			ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, new Float32Array(ceilOffsets), void 0, void 0, ceilCX, ceilCZ, aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : void 0);
+			ceilMesh = buildInstancedMesh(ceils, ceilRects, ceilMat, !!packedAtlas, void 0, void 0, void 0, ceilCX, ceilCZ, aoEnabled && ceilsAo.length ? new Float32Array(ceilsAo) : void 0);
 			scene.add(ceilMesh);
 			meshToCellMap.set(ceilMesh, ceilCellMap);
 			wallMesh = buildInstancedMesh(walls, wallRects, wallMat, !!packedAtlas, void 0, wallRots, void 0, wallCX, wallCZ, aoEnabled && wallsAo.length ? new Float32Array(wallsAo) : void 0, new Float32Array(wallNormals));

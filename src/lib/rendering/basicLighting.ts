@@ -36,7 +36,7 @@ import * as THREE from "three";
  *   3. Rotate the tile UV in 90° steps (aSurface.y = uvRotation).
  *   4. Map local UV into the atlas rect (aUvRect.xy = origin, aUvRect.zw = size).
  *   5. Compute cell-relative overlay UV (aCellFace.xy / uDungeonSize).
- *   6. Apply height offset in world space (aSurface.x = heightOffset).
+ *   6. Apply height offset in world space (aSurface.x = heightOffset).	!DISABLED!
  *   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
  *   8. Output fog distance as eye-space length.
  */
@@ -151,7 +151,7 @@ void main() {
 
   // ── 6. World position + height offset ─────────────────────────────────────
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-  worldPos.y   += aSurface.x;
+  //worldPos.y   += aSurface.x;
 
   // ── 7. Fog distance (eye-space length) ────────────────────────────────────
   vec4 eyePos = viewMatrix * worldPos;
