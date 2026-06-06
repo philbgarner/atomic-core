@@ -6206,7 +6206,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	function onCanvasPointerMove(e) {
 		if (!options.onCellHover) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
-		const key = info ? `${info.cx},${info.cz}` : null;
+		const key = info ? `${info.cx},${info.cz},${info.entityId}` : null;
 		if (key === _lastHoverKey) return;
 		_lastHoverKey = key;
 		options.onCellHover(info);
