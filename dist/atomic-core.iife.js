@@ -4663,6 +4663,10 @@ void main() {
 		const { spriteMap } = entity;
 		const group = new three.Group();
 		scene.add(group);
+		const pickMesh = new three.Mesh(new three.PlaneGeometry(1, 1), new three.MeshBasicMaterial());
+		pickMesh.visible = false;
+		pickMesh.userData.entity = entity;
+		group.add(pickMesh);
 		const atlasTex = new three.Texture(packedAtlas.texture);
 		atlasTex.magFilter = three.NearestFilter;
 		atlasTex.minFilter = three.NearestFilter;
@@ -4735,6 +4739,8 @@ void main() {
 				group.rotation.set(0, useYaw, 0, "YXZ");
 				const sprW = (ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1) * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
+				pickMesh.scale.set(sprW, sprH, 1);
+				pickMesh.position.set(0, 0, 0);
 				for (const entry of layerEntries) {
 					const s = entry.baseLayer.scale ?? 1;
 					entry.mesh.scale.set(sprW * s, sprH * s, 1);
@@ -4744,6 +4750,9 @@ void main() {
 					const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
 					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .01);
 				}
+			},
+			getPickObject() {
+				return pickMesh;
 			},
 			setVisible(visible) {
 				group.visible = visible;
@@ -6182,20 +6191,35 @@ void main() {
 				ceilingPanelMesh
 			].filter((m) => m !== null);
 			if (pickable.length === 0) return null;
-			const hit = raycaster.intersectObjects(pickable, false)[0];
+			const hit = raycaster.intersectObjects([
+				...pickable,
+				...Array.from(billboardMap.values(), (b) => b.getPickObject()),
+				...Array.from(objectBillboardMap.values(), (b) => b.getPickObject())
+			], false)[0];
 			if (!hit) return null;
-			const cellArray = meshToCellMap.get(hit.object);
-			if (!cellArray || hit.instanceId == null) return null;
-			const cell = cellArray[hit.instanceId];
-			if (!cell) return null;
-			const { cx, cz } = cell;
-			const { width } = outputs;
-			const regionData = outputs.textures.regionId?.image.data;
-			return {
-				cx,
-				cz,
-				regionId: regionData ? regionData[cz * width + cx] ?? 0 : 0
+			let cx = 0, cz = 0;
+			if (hit.object.userData.entity) return {
+				cx: hit.object.userData.entity.x,
+				cz: hit.object.userData.entity.z,
+				entityId: hit.object.userData.entity.id,
+				regionId: 0
 			};
+			else {
+				const cellArray = meshToCellMap.get(hit.object);
+				if (!cellArray || hit.instanceId == null) return null;
+				const cell = cellArray[hit.instanceId];
+				if (!cell) return null;
+				cx = cell.cx;
+				cz = cell.cz;
+				const { width } = outputs;
+				const regionData = outputs.textures.regionId?.image.data;
+				const regionId = regionData ? regionData[cz * width + cx] ?? 0 : 0;
+				return {
+					cx,
+					cz,
+					regionId
+				};
+			}
 		}
 		let _lastHoverKey = null;
 		function onCanvasClick(e) {

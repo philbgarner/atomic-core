@@ -41,6 +41,8 @@ export type CellInfo = {
     cz: number;
     /** Region/room ID from the dungeon's regionId texture (0 = unassigned). */
     regionId: number;
+    /** entity id, if we clicked on one */
+    entityId?: string;
 };
 export type DungeonRendererOptions = {
     /** Camera field of view in degrees. Default: 75. */

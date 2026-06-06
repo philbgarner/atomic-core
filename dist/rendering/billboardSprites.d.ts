@@ -61,6 +61,7 @@ export interface BillboardHandle {
     setVisible(visible: boolean): void;
     /** Remove meshes from scene and dispose GPU resources. */
     dispose(): void;
+    getPickObject(): THREE.Mesh;
 }
 export interface BillboardFog {
     color?: THREE.Color;

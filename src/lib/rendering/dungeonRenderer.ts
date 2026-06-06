@@ -57,6 +57,8 @@ export type CellInfo = {
 	cz: number;
 	/** Region/room ID from the dungeon's regionId texture (0 = unassigned). */
 	regionId: number;
+	/** entity id, if we clicked on one */
+	entityId?: string;
 };
 
 export type DungeonRendererOptions = {
@@ -1861,12 +1863,12 @@ export function createDungeonRenderer(
 							emitSkyPanels(wx, (cz + 1) * tileSize, 0, nfvo);
 						}
 						if (!isOpenSkyCeil(cx - 1, cz)) {
-							const nfloorVal=floorOffData ? (floorOffData[idx -1] ?? 128) : 128;
+							const nfloorVal = floorOffData ? (floorOffData[idx - 1] ?? 128) : 128;
 							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 							emitSkyPanels((cx) * tileSize, wz, -HALF_PI, nfvo);
 						}
 						if (!isOpenSkyCeil(cx + 1, cz)) {
-							const nfloorVal=floorOffData ? (floorOffData[idx +1] ?? 128) : 128;
+							const nfloorVal = floorOffData ? (floorOffData[idx + 1] ?? 128) : 128;
 							const nfvo = Math.min((nfloorVal - 128) * offsetStep, fvo);
 							emitSkyPanels((cx + 1) * tileSize, wz, HALF_PI, nfvo);
 						}
@@ -2299,20 +2301,32 @@ export function createDungeonRenderer(
 		);
 		if (pickable.length === 0) return null;
 
-		const hits = raycaster.intersectObjects(pickable, false);
+		const hits = raycaster.intersectObjects([...pickable,
+		...Array.from(billboardMap.values(), b => b.getPickObject()),
+		...Array.from(objectBillboardMap.values(), b => b.getPickObject()),
+		], false);
 		const hit = hits[0];
 		if (!hit) return null;
 
-		const cellArray = meshToCellMap.get(hit.object as THREE.InstancedMesh);
-		if (!cellArray || hit.instanceId == null) return null;
+		let cx = 0, cz = 0;
+		if (hit.object.userData.entity)	// is an entity
+		{
+			return { cx: hit.object.userData.entity.x, cz: hit.object.userData.entity.z, entityId: hit.object.userData.entity.id, regionId:0 };
+		}
+		else {
+			const cellArray = meshToCellMap.get(hit.object as THREE.InstancedMesh);
+			if (!cellArray || hit.instanceId == null) return null;
 
-		const cell = cellArray[hit.instanceId];
-		if (!cell) return null;
-		const { cx, cz } = cell;
-		const { width } = outputs;
-		const regionData = outputs.textures.regionId?.image.data as Uint8Array | undefined;
-		const regionId = regionData ? (regionData[cz * width + cx] ?? 0) : 0;
-		return { cx, cz, regionId };
+			const cell = cellArray[hit.instanceId];
+			if (!cell) return null;
+			cx = cell.cx; cz = cell.cz;
+
+			const { width } = outputs;
+			const regionData = outputs.textures.regionId?.image.data as Uint8Array | undefined;
+			const regionId = regionData ? (regionData[cz * width + cx] ?? 0) : 0;
+
+			return { cx, cz, regionId };
+		}		
 	}
 
 	let _lastHoverKey: string | null = null;
@@ -2324,7 +2338,7 @@ export function createDungeonRenderer(
 	}
 
 	function onCanvasPointerMove(e: PointerEvent) {
-		if (!options.onCellHover) return;
+		if (!options.onCellHover) return;		
 		const info = getCellAtPointer(e.clientX, e.clientY);
 		const key = info ? `${info.cx},${info.cz}` : null;
 		if (key === _lastHoverKey) return;

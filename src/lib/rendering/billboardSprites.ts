@@ -142,6 +142,7 @@ export interface BillboardHandle {
 	setVisible(visible: boolean): void;
 	/** Remove meshes from scene and dispose GPU resources. */
 	dispose(): void;
+	getPickObject(): THREE.Mesh;
 }
 
 interface LayerMeshEntry {
@@ -196,6 +197,15 @@ export function createBillboard(
 	const { spriteMap } = entity;
 	const group = new THREE.Group();
 	scene.add(group);
+
+	// handle clicking on billboards
+	const pickMesh = new THREE.Mesh(
+		new THREE.PlaneGeometry(1, 1),
+		new THREE.MeshBasicMaterial()
+	);	
+	pickMesh.visible = false;
+	pickMesh.userData.entity = entity;
+	group.add(pickMesh);
 
 	const atlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
 	atlasTex.magFilter = THREE.NearestFilter;
@@ -287,6 +297,8 @@ export function createBillboard(
 			const flipx = ent.flipTimer ? (Math.floor((performance.now() / 1000) / (ent.flipTimer as number)) % 2 === 0 ? 1 : -1) : 1;
 			const sprW = flipx*tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 			const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
+			pickMesh.scale.set(sprW, sprH, 1);
+			pickMesh.position.set(0, 0, 0);
 
 			// Determine active angle key for override lookup. doesn't seem to work. disabled for now for speed.
 			//const facing = (ent as { facing?: number }).facing ?? 0;
@@ -310,7 +322,7 @@ export function createBillboard(
 
 				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
-
+				
 				const bob = entry.baseLayer.bob;
 				const bobTheta = bob ? (performance.now() / 1000) * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
@@ -322,6 +334,10 @@ export function createBillboard(
 					entry.layerIndex * 0.01,	// was 0.001 but occasionally order was observed to be wrong
 				);
 			}
+		},
+
+		getPickObject() {
+			return pickMesh;
 		},
 
 		setVisible(visible: boolean) {
