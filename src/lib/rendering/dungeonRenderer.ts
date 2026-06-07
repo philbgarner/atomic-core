@@ -2329,8 +2329,8 @@ export function createDungeonRenderer(
 		}		
 	}
 
-	let _lastHoverKey: string | null = null;
-
+	//let _lastHoverKey: string | null = null;
+	// was a great idea, but we need to let the dev do this because it's tied to other stuff usually.
 	function onCanvasClick(e: MouseEvent) {
 		if (!options.onCellClick) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
@@ -2340,18 +2340,18 @@ export function createDungeonRenderer(
 	function onCanvasPointerMove(e: PointerEvent) {
 		if (!options.onCellHover) return;		
 		const info = getCellAtPointer(e.clientX, e.clientY);
-		const key = info ? `${info.cx},${info.cz},${info.entityId}` : null;
-		if (key === _lastHoverKey) return;
-		_lastHoverKey = key;
+		//const key = info ? `${info.cx},${info.cz},${info.entityId}` : null;
+		//if (key === _lastHoverKey) return;
+		//_lastHoverKey = key;
 		options.onCellHover(info);
 	}
 
 	function onCanvasPointerLeave() {
 		if (!options.onCellHover) return;
-		if (_lastHoverKey !== null) {
-			_lastHoverKey = null;
+		//if (_lastHoverKey !== null) {
+		//	_lastHoverKey = null;
 			options.onCellHover(null);
-		}
+		//}
 	}
 
 	if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);

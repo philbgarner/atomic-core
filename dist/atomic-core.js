@@ -6197,7 +6197,6 @@ function createDungeonRenderer(element, game, options = {}) {
 			};
 		}
 	}
-	let _lastHoverKey = null;
 	function onCanvasClick(e) {
 		if (!options.onCellClick) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
@@ -6206,17 +6205,11 @@ function createDungeonRenderer(element, game, options = {}) {
 	function onCanvasPointerMove(e) {
 		if (!options.onCellHover) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
-		const key = info ? `${info.cx},${info.cz},${info.entityId}` : null;
-		if (key === _lastHoverKey) return;
-		_lastHoverKey = key;
 		options.onCellHover(info);
 	}
 	function onCanvasPointerLeave() {
 		if (!options.onCellHover) return;
-		if (_lastHoverKey !== null) {
-			_lastHoverKey = null;
-			options.onCellHover(null);
-		}
+		options.onCellHover(null);
 	}
 	if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);
 	if (options.onCellHover) {
