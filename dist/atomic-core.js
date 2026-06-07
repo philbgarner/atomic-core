@@ -4777,6 +4777,17 @@ function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize
 		setVisible(visible) {
 			group.visible = visible;
 		},
+		setLayerTile(layerIndex, tile) {
+			const entry = layerEntries[layerIndex];
+			if (!entry) return;
+			entry.baseLayer.tile = tile;
+			const rect = getRect(tile);
+			const mat = entry.mesh.material;
+			mat.uniforms.uUvX.value = rect.x;
+			mat.uniforms.uUvY.value = rect.y;
+			mat.uniforms.uUvW.value = rect.w;
+			mat.uniforms.uUvH.value = rect.h;
+		},
 		dispose() {
 			scene.remove(group);
 			for (const entry of layerEntries) {
@@ -6300,6 +6311,10 @@ function createDungeonRenderer(element, game, options = {}) {
 		setEntities(entities) {
 			currentEntities = entities;
 			syncEntities(entities);
+		},
+		editEntity(entity, layerIndex, tile) {
+			if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);
+			else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);
 		},
 		setObjects(objects) {
 			currentObjects = objects;

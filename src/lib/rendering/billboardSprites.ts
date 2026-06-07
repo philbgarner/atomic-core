@@ -143,6 +143,7 @@ export interface BillboardHandle {
 	/** Remove meshes from scene and dispose GPU resources. */
 	dispose(): void;
 	getPickObject(): THREE.Mesh;
+	setLayerTile(layerIndex: number, tile: string): void;
 }
 
 interface LayerMeshEntry {
@@ -382,6 +383,19 @@ export function createBillboard(
 
 		setVisible(visible: boolean) {
 			group.visible = visible;
+		},
+
+		setLayerTile(layerIndex: number, tile: string) {
+			const entry = layerEntries[layerIndex];
+			if (!entry) return;
+		
+			entry.baseLayer.tile = tile;	
+			const rect = getRect(tile);	
+			const mat = entry.mesh.material as THREE.ShaderMaterial;	
+			mat.uniforms.uUvX!.value = rect.x;
+			mat.uniforms.uUvY!.value = rect.y;
+			mat.uniforms.uUvW!.value = rect.w;
+			mat.uniforms.uUvH!.value = rect.h;
 		},
 
 		dispose() {

@@ -62,6 +62,7 @@ export interface BillboardHandle {
     /** Remove meshes from scene and dispose GPU resources. */
     dispose(): void;
     getPickObject(): THREE.Mesh;
+    setLayerTile(layerIndex: number, tile: string): void;
 }
 export interface BillboardFog {
     color?: THREE.Color;

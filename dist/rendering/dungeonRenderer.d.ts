@@ -289,6 +289,10 @@ export type DungeonRenderer = {
      */
     setEntities(entities: EntityBase[]): void;
     /**
+     * edit a (billboard) entity sprite, for animations
+     */
+    editEntity(entity: EntityBase, layerIndex: number, tile: string): void;
+    /**
      * Register stationary billboard objects derived from `ObjectPlacement` records.
      * Call once after `game.generate()` (or pass `game.dungeon.objects` directly).
      * Objects with a `spriteMap` are rendered as camera-facing billboard sprites;
