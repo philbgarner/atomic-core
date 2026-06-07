@@ -202,7 +202,7 @@ export function createBillboard(
 	const pickMesh = new THREE.Mesh(
 		new THREE.PlaneGeometry(1, 1),
 		new THREE.MeshBasicMaterial()
-	);	
+	);
 	pickMesh.visible = false;
 	pickMesh.userData.entity = entity;
 	group.add(pickMesh);
@@ -211,6 +211,8 @@ export function createBillboard(
 	atlasTex.magFilter = THREE.NearestFilter;
 	atlasTex.minFilter = THREE.NearestFilter;
 	atlasTex.needsUpdate = true;
+
+	const opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 
 	function getRect(tile: string | number) {
 		const id = resolveTile(tile, resolver);
@@ -223,6 +225,62 @@ export function createBillboard(
 		const sprite = packedAtlas.getById(id);
 		const piv = { x: sprite?.pivot?.x ?? 0.5, y: sprite?.pivot?.y ?? 0 };
 		return piv;
+	}
+
+	function computeOpaqueBounds(spriteMap: SpriteMap, packedAtlas: PackedAtlas, resolver?: (name: string) => number) {
+		let minX = Infinity;
+		let minY = Infinity;
+		let maxX = -Infinity;
+		let maxY = -Infinity;
+
+		const atlasCanvas = packedAtlas.texture as HTMLCanvasElement;
+		const ctx = atlasCanvas.getContext("2d")!;
+		const atlasData = ctx.getImageData(
+			0,
+			0,
+			atlasCanvas.width,
+			atlasCanvas.height
+		).data;
+
+		for (const layer of spriteMap.layers) {
+			const id = resolveTile(layer.tile, resolver);
+			const sprite = packedAtlas.getById(id);
+			if (!sprite) continue;
+
+			const atlasW = atlasCanvas.width;
+			const atlasH = atlasCanvas.height;
+
+			const sx = Math.floor(sprite.uvX * atlasW);
+			const sy = Math.floor(sprite.uvY * atlasH);
+			const ex = Math.ceil((sprite.uvX + sprite.uvW) * atlasW);
+			const ey = Math.ceil((sprite.uvY + sprite.uvH) * atlasH);
+			const sw = ex - sx;
+			const sh = ey - sy;
+
+			for (let y = 0; y < sh; y++) {
+				for (let x = 0; x < sw; x++) {
+					const idx =((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3;
+					const alpha = atlasData[idx] ?? 0;
+					if (alpha > 0) {
+						minX = Math.min(minX, x);
+						minY = Math.min(minY, y);
+						maxX = Math.max(maxX, x);
+						maxY = Math.max(maxY, y);
+					}
+				}
+			}
+		}
+
+		if (minX === Infinity) {
+			return { left: 0, right: 1, top: 0, bottom: 1 };
+		}
+
+		return {
+			left: minX / spriteMap.frameSize.w,
+			right: (maxX + 1) / spriteMap.frameSize.w,
+			top: minY / spriteMap.frameSize.h,
+			bottom: (maxY + 1) / spriteMap.frameSize.h,
+		};
 	}
 
 	const layerEntries: LayerMeshEntry[] = spriteMap.layers.map(
@@ -256,11 +314,7 @@ export function createBillboard(
 
 			const geo = new THREE.PlaneGeometry(1, 1);
 			const mesh = new THREE.Mesh(geo, mat);
-			mesh.renderOrder = 1;//layerIndex + 1;
-			// PHIL CHECK THIS! why does setting it to 1 fix the bug where entity body parts drew in weird orders?
-			// the original code resulted in entities in a straight line drawing body parts out of order, or when aligned with decor entities.
-			// set to 1 and everything seems to work perfectly.. so why did it use this index in the first place? must be some logic here that
-			// i may have broken?
+			mesh.renderOrder = 1;
 
 			const s = layer.scale ?? 1;
 			mesh.position.set(
@@ -277,7 +331,7 @@ export function createBillboard(
 
 	return {
 		update(ent, cameraYaw, tileSize, ceilingH, floorY) {
-			const useYaw=(ent.forcedYaw as number) ?? cameraYaw;	// support facades with fixed angle
+			const useYaw = (ent.forcedYaw as number) ?? cameraYaw;	// support facades with fixed angle
 
 			// Position group at entity world coordinates.
 			const wx = (ent.x + 0.5) * tileSize;
@@ -287,7 +341,7 @@ export function createBillboard(
 			group.position.set(wx, wy, wz);
 
 			// Rotate the group to always face the camera (Y-axis billboard). unless it's a facade with fixed angle
-			group.rotation.set(0, useYaw, 0, "YXZ");	
+			group.rotation.set(0, useYaw, 0, "YXZ");
 
 			// Scale layers to world-unit sprite size, preserving frameSize aspect ratio.
 			// no longer do this. the artist decides the scaling, which by default should be tilesize if it's a full-size monster
@@ -295,34 +349,20 @@ export function createBillboard(
 			// to exist. Expected tile size is 64 pixels (anything less just looks bad)
 			// added a simple flip timer here for fire and other basic animating effects
 			const flipx = ent.flipTimer ? (Math.floor((performance.now() / 1000) / (ent.flipTimer as number)) % 2 === 0 ? 1 : -1) : 1;
-			const sprW = flipx*tileSize * (spriteMap.frameSize.w / expectedFrameSize);
+			const sprW = flipx * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 			const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
-			pickMesh.scale.set(sprW, sprH, 1);
-			pickMesh.position.set(0, 0, 0);
 
-			// Determine active angle key for override lookup. doesn't seem to work. disabled for now for speed.
-			//const facing = (ent as { facing?: number }).facing ?? 0;
-			//const angleKey = selectAngleKey(facing, useYaw);
-			//const overrides = spriteMap.angles?.[angleKey];
-			
+			const widthFrac = opaqueBounds.right - opaqueBounds.left;
+			const heightFrac = opaqueBounds.bottom - opaqueBounds.top;
+			pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
+			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5 - 0.5;
+			const centerY = 0.5 - (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
+			pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
+
 			for (const entry of layerEntries) {
-				/* disabled because this code seems overriden somewhere else. it has no effect currently. it's just slowing us down rn.
-				const override = overrides?.find(
-					(o) => o.layerIndex === entry.layerIndex,
-				);
-				const rawTile = override?.tile ?? entry.baseLayer.tile;				 
-				const rect = getRect(rawTile);
-				entry.uniforms.uUvX.value = rect.x;
-				entry.uniforms.uUvY.value = rect.y;
-				entry.uniforms.uUvW.value = rect.w;
-				entry.uniforms.uUvH.value = rect.h;
-				entry.uniforms.uOpacity.value =
-					override?.opacity ?? entry.baseLayer.opacity ?? 1;
-				*/
-
 				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
-				
+
 				const bob = entry.baseLayer.bob;
 				const bobTheta = bob ? (performance.now() / 1000) * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;

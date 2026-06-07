@@ -4671,6 +4671,7 @@ void main() {
 		atlasTex.magFilter = three.NearestFilter;
 		atlasTex.minFilter = three.NearestFilter;
 		atlasTex.needsUpdate = true;
+		const opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 		function getRect(tile) {
 			const id = resolveTile(tile, resolver);
 			const sprite = packedAtlas.getById(id);
@@ -4687,6 +4688,45 @@ void main() {
 			return {
 				x: sprite?.pivot?.x ?? .5,
 				y: sprite?.pivot?.y ?? 0
+			};
+		}
+		function computeOpaqueBounds(spriteMap, packedAtlas, resolver) {
+			let minX = Infinity;
+			let minY = Infinity;
+			let maxX = -Infinity;
+			let maxY = -Infinity;
+			const atlasCanvas = packedAtlas.texture;
+			const atlasData = atlasCanvas.getContext("2d").getImageData(0, 0, atlasCanvas.width, atlasCanvas.height).data;
+			for (const layer of spriteMap.layers) {
+				const id = resolveTile(layer.tile, resolver);
+				const sprite = packedAtlas.getById(id);
+				if (!sprite) continue;
+				const atlasW = atlasCanvas.width;
+				const atlasH = atlasCanvas.height;
+				const sx = Math.floor(sprite.uvX * atlasW);
+				const sy = Math.floor(sprite.uvY * atlasH);
+				const ex = Math.ceil((sprite.uvX + sprite.uvW) * atlasW);
+				const ey = Math.ceil((sprite.uvY + sprite.uvH) * atlasH);
+				const sw = ex - sx;
+				const sh = ey - sy;
+				for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if ((atlasData[((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3] ?? 0) > 0) {
+					minX = Math.min(minX, x);
+					minY = Math.min(minY, y);
+					maxX = Math.max(maxX, x);
+					maxY = Math.max(maxY, y);
+				}
+			}
+			if (minX === Infinity) return {
+				left: 0,
+				right: 1,
+				top: 0,
+				bottom: 1
+			};
+			return {
+				left: minX / spriteMap.frameSize.w,
+				right: (maxX + 1) / spriteMap.frameSize.w,
+				top: minY / spriteMap.frameSize.h,
+				bottom: (maxY + 1) / spriteMap.frameSize.h
 			};
 		}
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
@@ -4739,8 +4779,12 @@ void main() {
 				group.rotation.set(0, useYaw, 0, "YXZ");
 				const sprW = (ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1) * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
 				const sprH = tileSize * (spriteMap.frameSize.h / expectedFrameSize);
-				pickMesh.scale.set(sprW, sprH, 1);
-				pickMesh.position.set(0, 0, 0);
+				const widthFrac = opaqueBounds.right - opaqueBounds.left;
+				const heightFrac = opaqueBounds.bottom - opaqueBounds.top;
+				pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
+				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5 - .5;
+				const centerY = .5 - (opaqueBounds.top + opaqueBounds.bottom) * .5;
+				pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
 				for (const entry of layerEntries) {
 					const s = entry.baseLayer.scale ?? 1;
 					entry.mesh.scale.set(sprW * s, sprH * s, 1);
