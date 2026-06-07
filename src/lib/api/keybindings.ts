@@ -59,15 +59,16 @@ export function createKeybindings(options: KeybindingsOptions): KeybindingsHandl
   const lastFired = new Map<string, number>();
 
   function handleKeydown(event: KeyboardEvent): void {
-    const action = keyToAction.get(event.key);
+	// keyboard handler should use .code not .key so we support AZERTY
+    const action = keyToAction.get(event.code);
     if (action === undefined) return;
 
     if (event.repeat && repeatDelayMs > 0) {
-      const last = lastFired.get(event.key) ?? 0;
+      const last = lastFired.get(event.code) ?? 0;
       if (event.timeStamp - last < repeatDelayMs) return;
     }
 
-    lastFired.set(event.key, event.timeStamp);
+    lastFired.set(event.code, event.timeStamp);
     options.onAction(action, event);
   }
 

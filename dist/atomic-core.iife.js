@@ -2581,13 +2581,13 @@ var AtomicCore = (function(exports, three) {
 		const repeatDelayMs = options.repeatDelayMs ?? 150;
 		const lastFired = /* @__PURE__ */ new Map();
 		function handleKeydown(event) {
-			const action = keyToAction.get(event.key);
+			const action = keyToAction.get(event.code);
 			if (action === void 0) return;
 			if (event.repeat && repeatDelayMs > 0) {
-				const last = lastFired.get(event.key) ?? 0;
+				const last = lastFired.get(event.code) ?? 0;
 				if (event.timeStamp - last < repeatDelayMs) return;
 			}
-			lastFired.set(event.key, event.timeStamp);
+			lastFired.set(event.code, event.timeStamp);
 			options.onAction(action, event);
 		}
 		document.addEventListener("keydown", handleKeydown);
