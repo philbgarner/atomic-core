@@ -182,11 +182,7 @@ export function commitPlayerAction(
 	let next = deps.applyAction(state, state.playerId, action, deps);
 
 	if (action.kind === "rotate") {
-		// when rotating, time does not advance, thus the turn counter remains static
-		const t=next.scheduler.getNow();
-		deps.onTimeAdvanced?.({ prevTime: t, nextTime: t, activeActorId: state.playerId, state: next });
-
-		return next;	// this *should* be correct..
+		return next;
 	}
 
 	next = { ...next, awaitingPlayerInput: false, activeActorId: null };

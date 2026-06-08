@@ -1886,16 +1886,7 @@ var AtomicCore = (function(exports, three) {
 		if (!state.awaitingPlayerInput) return state;
 		const cost_time = deps.computeCost(state.playerId, action).time;
 		let next = deps.applyAction(state, state.playerId, action, deps);
-		if (action.kind === "rotate") {
-			const t = next.scheduler.getNow();
-			deps.onTimeAdvanced?.({
-				prevTime: t,
-				nextTime: t,
-				activeActorId: state.playerId,
-				state: next
-			});
-			return next;
-		}
+		if (action.kind === "rotate") return next;
 		next = {
 			...next,
 			awaitingPlayerInput: false,
@@ -3923,7 +3914,7 @@ var AtomicCore = (function(exports, three) {
 	*   3. Rotate the tile UV in 90° steps (aSurface.y = uvRotation).
 	*   4. Map local UV into the atlas rect (aUvRect.xy = origin, aUvRect.zw = size).
 	*   5. Compute cell-relative overlay UV (aCellFace.xy / uDungeonSize).
-	*   6. Apply height offset in world space (aSurface.x = heightOffset).	!DISABLED!
+	*   6. (Height offset removed — now baked into instance matrices upstream.)
 	*   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
 	*   8. Output fog distance as eye-space length.
 	*/
@@ -3936,7 +3927,7 @@ attribute vec4 aUvRect;
 
 // ── Per-instance geometry + UV transform ─────────────────────────────────────
 // Three per-face scalars packed into one vec3 (1 slot, saves 2 vs. 3 floats).
-//   .x = heightOffset   — world-space Y shift applied after instance matrix
+//   .x = heightOffset   — formerly a world-space Y shift; now baked into instance matrix (not read by shader)
 //   .y = uvRotation     — UV rotation index: 0=0°, 1=90°CCW, 2=180°, 3=270°CCW
 //   .z = uvHeightScale  — fraction of tile height to show, top-aligned [0,1];
 //                         skirt panels use < 1 so brick rows keep aspect ratio
@@ -4036,9 +4027,8 @@ void main() {
   // is sampled at the right texel for this grid cell.
   vOverlayUv = (aCellFace.xy + 0.5) / uDungeonSize;
 
-  // ── 6. World position + height offset ─────────────────────────────────────
+  // ── 6. World position ─────────────────────────────────────────────────────
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-  //worldPos.y   += aSurface.x;
 
   // ── 7. Fog distance (eye-space length) ────────────────────────────────────
   vec4 eyePos = viewMatrix * worldPos;
@@ -4655,6 +4645,20 @@ void main() {
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a * uOpacity);
 }
 `;
+	var ANGLE_KEYS = [
+		"N",
+		"NE",
+		"E",
+		"SE",
+		"S",
+		"SW",
+		"W",
+		"NW"
+	];
+	function selectAngleKey(entityFacing, cameraYaw) {
+		const rel = ((entityFacing - cameraYaw) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+		return ANGLE_KEYS[Math.round(rel / (Math.PI / 4)) % 8] ?? "N";
+	}
 	/**
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
@@ -4671,7 +4675,7 @@ void main() {
 		atlasTex.magFilter = three.NearestFilter;
 		atlasTex.minFilter = three.NearestFilter;
 		atlasTex.needsUpdate = true;
-		const opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+		let opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 		function getRect(tile) {
 			const id = resolveTile(tile, resolver);
 			const sprite = packedAtlas.getById(id);
@@ -4709,11 +4713,12 @@ void main() {
 				const ey = Math.ceil((sprite.uvY + sprite.uvH) * atlasH);
 				const sw = ex - sx;
 				const sh = ey - sy;
+				if (sw === 0 || sh === 0) continue;
 				for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if ((atlasData[((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3] ?? 0) > 0) {
-					minX = Math.min(minX, x);
-					minY = Math.min(minY, y);
-					maxX = Math.max(maxX, x);
-					maxY = Math.max(maxY, y);
+					minX = Math.min(minX, x / sw);
+					minY = Math.min(minY, y / sh);
+					maxX = Math.max(maxX, (x + 1) / sw);
+					maxY = Math.max(maxY, (y + 1) / sh);
 				}
 			}
 			if (minX === Infinity) return {
@@ -4723,10 +4728,10 @@ void main() {
 				bottom: 1
 			};
 			return {
-				left: minX / spriteMap.frameSize.w,
-				right: (maxX + 1) / spriteMap.frameSize.w,
-				top: minY / spriteMap.frameSize.h,
-				bottom: (maxY + 1) / spriteMap.frameSize.h
+				left: minX,
+				right: maxX,
+				top: minY,
+				bottom: maxY
 			};
 		}
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
@@ -4785,7 +4790,17 @@ void main() {
 				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5 - .5;
 				const centerY = .5 - (opaqueBounds.top + opaqueBounds.bottom) * .5;
 				pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
+				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
+				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {
+					const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
+					const rect = getRect(override?.tile ?? entry.baseLayer.tile);
+					const layerMat = entry.mesh.material;
+					layerMat.uniforms.uUvX.value = rect.x;
+					layerMat.uniforms.uUvY.value = rect.y;
+					layerMat.uniforms.uUvW.value = rect.w;
+					layerMat.uniforms.uUvH.value = rect.h;
+					layerMat.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
 					const s = entry.baseLayer.scale ?? 1;
 					entry.mesh.scale.set(sprW * s, sprH * s, 1);
 					const bob = entry.baseLayer.bob;
@@ -4811,6 +4826,7 @@ void main() {
 				mat.uniforms.uUvY.value = rect.y;
 				mat.uniforms.uUvW.value = rect.w;
 				mat.uniforms.uUvH.value = rect.h;
+				opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 			},
 			dispose() {
 				scene.remove(group);
