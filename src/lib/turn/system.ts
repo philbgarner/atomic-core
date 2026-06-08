@@ -73,6 +73,13 @@ export type TurnSystemDeps = {
 	 * Called synchronously — callers must NOT setState directly from here.
 	 */
 	onEvent?: (event: TurnEvent) => void;
+	/**
+	 * Optional list of non-actor grid positions that block movement (e.g. NPCs
+	 * that are rendered but not part of the turn system). Checked by
+	 * defaultApplyAction on every move attempt. Custom applyAction callbacks
+	 * must call this themselves if they want the same behaviour.
+	 */
+	getStaticBlockers?: () => ReadonlyArray<{ x: number; y: number }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -182,6 +189,10 @@ export function commitPlayerAction(
 	let next = deps.applyAction(state, state.playerId, action, deps);
 
 	if (action.kind === "rotate") {
+		// Time does not advance for a rotate, but consumers use onTimeAdvanced as their
+		// re-render signal, so we fire it with prevTime === nextTime to trigger a redraw.
+		const t = next.scheduler.getNow();
+		deps.onTimeAdvanced?.({ prevTime: t, nextTime: t, activeActorId: state.playerId, state: next });
 		return next;
 	}
 
@@ -232,6 +243,9 @@ export function defaultApplyAction(
 		if (other.id === actorId) continue;
 		if (other.alive && other.blocksMove && other.x === nx && other.y === ny) return state;
 	}
+
+	const staticBlockers = deps.getStaticBlockers?.() ?? [];
+	if (staticBlockers.some((b) => b.x === nx && b.y === ny)) return state;
 
 	return { ...state, actors: { ...state.actors, [actorId]: { ...actor, x: nx, y: ny } } };
 }
