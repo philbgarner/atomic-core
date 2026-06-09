@@ -35,6 +35,16 @@ export type TurnSystemDeps = {
      * Called synchronously — callers must NOT setState directly from here.
      */
     onEvent?: (event: TurnEvent) => void;
+    /**
+     * Optional list of non-actor grid positions that block movement (e.g. NPCs
+     * that are rendered but not part of the turn system). Checked by
+     * defaultApplyAction on every move attempt. Custom applyAction callbacks
+     * must call this themselves if they want the same behaviour.
+     */
+    getStaticBlockers?: () => ReadonlyArray<{
+        x: number;
+        y: number;
+    }>;
 };
 /**
  * Build the initial TurnSystemState from a player + monster list.

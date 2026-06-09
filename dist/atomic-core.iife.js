@@ -1886,7 +1886,16 @@ var AtomicCore = (function(exports, three) {
 		if (!state.awaitingPlayerInput) return state;
 		const cost_time = deps.computeCost(state.playerId, action).time;
 		let next = deps.applyAction(state, state.playerId, action, deps);
-		if (action.kind === "rotate") return next;
+		if (action.kind === "rotate") {
+			const t = next.scheduler.getNow();
+			deps.onTimeAdvanced?.({
+				prevTime: t,
+				nextTime: t,
+				activeActorId: state.playerId,
+				state: next
+			});
+			return next;
+		}
 		next = {
 			...next,
 			awaitingPlayerInput: false,
