@@ -6280,7 +6280,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	function onCanvasClick(e) {
 		if (!options.onCellClick) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
-		if (info) options.onCellClick(info);
+		if (info) options.onCellClick(e, info);
 	}
 	function onCanvasPointerMove(e) {
 		if (!options.onCellHover) return;
@@ -6291,7 +6291,13 @@ function createDungeonRenderer(element, game, options = {}) {
 		if (!options.onCellHover) return;
 		options.onCellHover(null);
 	}
-	if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);
+	if (options.onCellClick) {
+		canvas.addEventListener("click", onCanvasClick);
+		canvas.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			onCanvasClick(e);
+		});
+	}
 	if (options.onCellHover) {
 		canvas.addEventListener("pointermove", onCanvasPointerMove);
 		canvas.addEventListener("pointerleave", onCanvasPointerLeave);

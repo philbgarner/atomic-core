@@ -135,7 +135,7 @@ export type DungeonRendererOptions = {
 	 * The click is resolved by casting a ray from the camera through the
 	 * mouse position and intersecting it with the floor plane (y = 0).
 	 */
-	onCellClick?: (info: CellInfo) => void;
+	onCellClick?: (e: MouseEvent, info: CellInfo) => void;
 	/**
 	 * Called whenever the hovered cell changes (including when the cursor
 	 * leaves the dungeon surface, in which case `info` is `null`).
@@ -2338,7 +2338,7 @@ export function createDungeonRenderer(
 	function onCanvasClick(e: MouseEvent) {
 		if (!options.onCellClick) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
-		if (info) options.onCellClick(info);
+		if (info) options.onCellClick(e, info);
 	}
 
 	function onCanvasPointerMove(e: PointerEvent) {
@@ -2358,7 +2358,10 @@ export function createDungeonRenderer(
 		//}
 	}
 
-	if (options.onCellClick) canvas.addEventListener("click", onCanvasClick);
+	if (options.onCellClick) {
+		canvas.addEventListener("click", onCanvasClick);
+		canvas.addEventListener("contextmenu", (e)=>{ e.preventDefault(); onCanvasClick(e);});
+	}
 	if (options.onCellHover) {
 		canvas.addEventListener("pointermove", onCanvasPointerMove);
 		canvas.addEventListener("pointerleave", onCanvasPointerLeave);

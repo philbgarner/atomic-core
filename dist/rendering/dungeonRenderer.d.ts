@@ -118,7 +118,7 @@ export type DungeonRendererOptions = {
      * The click is resolved by casting a ray from the camera through the
      * mouse position and intersecting it with the floor plane (y = 0).
      */
-    onCellClick?: (info: CellInfo) => void;
+    onCellClick?: (e: MouseEvent, info: CellInfo) => void;
     /**
      * Called whenever the hovered cell changes (including when the cursor
      * leaves the dungeon surface, in which case `info` is `null`).
