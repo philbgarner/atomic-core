@@ -36,7 +36,7 @@ import * as THREE from "three";
  *   3. Rotate the tile UV in 90° steps (aSurface.y = uvRotation).
  *   4. Map local UV into the atlas rect (aUvRect.xy = origin, aUvRect.zw = size).
  *   5. Compute cell-relative overlay UV (aCellFace.xy / uDungeonSize).
- *   6. Apply height offset in world space (aSurface.x = heightOffset).	!DISABLED!
+ *   6. (Height offset removed — now baked into instance matrices upstream.)
  *   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
  *   8. Output fog distance as eye-space length.
  */
@@ -49,7 +49,7 @@ attribute vec4 aUvRect;
 
 // ── Per-instance geometry + UV transform ─────────────────────────────────────
 // Three per-face scalars packed into one vec3 (1 slot, saves 2 vs. 3 floats).
-//   .x = heightOffset   — world-space Y shift applied after instance matrix
+//   .x = heightOffset   — formerly a world-space Y shift; now baked into instance matrix (not read by shader)
 //   .y = uvRotation     — UV rotation index: 0=0°, 1=90°CCW, 2=180°, 3=270°CCW
 //   .z = uvHeightScale  — fraction of tile height to show, top-aligned [0,1];
 //                         skirt panels use < 1 so brick rows keep aspect ratio
@@ -149,9 +149,8 @@ void main() {
   // is sampled at the right texel for this grid cell.
   vOverlayUv = (aCellFace.xy + 0.5) / uDungeonSize;
 
-  // ── 6. World position + height offset ─────────────────────────────────────
+  // ── 6. World position ─────────────────────────────────────────────────────
   vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-  //worldPos.y   += aSurface.x;
 
   // ── 7. Fog distance (eye-space length) ────────────────────────────────────
   vec4 eyePos = viewMatrix * worldPos;

@@ -213,7 +213,7 @@ export function createBillboard(
 	atlasTex.minFilter = THREE.NearestFilter;
 	atlasTex.needsUpdate = true;
 
-	const opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+	let opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 
 	function getRect(tile: string | number) {
 		const id = resolveTile(tile, resolver);
@@ -258,15 +258,16 @@ export function createBillboard(
 			const sw = ex - sx;
 			const sh = ey - sy;
 
+			if (sw === 0 || sh === 0) continue;
 			for (let y = 0; y < sh; y++) {
 				for (let x = 0; x < sw; x++) {
-					const idx =((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3;
+					const idx = ((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3;
 					const alpha = atlasData[idx] ?? 0;
 					if (alpha > 0) {
-						minX = Math.min(minX, x);
-						minY = Math.min(minY, y);
-						maxX = Math.max(maxX, x);
-						maxY = Math.max(maxY, y);
+						minX = Math.min(minX, x / sw);
+						minY = Math.min(minY, y / sh);
+						maxX = Math.max(maxX, (x + 1) / sw);
+						maxY = Math.max(maxY, (y + 1) / sh);
 					}
 				}
 			}
@@ -277,10 +278,10 @@ export function createBillboard(
 		}
 
 		return {
-			left: minX / spriteMap.frameSize.w,
-			right: (maxX + 1) / spriteMap.frameSize.w,
-			top: minY / spriteMap.frameSize.h,
-			bottom: (maxY + 1) / spriteMap.frameSize.h,
+			left: minX,
+			right: maxX,
+			top: minY,
+			bottom: maxY,
 		};
 	}
 
@@ -360,7 +361,21 @@ export function createBillboard(
 			const centerY = 0.5 - (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
 
+			const facing = (ent as { facing?: number }).facing ?? 0;
+			const angleKey = selectAngleKey(facing, cameraYaw);
+			const overrides = spriteMap.angles?.[angleKey];
+
 			for (const entry of layerEntries) {
+				const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
+				const rawTile = override?.tile ?? entry.baseLayer.tile;
+				const rect = getRect(rawTile);
+				const layerMat = entry.mesh.material as THREE.ShaderMaterial;
+				layerMat.uniforms.uUvX!.value = rect.x;
+				layerMat.uniforms.uUvY!.value = rect.y;
+				layerMat.uniforms.uUvW!.value = rect.w;
+				layerMat.uniforms.uUvH!.value = rect.h;
+				layerMat.uniforms.uOpacity!.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
+
 				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
 
@@ -388,14 +403,15 @@ export function createBillboard(
 		setLayerTile(layerIndex: number, tile: string) {
 			const entry = layerEntries[layerIndex];
 			if (!entry) return;
-		
-			entry.baseLayer.tile = tile;	
-			const rect = getRect(tile);	
-			const mat = entry.mesh.material as THREE.ShaderMaterial;	
+
+			entry.baseLayer.tile = tile;
+			const rect = getRect(tile);
+			const mat = entry.mesh.material as THREE.ShaderMaterial;
 			mat.uniforms.uUvX!.value = rect.x;
 			mat.uniforms.uUvY!.value = rect.y;
 			mat.uniforms.uUvW!.value = rect.w;
 			mat.uniforms.uUvH!.value = rect.h;
+			opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
 		},
 
 		dispose() {
