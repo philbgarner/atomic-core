@@ -4,7 +4,7 @@
 
 > **LayerFaceResult** = \{ `rotation?`: `number`; `tile?`: `string` \| `number`; \} \| `null` \| `false` \| `undefined`
 
-Defined in: [rendering/dungeonRenderer.ts:210](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/rendering/dungeonRenderer.ts#L210)
+Defined in: [rendering/dungeonRenderer.ts:232](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/dungeonRenderer.ts#L232)
 
 Return value from a `LayerSpec.filter` callback.
 Return an object (optionally overriding `tile`/`rotation`) to include the

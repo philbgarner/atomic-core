@@ -4,7 +4,7 @@
 
 > **setCeilingHeightOffset**(`outputs`, `cx`, `cz`, `steps`): `void`
 
-Defined in: [dungeon/bsp.ts:1369](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/dungeon/bsp.ts#L1369)
+Defined in: [dungeon/bsp.ts:1369](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/dungeon/bsp.ts#L1369)
 
 ## Parameters
 

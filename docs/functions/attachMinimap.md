@@ -4,7 +4,7 @@
 
 > **attachMinimap**(`game`, `canvas`, `opts?`): `void`
 
-Defined in: [api/createGame.ts:1804](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/api/createGame.ts#L1804)
+Defined in: [api/createGame.ts:2336](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L2336)
 
 Wire up a 2D canvas minimap that redraws on every `turn` event.
 

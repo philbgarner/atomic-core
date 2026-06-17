@@ -67,7 +67,7 @@ import type { PlayerHandle, PlayerState } from "./player";
 import { createKeybindings } from "./keybindings";
 import type { KeybindingsOptions, KeybindingsHandle } from "./keybindings";
 import { makeRng } from "../utils/rng";
-import { isWalkableCell, isLightPassableCell } from "../dungeon/colliderFlags";
+import { isWalkableCell, isLightPassableCell, IS_WALKABLE, IS_BLOCKED, IS_LIGHT_PASSABLE } from "../dungeon/colliderFlags";
 import type { ActionTransport } from "../transport/types";
 import { createMissionSystem } from "../missions/missionSystem";
 import type { MissionsHandle } from "../missions/types";
@@ -168,6 +168,46 @@ export type SetCellOptions = {
 	skipSync?: boolean;
 };
 
+export type CellData = {
+	/** True if this is a solid wall cell. */
+	solid: boolean;
+	/** True if normal movement is permitted. */
+	walkable: boolean;
+	/** True if all movement (including forced) is prevented. */
+	blocked: boolean;
+	/** True if light/LOS rays pass through. */
+	lightPassable: boolean;
+	/** Room/region ID (0 = unassigned). */
+	regionId: number;
+	/**
+	 * Floor height offset in steps (positive = raised, negative = lowered, 0 = default).
+	 * `null` means a pit (no floor geometry). `undefined` when the texture is absent (tiled dungeon).
+	 */
+	floorHeightOffset: number | null | undefined;
+	/**
+	 * Ceiling height offset in steps (positive = lowered, negative = raised, 0 = default).
+	 * Matches the `ceilingHeightOffset` convention in `SetCellOptions`.
+	 * `null` means open sky (no ceiling geometry). `undefined` when the texture is absent (tiled dungeon).
+	 */
+	ceilingHeightOffset: number | null | undefined;
+	/** Number of upward sky panels above the wall (0–4). `undefined` when the texture is absent. */
+	skyPanelCount: number | undefined;
+	/** Number of downward ceiling panels below the ceiling (0–4). `undefined` when the texture is absent. */
+	ceilingPanelCount: number | undefined;
+	/** Hazard ID (0 = none). */
+	hazard: number;
+	/** Temperature (0–255; 127 = neutral). */
+	temperature: number;
+	/** Floor type index from atlas.json floorTypes (0 = no floor). */
+	floorType: number;
+	/** Wall type index from atlas.json wallTypes (0 = no wall). */
+	wallType: number;
+	/** Ceiling type index from atlas.json ceilingTypes (0 = no ceiling type). */
+	ceilingType: number;
+	/** Surface overlay tile names applied via paint(). `undefined` if this cell has not been painted. */
+	paint: SurfacePaintTarget | undefined;
+};
+
 export type DungeonHandle = {
 	readonly width: number;
 	readonly height: number;
@@ -179,6 +219,11 @@ export type DungeonHandle = {
 	readonly objects: readonly ObjectPlacement[];
 	passages: PassageList;
 	passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
+	/**
+	 * Read all available per-cell state for the cell at grid coordinates `(x, z)`.
+	 * Returns `null` if the dungeon has not been generated yet or the coordinates are out of bounds.
+	 */
+	getCell(x: number, z: number): CellData | null;
 	/** Apply per-surface overlay tile names to a cell. */
 	paint(x: number, z: number, layers: SurfacePaintTarget): void;
 	unpaint(x: number, z: number): void;
@@ -1158,6 +1203,62 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			return best;
 		},
 
+		getCell(x: number, z: number): CellData | null {
+			const dungeon = internal.dungeonOutputs;
+			if (!dungeon) return null;
+			const { width, height } = dungeon;
+			if (x < 0 || z < 0 || x >= width || z >= height) return null;
+
+			const idx = z * width + x;
+			const tex = dungeon.textures;
+
+			const solidRaw   = (tex.solid.image.data         as Uint8Array)[idx]!;
+			const flagsRaw   = (tex.colliderFlags.image.data as Uint8Array)[idx]!;
+			const regionRaw  = (tex.regionId.image.data      as Uint8Array)[idx]!;
+			const hazardRaw  = (tex.hazards.image.data       as Uint8Array)[idx]!;
+			const tempRaw    = (tex.temperature.image.data   as Uint8Array)[idx]!;
+			const floorTypeRaw   = (tex.floorType.image.data   as Uint8Array)[idx]!;
+			const wallTypeRaw    = (tex.wallType.image.data    as Uint8Array)[idx]!;
+			const ceilingTypeRaw = (tex.ceilingType.image.data as Uint8Array)[idx]!;
+
+			let floorHeightOffset: number | null | undefined;
+			if (tex.floorHeightOffset) {
+				const raw = (tex.floorHeightOffset.image.data as Uint8Array)[idx]!;
+				floorHeightOffset = raw === 0 ? null : raw - 128;
+			}
+
+			let ceilingHeightOffset: number | null | undefined;
+			if (tex.ceilingHeightOffset) {
+				const raw = (tex.ceilingHeightOffset.image.data as Uint8Array)[idx]!;
+				ceilingHeightOffset = raw === 0 ? null : raw - 128;
+			}
+
+			const skyPanelCount = tex.skyPanelCount
+				? (tex.skyPanelCount.image.data     as Uint8Array)[idx]!
+				: undefined;
+			const ceilingPanelCount = tex.ceilingPanelCount
+				? (tex.ceilingPanelCount.image.data as Uint8Array)[idx]!
+				: undefined;
+
+			return {
+				solid:         solidRaw !== 0,
+				walkable:      (flagsRaw & IS_WALKABLE)       !== 0 && (flagsRaw & IS_BLOCKED) === 0,
+				blocked:       (flagsRaw & IS_BLOCKED)        !== 0,
+				lightPassable: (flagsRaw & IS_LIGHT_PASSABLE) !== 0,
+				regionId:      regionRaw,
+				floorHeightOffset,
+				ceilingHeightOffset,
+				skyPanelCount,
+				ceilingPanelCount,
+				hazard:      hazardRaw,
+				temperature: tempRaw,
+				floorType:   floorTypeRaw,
+				wallType:    wallTypeRaw,
+				ceilingType: ceilingTypeRaw,
+				paint: internal.paintMap.get(`${x},${z}`),
+			};
+		},
+
 		paint(x: number, z: number, layers: SurfacePaintTarget) {
 			const existing = internal.paintMap.get(`${x},${z}`) ?? {};
 			const merged: SurfacePaintTarget = { ...existing, ...layers };
@@ -1220,9 +1321,9 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 				setCeilingPanelCount(dungeon, x, y, options.ceilingPanelCount);
 
 			if (options?.floorHeightOffset !== undefined)
-				setFloorHeightOffset(dungeon, x, y, options.floorHeightOffset);
+				setFloorHeightOffset(dungeon, x, y, Math.max(1, Math.min(255, 128 + options.floorHeightOffset)));
 			if (options?.ceilingHeightOffset !== undefined)
-				setCeilingHeightOffset(dungeon, x, y, options.ceilingHeightOffset);
+				setCeilingHeightOffset(dungeon, x, y, Math.max(0, Math.min(255, 128 + options.ceilingHeightOffset)));
 
 			if (options?.solid !== undefined) {
 				setSolid(dungeon, x, y, options.solid);

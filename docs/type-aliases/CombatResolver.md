@@ -4,7 +4,7 @@
 
 > **CombatResolver** = (`attacker`, `defender`, `ctx`) => [`CombatResult`](CombatResult.md)
 
-Defined in: [combat/combat.ts:60](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/combat/combat.ts#L60)
+Defined in: [combat/combat.ts:60](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/combat/combat.ts#L60)
 
 Developer-supplied combat resolution function.
 

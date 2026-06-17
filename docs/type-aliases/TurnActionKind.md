@@ -2,6 +2,6 @@
 
 # Type Alias: TurnActionKind
 
-> **TurnActionKind** = `"wait"` \| `"move"` \| `"attack"` \| `"interact"`
+> **TurnActionKind** = `"wait"` \| `"move"` \| `"attack"` \| `"interact"` \| `"rotate"`
 
-Defined in: [turn/types.ts:59](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/turn/types.ts#L59)
+Defined in: [turn/types.ts:59](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/turn/types.ts#L59)

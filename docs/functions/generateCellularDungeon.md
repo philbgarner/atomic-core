@@ -4,7 +4,7 @@
 
 > **generateCellularDungeon**(`options`): [`CellularDungeonOutputs`](../type-aliases/CellularDungeonOutputs.md)
 
-Defined in: [dungeon/cellular.ts:718](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/dungeon/cellular.ts#L718)
+Defined in: [dungeon/cellular.ts:718](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/dungeon/cellular.ts#L718)
 
 Generate a cellular-automata cave dungeon and return the full texture set.
 

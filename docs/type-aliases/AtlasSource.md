@@ -4,11 +4,11 @@
 
 > **AtlasSource** = `object`
 
-Defined in: [rendering/textureLoader.ts:254](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/rendering/textureLoader.ts#L254)
+Defined in: [rendering/textureLoader.ts:254](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L254)
 
 ## Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="atlasjson"></a> `atlasJson` | [`TextureAtlasJson`](TextureAtlasJson.md) | [rendering/textureLoader.ts:256](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/rendering/textureLoader.ts#L256) |
-| <a id="imageurl"></a> `imageUrl` | `string` | [rendering/textureLoader.ts:255](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/rendering/textureLoader.ts#L255) |
+| <a id="atlasjson"></a> `atlasJson` | [`TextureAtlasJson`](TextureAtlasJson.md) | [rendering/textureLoader.ts:256](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L256) |
+| <a id="imageurl"></a> `imageUrl` | `string` | [rendering/textureLoader.ts:255](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L255) |

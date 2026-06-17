@@ -4,7 +4,7 @@
 
 > **CellularDungeonOutputs** = [`RoomedDungeonOutputs`](RoomedDungeonOutputs.md) & `object`
 
-Defined in: [dungeon/cellular.ts:132](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/dungeon/cellular.ts#L132)
+Defined in: [dungeon/cellular.ts:132](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/dungeon/cellular.ts#L132)
 
 ## Type Declaration
 

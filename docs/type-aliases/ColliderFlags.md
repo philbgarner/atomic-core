@@ -4,12 +4,12 @@
 
 > **ColliderFlags** = `object`
 
-Defined in: [api/createGame.ts:101](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/api/createGame.ts#L101)
+Defined in: [api/createGame.ts:134](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L134)
 
 ## Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="blocked"></a> `blocked?` | `boolean` | [api/createGame.ts:103](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/api/createGame.ts#L103) |
-| <a id="lightpassable"></a> `lightPassable?` | `boolean` | [api/createGame.ts:104](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/api/createGame.ts#L104) |
-| <a id="walkable"></a> `walkable?` | `boolean` | [api/createGame.ts:102](https://github.com/philbgarner/atomic-core/blob/f1012ab8b30529b38b517f49f682599c72c34307/src/lib/api/createGame.ts#L102) |
+| <a id="blocked"></a> `blocked?` | `boolean` | [api/createGame.ts:136](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L136) |
+| <a id="lightpassable"></a> `lightPassable?` | `boolean` | [api/createGame.ts:137](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L137) |
+| <a id="walkable"></a> `walkable?` | `boolean` | [api/createGame.ts:135](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L135) |
