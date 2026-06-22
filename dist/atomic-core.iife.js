@@ -3058,6 +3058,51 @@ var AtomicCore = (function(exports, three) {
 				}
 				return best;
 			},
+			getCell(x, z) {
+				const dungeon = internal.dungeonOutputs;
+				if (!dungeon) return null;
+				const { width, height } = dungeon;
+				if (x < 0 || z < 0 || x >= width || z >= height) return null;
+				const idx = z * width + x;
+				const tex = dungeon.textures;
+				const solidRaw = tex.solid.image.data[idx];
+				const flagsRaw = tex.colliderFlags.image.data[idx];
+				const regionRaw = tex.regionId.image.data[idx];
+				const hazardRaw = tex.hazards.image.data[idx];
+				const tempRaw = tex.temperature.image.data[idx];
+				const floorTypeRaw = tex.floorType.image.data[idx];
+				const wallTypeRaw = tex.wallType.image.data[idx];
+				const ceilingTypeRaw = tex.ceilingType.image.data[idx];
+				let floorHeightOffset;
+				if (tex.floorHeightOffset) {
+					const raw = tex.floorHeightOffset.image.data[idx];
+					floorHeightOffset = raw === 0 ? null : raw - 128;
+				}
+				let ceilingHeightOffset;
+				if (tex.ceilingHeightOffset) {
+					const raw = tex.ceilingHeightOffset.image.data[idx];
+					ceilingHeightOffset = raw === 0 ? null : raw - 128;
+				}
+				const skyPanelCount = tex.skyPanelCount ? tex.skyPanelCount.image.data[idx] : void 0;
+				const ceilingPanelCount = tex.ceilingPanelCount ? tex.ceilingPanelCount.image.data[idx] : void 0;
+				return {
+					solid: solidRaw !== 0,
+					walkable: (flagsRaw & 1) !== 0 && (flagsRaw & 2) === 0,
+					blocked: (flagsRaw & 2) !== 0,
+					lightPassable: (flagsRaw & 4) !== 0,
+					regionId: regionRaw,
+					floorHeightOffset,
+					ceilingHeightOffset,
+					skyPanelCount,
+					ceilingPanelCount,
+					hazard: hazardRaw,
+					temperature: tempRaw,
+					floorType: floorTypeRaw,
+					wallType: wallTypeRaw,
+					ceilingType: ceilingTypeRaw,
+					paint: internal.paintMap.get(`${x},${z}`)
+				};
+			},
 			paint(x, z, layers) {
 				const merged = {
 					...internal.paintMap.get(`${x},${z}`) ?? {},
@@ -4672,7 +4717,7 @@ void main() {
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
 	*/
-	function createBillboard(entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
+	function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
 		const { spriteMap } = entity;
 		const group = new three.Group();
 		scene.add(group);
@@ -4684,7 +4729,7 @@ void main() {
 		atlasTex.magFilter = three.NearestFilter;
 		atlasTex.minFilter = three.NearestFilter;
 		atlasTex.needsUpdate = true;
-		let opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+		let opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 		function getRect(tile) {
 			const id = resolveTile(tile, resolver);
 			const sprite = packedAtlas.getById(id);
@@ -4703,11 +4748,11 @@ void main() {
 				y: sprite?.pivot?.y ?? 0
 			};
 		}
-		function computeOpaqueBounds(spriteMap, packedAtlas, resolver) {
-			let minX = Infinity;
-			let minY = Infinity;
-			let maxX = -Infinity;
-			let maxY = -Infinity;
+		function computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver) {
+			let left = Infinity;
+			let right = -Infinity;
+			let top = -Infinity;
+			let bottom = Infinity;
 			const atlasCanvas = packedAtlas.texture;
 			const atlasData = atlasCanvas.getContext("2d").getImageData(0, 0, atlasCanvas.width, atlasCanvas.height).data;
 			for (const layer of spriteMap.layers) {
@@ -4723,24 +4768,40 @@ void main() {
 				const sw = ex - sx;
 				const sh = ey - sy;
 				if (sw === 0 || sh === 0) continue;
+				let minX = Infinity;
+				let minY = Infinity;
+				let maxX = -Infinity;
+				let maxY = -Infinity;
 				for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if ((atlasData[((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3] ?? 0) > 0) {
 					minX = Math.min(minX, x / sw);
 					minY = Math.min(minY, y / sh);
 					maxX = Math.max(maxX, (x + 1) / sw);
 					maxY = Math.max(maxY, (y + 1) / sh);
 				}
+				if (minX === Infinity) continue;
+				const scale = layer.scale ?? 1;
+				const ox = (layer.offsetX ?? 0) / tileSize;
+				const oy = (layer.offsetY ?? 0) / tileSize;
+				const layerLeft = ox + (minX - .5) * scale;
+				const layerRight = ox + (maxX - .5) * scale;
+				const layerTop = oy + (.5 - minY) * scale;
+				const layerBottom = oy + (.5 - maxY) * scale;
+				left = Math.min(left, layerLeft);
+				right = Math.max(right, layerRight);
+				top = Math.max(top, layerTop);
+				bottom = Math.min(bottom, layerBottom);
 			}
-			if (minX === Infinity) return {
-				left: 0,
-				right: 1,
-				top: 0,
-				bottom: 1
+			if (left === Infinity) return {
+				left: -.5,
+				right: .5,
+				top: -.5,
+				bottom: .5
 			};
 			return {
-				left: minX,
-				right: maxX,
-				top: minY,
-				bottom: maxY
+				left,
+				right,
+				top,
+				bottom
 			};
 		}
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
@@ -4796,8 +4857,8 @@ void main() {
 				const widthFrac = opaqueBounds.right - opaqueBounds.left;
 				const heightFrac = opaqueBounds.bottom - opaqueBounds.top;
 				pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
-				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5 - .5;
-				const centerY = .5 - (opaqueBounds.top + opaqueBounds.bottom) * .5;
+				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5;
+				const centerY = (opaqueBounds.top + opaqueBounds.bottom) * .5;
 				pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
@@ -4825,7 +4886,7 @@ void main() {
 			setVisible(visible) {
 				group.visible = visible;
 			},
-			setLayerTile(layerIndex, tile) {
+			setLayerTile(tileSize, layerIndex, tile) {
 				const entry = layerEntries[layerIndex];
 				if (!entry) return;
 				entry.baseLayer.tile = tile;
@@ -4835,7 +4896,7 @@ void main() {
 				mat.uniforms.uUvY.value = rect.y;
 				mat.uniforms.uUvW.value = rect.w;
 				mat.uniforms.uUvH.value = rect.h;
-				opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+				opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 			},
 			dispose() {
 				scene.remove(group);
@@ -6111,7 +6172,7 @@ void main() {
 						spriteMap: obj.spriteMap,
 						type: obj.type
 					};
-					objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver, 64, {
+					objectBillboardMap.set(key, createBillboard(tileSize, fakeEntity, packedAtlas, scene, resolver, 64, {
 						color: fogColor,
 						near: fogNear,
 						far: fogFar
@@ -6133,7 +6194,7 @@ void main() {
 				if (!e.alive) continue;
 				if (e.spriteMap) {
 					if (!billboardMap.has(e.id) && packedAtlas) {
-						const handle = createBillboard(e, packedAtlas, scene, resolver, 64, {
+						const handle = createBillboard(tileSize, e, packedAtlas, scene, resolver, 64, {
 							color: fogColor,
 							near: fogNear,
 							far: fogFar
@@ -6368,8 +6429,8 @@ void main() {
 				syncEntities(entities);
 			},
 			editEntity(entity, layerIndex, tile) {
-				if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);
-				else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);
+				if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
+				else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
 			},
 			setObjects(objects) {
 				currentObjects = objects;

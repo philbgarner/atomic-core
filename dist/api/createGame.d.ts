@@ -74,6 +74,45 @@ export type SetCellOptions = {
      */
     skipSync?: boolean;
 };
+export type CellData = {
+    /** True if this is a solid wall cell. */
+    solid: boolean;
+    /** True if normal movement is permitted. */
+    walkable: boolean;
+    /** True if all movement (including forced) is prevented. */
+    blocked: boolean;
+    /** True if light/LOS rays pass through. */
+    lightPassable: boolean;
+    /** Room/region ID (0 = unassigned). */
+    regionId: number;
+    /**
+     * Floor height offset in steps (positive = raised, negative = lowered, 0 = default).
+     * `null` means a pit (no floor geometry). `undefined` when the texture is absent (tiled dungeon).
+     */
+    floorHeightOffset: number | null | undefined;
+    /**
+     * Ceiling height offset in steps (positive = lowered, negative = raised, 0 = default).
+     * Matches the `ceilingHeightOffset` convention in `SetCellOptions`.
+     * `null` means open sky (no ceiling geometry). `undefined` when the texture is absent (tiled dungeon).
+     */
+    ceilingHeightOffset: number | null | undefined;
+    /** Number of upward sky panels above the wall (0–4). `undefined` when the texture is absent. */
+    skyPanelCount: number | undefined;
+    /** Number of downward ceiling panels below the ceiling (0–4). `undefined` when the texture is absent. */
+    ceilingPanelCount: number | undefined;
+    /** Hazard ID (0 = none). */
+    hazard: number;
+    /** Temperature (0–255; 127 = neutral). */
+    temperature: number;
+    /** Floor type index from atlas.json floorTypes (0 = no floor). */
+    floorType: number;
+    /** Wall type index from atlas.json wallTypes (0 = no wall). */
+    wallType: number;
+    /** Ceiling type index from atlas.json ceilingTypes (0 = no ceiling type). */
+    ceilingType: number;
+    /** Surface overlay tile names applied via paint(). `undefined` if this cell has not been painted. */
+    paint: SurfacePaintTarget | undefined;
+};
 export type DungeonHandle = {
     readonly width: number;
     readonly height: number;
@@ -85,6 +124,11 @@ export type DungeonHandle = {
     readonly objects: readonly ObjectPlacement[];
     passages: PassageList;
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
+    /**
+     * Read all available per-cell state for the cell at grid coordinates `(x, z)`.
+     * Returns `null` if the dungeon has not been generated yet or the coordinates are out of bounds.
+     */
+    getCell(x: number, z: number): CellData | null;
     /** Apply per-surface overlay tile names to a cell. */
     paint(x: number, z: number, layers: SurfacePaintTarget): void;
     unpaint(x: number, z: number): void;

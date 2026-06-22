@@ -2091,7 +2091,7 @@ export function createDungeonRenderer(
 					spriteMap: obj.spriteMap,
 					type: obj.type,
 				};
-				objectBillboardMap.set(key, createBillboard(fakeEntity, packedAtlas, scene, resolver, 64, { color: fogColor, near: fogNear, far: fogFar }));
+				objectBillboardMap.set(key, createBillboard(tileSize, fakeEntity, packedAtlas, scene, resolver, 64, { color: fogColor, near: fogNear, far: fogFar }));
 			}
 		}
 	}
@@ -2119,6 +2119,7 @@ export function createDungeonRenderer(
 				// Billboard path
 				if (!billboardMap.has(e.id) && packedAtlas) {
 					const handle = createBillboard(
+						tileSize,
 						e as EntityBase & { spriteMap: SpriteMap },
 						packedAtlas,
 						scene,
@@ -2418,8 +2419,8 @@ export function createDungeonRenderer(
 			syncEntities(entities);
 		},
 		editEntity(entity, layerIndex: number, tile: string) {
-			if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);
-			else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(layerIndex, tile);					
+			if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
+			else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);					
 		},
 		setObjects(objects) {
 			currentObjects = objects;

@@ -1320,10 +1320,11 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			if (options?.ceilingPanelCount !== undefined)
 				setCeilingPanelCount(dungeon, x, y, options.ceilingPanelCount);
 
+			// Phil, not sure where you were going with the max/min change, it breaks everything? reverted it for now..
 			if (options?.floorHeightOffset !== undefined)
-				setFloorHeightOffset(dungeon, x, y, Math.max(1, Math.min(255, 128 + options.floorHeightOffset)));
+				setFloorHeightOffset(dungeon, x, y, options.floorHeightOffset);	//Math.max(1, Math.min(255, 128 + options.floorHeightOffset)));
 			if (options?.ceilingHeightOffset !== undefined)
-				setCeilingHeightOffset(dungeon, x, y, Math.max(0, Math.min(255, 128 + options.ceilingHeightOffset)));
+				setCeilingHeightOffset(dungeon, x, y, options.ceilingHeightOffset); //Math.max(0, Math.min(255, 128 + options.ceilingHeightOffset)));
 
 			if (options?.solid !== undefined) {
 				setSolid(dungeon, x, y, options.solid);

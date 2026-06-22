@@ -143,7 +143,7 @@ export interface BillboardHandle {
 	/** Remove meshes from scene and dispose GPU resources. */
 	dispose(): void;
 	getPickObject(): THREE.Mesh;
-	setLayerTile(layerIndex: number, tile: string): void;
+	setLayerTile(tileSize: number, layerIndex: number, tile: string): void;
 }
 
 interface LayerMeshEntry {
@@ -188,6 +188,7 @@ export interface BillboardFog {
  * The atlas texture should already be created and cached by the caller.
  */
 export function createBillboard(
+	tileSize: number,
 	entity: EntityBase & { spriteMap: SpriteMap },
 	packedAtlas: PackedAtlas,
 	scene: THREE.Scene,
@@ -213,7 +214,7 @@ export function createBillboard(
 	atlasTex.minFilter = THREE.NearestFilter;
 	atlasTex.needsUpdate = true;
 
-	let opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+	let opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 
 	function getRect(tile: string | number) {
 		const id = resolveTile(tile, resolver);
@@ -228,11 +229,11 @@ export function createBillboard(
 		return piv;
 	}
 
-	function computeOpaqueBounds(spriteMap: SpriteMap, packedAtlas: PackedAtlas, resolver?: (name: string) => number) {
-		let minX = Infinity;
-		let minY = Infinity;
-		let maxX = -Infinity;
-		let maxY = -Infinity;
+	function computeOpaqueBounds(tileSize: number, spriteMap: SpriteMap, packedAtlas: PackedAtlas, resolver?: (name: string) => number) {
+		let left = Infinity;
+		let right = -Infinity;
+		let top = -Infinity;
+		let bottom = Infinity;
 
 		const atlasCanvas = packedAtlas.texture as HTMLCanvasElement;
 		const ctx = atlasCanvas.getContext("2d")!;
@@ -259,6 +260,11 @@ export function createBillboard(
 			const sh = ey - sy;
 
 			if (sw === 0 || sh === 0) continue;
+			let minX = Infinity;
+			let minY = Infinity;
+			let maxX = -Infinity;
+			let maxY = -Infinity;
+
 			for (let y = 0; y < sh; y++) {
 				for (let x = 0; x < sw; x++) {
 					const idx = ((sy + y) * atlasCanvas.width + (sx + x)) * 4 + 3;
@@ -271,17 +277,40 @@ export function createBillboard(
 					}
 				}
 			}
+
+			if (minX === Infinity) continue;
+
+			const scale = layer.scale ?? 1;
+			const ox = (layer.offsetX ?? 0) / tileSize;
+			const oy = (layer.offsetY ?? 0) / tileSize;
+
+			// convert UV-space bounds into billboard-local plane coordinates
+			const layerLeft = ox + (minX - 0.5) * scale;
+			const layerRight = ox + (maxX - 0.5) * scale;
+
+			const layerTop = oy + (0.5 - minY) * scale;
+			const layerBottom = oy + (0.5 - maxY) * scale;
+
+			left = Math.min(left, layerLeft);
+			right = Math.max(right, layerRight);
+			top = Math.max(top, layerTop);
+			bottom = Math.min(bottom, layerBottom);
 		}
 
-		if (minX === Infinity) {
-			return { left: 0, right: 1, top: 0, bottom: 1 };
+		if (left === Infinity) {
+			return {
+				left: -0.5,
+				right: 0.5,
+				top: -0.5,
+				bottom: 0.5,
+			};
 		}
 
 		return {
-			left: minX,
-			right: maxX,
-			top: minY,
-			bottom: maxY,
+			left,
+			right,
+			top,
+			bottom,
 		};
 	}
 
@@ -357,8 +386,8 @@ export function createBillboard(
 			const widthFrac = opaqueBounds.right - opaqueBounds.left;
 			const heightFrac = opaqueBounds.bottom - opaqueBounds.top;
 			pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
-			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5 - 0.5;
-			const centerY = 0.5 - (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
+			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5;
+			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
 
 			const facing = (ent as { facing?: number }).facing ?? 0;
@@ -400,7 +429,7 @@ export function createBillboard(
 			group.visible = visible;
 		},
 
-		setLayerTile(layerIndex: number, tile: string) {
+		setLayerTile(tileSize: number, layerIndex: number, tile: string) {
 			const entry = layerEntries[layerIndex];
 			if (!entry) return;
 
@@ -411,7 +440,7 @@ export function createBillboard(
 			mat.uniforms.uUvY!.value = rect.y;
 			mat.uniforms.uUvW!.value = rect.w;
 			mat.uniforms.uUvH!.value = rect.h;
-			opaqueBounds = computeOpaqueBounds(spriteMap, packedAtlas, resolver);
+			opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 		},
 
 		dispose() {

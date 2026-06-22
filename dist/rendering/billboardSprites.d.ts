@@ -62,7 +62,7 @@ export interface BillboardHandle {
     /** Remove meshes from scene and dispose GPU resources. */
     dispose(): void;
     getPickObject(): THREE.Mesh;
-    setLayerTile(layerIndex: number, tile: string): void;
+    setLayerTile(tileSize: number, layerIndex: number, tile: string): void;
 }
 export interface BillboardFog {
     color?: THREE.Color;
@@ -73,7 +73,7 @@ export interface BillboardFog {
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
  */
-export declare function createBillboard(entity: EntityBase & {
+export declare function createBillboard(tileSize: number, entity: EntityBase & {
     spriteMap: SpriteMap;
 }, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number, // Expected tile size is 64 pixels by default.
 fog?: BillboardFog): BillboardHandle;
