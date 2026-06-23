@@ -69,10 +69,6 @@ export interface BillboardFog {
     near?: number;
     far?: number;
 }
-/**
- * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
- * The atlas texture should already be created and cached by the caller.
- */
 export declare function createBillboard(tileSize: number, entity: EntityBase & {
     spriteMap: SpriteMap;
 }, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number, // Expected tile size is 64 pixels by default.

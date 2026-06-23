@@ -4693,6 +4693,7 @@ function selectAngleKey(entityFacing, cameraYaw) {
 * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 * The atlas texture should already be created and cached by the caller.
 */
+var sharedAtlasTex;
 function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
 	const { spriteMap } = entity;
 	const group = new THREE.Group();
@@ -4701,10 +4702,12 @@ function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expecte
 	pickMesh.visible = false;
 	pickMesh.userData.entity = entity;
 	group.add(pickMesh);
-	const atlasTex = new THREE.Texture(packedAtlas.texture);
-	atlasTex.magFilter = THREE.NearestFilter;
-	atlasTex.minFilter = THREE.NearestFilter;
-	atlasTex.needsUpdate = true;
+	if (!sharedAtlasTex) {
+		sharedAtlasTex = new THREE.Texture(packedAtlas.texture);
+		sharedAtlasTex.magFilter = THREE.NearestFilter;
+		sharedAtlasTex.minFilter = THREE.NearestFilter;
+	}
+	sharedAtlasTex.needsUpdate = true;
 	let opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 	function getRect(tile) {
 		const id = resolveTile(tile, resolver);
@@ -4783,7 +4786,7 @@ function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expecte
 	const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
 		const rect = getRect(layer.tile);
 		const appUniforms = {
-			uAtlas: { value: atlasTex },
+			uAtlas: { value: sharedAtlasTex },
 			uUvX: { value: rect.x },
 			uUvY: { value: rect.y },
 			uUvW: { value: rect.w },
@@ -6179,13 +6182,14 @@ function createDungeonRenderer(element, game, options = {}) {
 				}
 			} else {
 				const key = resolveAppearanceKey(e);
-				if (!entityMeshMap.has(e.id)) {
-					const mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
+				let mesh = entityMeshMap.get(e.id);
+				if (!mesh) {
+					mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
 					entityMeshMap.set(e.id, mesh);
 					scene.add(mesh);
 				}
 				const hf = (appearances[key] ?? {}).heightFactor ?? .55;
-				entityMeshMap.get(e.id).position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
+				mesh.position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
 			}
 		}
 	}

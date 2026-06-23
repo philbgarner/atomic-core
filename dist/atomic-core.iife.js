@@ -4717,6 +4717,7 @@ void main() {
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
 	*/
+	var sharedAtlasTex;
 	function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
 		const { spriteMap } = entity;
 		const group = new three.Group();
@@ -4725,10 +4726,12 @@ void main() {
 		pickMesh.visible = false;
 		pickMesh.userData.entity = entity;
 		group.add(pickMesh);
-		const atlasTex = new three.Texture(packedAtlas.texture);
-		atlasTex.magFilter = three.NearestFilter;
-		atlasTex.minFilter = three.NearestFilter;
-		atlasTex.needsUpdate = true;
+		if (!sharedAtlasTex) {
+			sharedAtlasTex = new three.Texture(packedAtlas.texture);
+			sharedAtlasTex.magFilter = three.NearestFilter;
+			sharedAtlasTex.minFilter = three.NearestFilter;
+		}
+		sharedAtlasTex.needsUpdate = true;
 		let opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 		function getRect(tile) {
 			const id = resolveTile(tile, resolver);
@@ -4807,7 +4810,7 @@ void main() {
 		const layerEntries = spriteMap.layers.map((layer, layerIndex) => {
 			const rect = getRect(layer.tile);
 			const appUniforms = {
-				uAtlas: { value: atlasTex },
+				uAtlas: { value: sharedAtlasTex },
 				uUvX: { value: rect.x },
 				uUvY: { value: rect.y },
 				uUvW: { value: rect.w },
@@ -6203,13 +6206,14 @@ void main() {
 					}
 				} else {
 					const key = resolveAppearanceKey(e);
-					if (!entityMeshMap.has(e.id)) {
-						const mesh = new three.Mesh(getEntityGeo(key), getEntityMat(key));
+					let mesh = entityMeshMap.get(e.id);
+					if (!mesh) {
+						mesh = new three.Mesh(getEntityGeo(key), getEntityMat(key));
 						entityMeshMap.set(e.id, mesh);
 						scene.add(mesh);
 					}
 					const hf = (appearances[key] ?? {}).heightFactor ?? .55;
-					entityMeshMap.get(e.id).position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
+					mesh.position.set((e.x + .5) * tileSize, ceilingH * hf / 2, (e.z + .5) * tileSize);
 				}
 			}
 		}

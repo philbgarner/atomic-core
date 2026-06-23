@@ -187,6 +187,7 @@ export interface BillboardFog {
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
  */
+let sharedAtlasTex : THREE.Texture;
 export function createBillboard(
 	tileSize: number,
 	entity: EntityBase & { spriteMap: SpriteMap },
@@ -209,10 +210,17 @@ export function createBillboard(
 	pickMesh.userData.entity = entity;
 	group.add(pickMesh);
 
-	const atlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
+	// attempt to speed up creation here - we were making multiple GPU texture objects before
+	if (!sharedAtlasTex) {
+		sharedAtlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
+		sharedAtlasTex.magFilter = THREE.NearestFilter;
+		sharedAtlasTex.minFilter = THREE.NearestFilter;		
+	}
+	sharedAtlasTex.needsUpdate = true;
+	/*const atlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
 	atlasTex.magFilter = THREE.NearestFilter;
 	atlasTex.minFilter = THREE.NearestFilter;
-	atlasTex.needsUpdate = true;
+	atlasTex.needsUpdate = true;*/
 
 	let opaqueBounds = computeOpaqueBounds(tileSize, spriteMap, packedAtlas, resolver);
 
@@ -318,7 +326,7 @@ export function createBillboard(
 		(layer, layerIndex) => {
 			const rect = getRect(layer.tile);
 			const appUniforms = {
-				uAtlas: { value: atlasTex },
+				uAtlas: { value: sharedAtlasTex },
 				uUvX: { value: rect.x },
 				uUvY: { value: rect.y },
 				uUvW: { value: rect.w },

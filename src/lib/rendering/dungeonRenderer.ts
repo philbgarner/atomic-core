@@ -330,7 +330,7 @@ export type DungeonRenderer = {
 	/**
 	 * edit a (billboard) entity sprite, for animations
 	 */
-	editEntity(entity:EntityBase, layerIndex: number, tile: string): void;
+	editEntity(entity: EntityBase, layerIndex: number, tile: string): void;
 	/**
 	 * Register stationary billboard objects derived from `ObjectPlacement` records.
 	 * Call once after `game.generate()` (or pass `game.dungeon.objects` directly).
@@ -2131,21 +2131,16 @@ export function createDungeonRenderer(
 				}
 				// update() is called in the RAF loop using the current camera yaw
 			} else {
-				// Box geometry path
+				// Box geometry path (faster version)
 				const key = resolveAppearanceKey(e);
-				if (!entityMeshMap.has(e.id)) {
-					const mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
+				let mesh = entityMeshMap.get(e.id);
+				if (!mesh) {
+					mesh = new THREE.Mesh(getEntityGeo(key), getEntityMat(key));
 					entityMeshMap.set(e.id, mesh);
 					scene.add(mesh);
 				}
 				const hf = (appearances[key] ?? {}).heightFactor ?? 0.55;
-				entityMeshMap
-					.get(e.id)!
-					.position.set(
-						(e.x + 0.5) * tileSize,
-						(ceilingH * hf) / 2,
-						(e.z + 0.5) * tileSize,
-					);
+				mesh.position.set((e.x + 0.5) * tileSize, (ceilingH * hf) / 2, (e.z + 0.5) * tileSize,);
 			}
 		}
 	}
@@ -2316,7 +2311,7 @@ export function createDungeonRenderer(
 		let cx = 0, cz = 0;
 		if (hit.object.userData.entity)	// is an entity
 		{
-			return { cx: hit.object.userData.entity.x, cz: hit.object.userData.entity.z, entityId: hit.object.userData.entity.id, regionId:0 };
+			return { cx: hit.object.userData.entity.x, cz: hit.object.userData.entity.z, entityId: hit.object.userData.entity.id, regionId: 0 };
 		}
 		else {
 			const cellArray = meshToCellMap.get(hit.object as THREE.InstancedMesh);
@@ -2331,7 +2326,7 @@ export function createDungeonRenderer(
 			const regionId = regionData ? (regionData[cz * width + cx] ?? 0) : 0;
 
 			return { cx, cz, regionId };
-		}		
+		}
 	}
 
 	//let _lastHoverKey: string | null = null;
@@ -2343,7 +2338,7 @@ export function createDungeonRenderer(
 	}
 
 	function onCanvasPointerMove(e: PointerEvent) {
-		if (!options.onCellHover) return;		
+		if (!options.onCellHover) return;
 		const info = getCellAtPointer(e.clientX, e.clientY);
 		//const key = info ? `${info.cx},${info.cz},${info.entityId}` : null;
 		//if (key === _lastHoverKey) return;
@@ -2355,13 +2350,13 @@ export function createDungeonRenderer(
 		if (!options.onCellHover) return;
 		//if (_lastHoverKey !== null) {
 		//	_lastHoverKey = null;
-			options.onCellHover(null);
+		options.onCellHover(null);
 		//}
 	}
 
 	if (options.onCellClick) {
 		canvas.addEventListener("click", onCanvasClick);
-		canvas.addEventListener("contextmenu", (e)=>{ e.preventDefault(); onCanvasClick(e);});
+		canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); onCanvasClick(e); });
 	}
 	if (options.onCellHover) {
 		canvas.addEventListener("pointermove", onCanvasPointerMove);
@@ -2420,7 +2415,7 @@ export function createDungeonRenderer(
 		},
 		editEntity(entity, layerIndex: number, tile: string) {
 			if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
-			else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);					
+			else if (objectBillboardMap.has(entity.id)) objectBillboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
 		},
 		setObjects(objects) {
 			currentObjects = objects;
