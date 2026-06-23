@@ -103,6 +103,15 @@ export interface GameEventMap {
         skyPanels?: (string | null)[];
         ceilingPanels?: (string | null)[];
     };
+    /**
+     * A cell's solid flag changed via `dungeon.set()`. The renderer listens to
+     * this event and calls `rebuild()` automatically — callers do not need to
+     * trigger a rebuild manually.
+     */
+    'cell-solid-changed': {
+        x: number;
+        z: number;
+    };
 }
 type Handler<T> = T extends void ? () => void | Promise<void> : (payload: T) => void | Promise<void>;
 export interface EventEmitter {
