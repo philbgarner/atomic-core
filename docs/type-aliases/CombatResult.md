@@ -4,4 +4,4 @@
 
 > **CombatResult** = \{ `outcome`: `"blocked"`; \} \| \{ `outcome`: `"miss"`; \} \| \{ `damage`: `number`; `defenderDied`: `boolean`; `outcome`: `"hit"`; \}
 
-Defined in: [combat/combat.ts:16](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/combat/combat.ts#L16)
+Defined in: [combat/combat.ts:16](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/combat/combat.ts#L16)

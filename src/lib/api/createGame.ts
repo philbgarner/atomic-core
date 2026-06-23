@@ -1335,6 +1335,7 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 					...derivedFlags,
 					...options.colliderFlags,
 				});
+				internal.events.emit("cell-solid-changed", { x, z: y });
 			} else if (options?.colliderFlags !== undefined) {
 				setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 			}

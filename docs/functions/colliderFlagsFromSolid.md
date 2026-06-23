@@ -4,7 +4,7 @@
 
 > **colliderFlagsFromSolid**(`solid`): `number`
 
-Defined in: [dungeon/colliderFlags.ts:27](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/dungeon/colliderFlags.ts#L27)
+Defined in: [dungeon/colliderFlags.ts:27](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/dungeon/colliderFlags.ts#L27)
 
 Derive a collider-flags byte from a legacy `solid` mask value.
   solid === 0  →  floor:  IS_WALKABLE | IS_LIGHT_PASSABLE  (0x05)

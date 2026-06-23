@@ -4,7 +4,7 @@
 
 > **loadSkybox**(`opts`): `Promise`\<`CubeTexture`\>
 
-Defined in: [rendering/skybox.ts:40](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L40)
+Defined in: [rendering/skybox.ts:40](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L40)
 
 Load a `THREE.CubeTexture` from 6 face image URLs and apply an optional
 Y-axis rotation. The returned texture is ready to assign to `scene.background`.

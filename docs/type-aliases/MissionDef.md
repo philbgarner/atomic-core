@@ -4,15 +4,15 @@
 
 > **MissionDef** = `object`
 
-Defined in: [missions/types.ts:76](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L76)
+Defined in: [missions/types.ts:76](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L76)
 
 ## Properties
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="description"></a> `description?` | `string` | - | [missions/types.ts:80](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L80) |
-| <a id="evaluator"></a> `evaluator` | [`MissionEvaluator`](MissionEvaluator.md) | Evaluated once per turn. Return true when the mission condition is met. | [missions/types.ts:84](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L84) |
-| <a id="id"></a> `id` | `string` | Must be unique within the game session. | [missions/types.ts:78](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L78) |
-| <a id="metadata"></a> `metadata?` | `Record`\<`string`, `unknown`\> | Seed data for the metadata bag. Evaluators can accumulate cross-turn state here (e.g. `{ kills: 0 }`). | [missions/types.ts:94](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L94) |
-| <a id="name"></a> `name` | `string` | - | [missions/types.ts:79](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L79) |
-| <a id="oncomplete"></a> `onComplete?` | [`MissionCompleteCallback`](MissionCompleteCallback.md) | Called once, synchronously, when the evaluator first returns true. Optional — omit if you only need the `mission-complete` event. | [missions/types.ts:89](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/missions/types.ts#L89) |
+| <a id="description"></a> `description?` | `string` | - | [missions/types.ts:80](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L80) |
+| <a id="evaluator"></a> `evaluator` | [`MissionEvaluator`](MissionEvaluator.md) | Evaluated once per turn. Return true when the mission condition is met. | [missions/types.ts:84](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L84) |
+| <a id="id"></a> `id` | `string` | Must be unique within the game session. | [missions/types.ts:78](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L78) |
+| <a id="metadata"></a> `metadata?` | `Record`\<`string`, `unknown`\> | Seed data for the metadata bag. Evaluators can accumulate cross-turn state here (e.g. `{ kills: 0 }`). | [missions/types.ts:94](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L94) |
+| <a id="name"></a> `name` | `string` | - | [missions/types.ts:79](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L79) |
+| <a id="oncomplete"></a> `onComplete?` | [`MissionCompleteCallback`](MissionCompleteCallback.md) | Called once, synchronously, when the evaluator first returns true. Optional — omit if you only need the `mission-complete` event. | [missions/types.ts:89](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/missions/types.ts#L89) |

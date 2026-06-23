@@ -2,12 +2,12 @@
 
 # Interface: AngleOverride
 
-Defined in: [rendering/billboardSprites.ts:44](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/billboardSprites.ts#L44)
+Defined in: [rendering/billboardSprites.ts:44](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/billboardSprites.ts#L44)
 
 ## Properties
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="layerindex"></a> `layerIndex` | `number` | Which layer index this override targets. | [rendering/billboardSprites.ts:46](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/billboardSprites.ts#L46) |
-| <a id="opacity"></a> `opacity?` | `number` | Replacement opacity (optional). | [rendering/billboardSprites.ts:50](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/billboardSprites.ts#L50) |
-| <a id="tile"></a> `tile` | `string` \| `number` | Replacement tile for this angle: string name or numeric tile index. | [rendering/billboardSprites.ts:48](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/billboardSprites.ts#L48) |
+| <a id="layerindex"></a> `layerIndex` | `number` | Which layer index this override targets. | [rendering/billboardSprites.ts:46](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/billboardSprites.ts#L46) |
+| <a id="opacity"></a> `opacity?` | `number` | Replacement opacity (optional). | [rendering/billboardSprites.ts:50](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/billboardSprites.ts#L50) |
+| <a id="tile"></a> `tile` | `string` \| `number` | Replacement tile for this angle: string name or numeric tile index. | [rendering/billboardSprites.ts:48](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/billboardSprites.ts#L48) |

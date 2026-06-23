@@ -69,6 +69,12 @@ export interface GameEventMap {
    * Emitted by `dungeon.paint()` and `dungeon.unpaint()`.
    */
   'cell-paint': { x: number; z: number; floor?: string[]; wall?: string[]; ceil?: string[]; ceilSkirtBase?: (string | null)[]; floorSkirtBase?: (string | null)[]; skyPanels?: (string | null)[]; ceilingPanels?: (string | null)[] };
+  /**
+   * A cell's solid flag changed via `dungeon.set()`. The renderer listens to
+   * this event and calls `rebuild()` automatically — callers do not need to
+   * trigger a rebuild manually.
+   */
+  'cell-solid-changed': { x: number; z: number };
 }
 
 // ---------------------------------------------------------------------------

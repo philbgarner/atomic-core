@@ -4,7 +4,7 @@
 
 > **AnimationsHandle** = `object`
 
-Defined in: [animations/types.ts:48](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/animations/types.ts#L48)
+Defined in: [animations/types.ts:48](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/animations/types.ts#L48)
 
 Developer-facing handle exposed as game.animations.
 
@@ -14,7 +14,7 @@ Developer-facing handle exposed as game.animations.
 
 > **clear**(`kind`): `void`
 
-Defined in: [animations/types.ts:51](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/animations/types.ts#L51)
+Defined in: [animations/types.ts:51](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/animations/types.ts#L51)
 
 #### Parameters
 
@@ -32,7 +32,7 @@ Defined in: [animations/types.ts:51](https://github.com/philbgarner/atomic-core/
 
 > **off**\<`K`\>(`kind`, `handler`): `void`
 
-Defined in: [animations/types.ts:50](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/animations/types.ts#L50)
+Defined in: [animations/types.ts:50](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/animations/types.ts#L50)
 
 #### Type Parameters
 
@@ -57,7 +57,7 @@ Defined in: [animations/types.ts:50](https://github.com/philbgarner/atomic-core/
 
 > **on**\<`K`\>(`kind`, `handler`): `void`
 
-Defined in: [animations/types.ts:49](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/animations/types.ts#L49)
+Defined in: [animations/types.ts:49](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/animations/types.ts#L49)
 
 #### Type Parameters
 

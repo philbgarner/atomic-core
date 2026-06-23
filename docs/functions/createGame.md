@@ -4,7 +4,7 @@
 
 > **createGame**(`canvas`, `options`): `GameHandle`
 
-Defined in: [api/createGame.ts:1967](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L1967)
+Defined in: [api/createGame.ts:1969](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/api/createGame.ts#L1969)
 
 Create a game handle. Does not generate the dungeon — call `game.generate()`
 after attaching callbacks.

@@ -4,7 +4,7 @@
 
 > **setFloorSkirtTiles**(`outputs`, `cx`, `cz`, `tiles`): `void`
 
-Defined in: [dungeon/bsp.ts:1254](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/dungeon/bsp.ts#L1254)
+Defined in: [dungeon/bsp.ts:1254](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/dungeon/bsp.ts#L1254)
 
 Write floor skirt overlay tile IDs for a single cell.
 `tiles` is an array of up to 4 numeric tile IDs corresponding to RGBA slots 1–4.

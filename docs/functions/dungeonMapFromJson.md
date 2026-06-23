@@ -4,7 +4,7 @@
 
 > **dungeonMapFromJson**(`json`): [`ImportResult`](../type-aliases/ImportResult.md)
 
-Defined in: [dungeon/mapFile.ts:183](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/dungeon/mapFile.ts#L183)
+Defined in: [dungeon/mapFile.ts:183](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/dungeon/mapFile.ts#L183)
 
 Parse a JSON string produced by dungeonMapToJson and reconstruct the dungeon.
 

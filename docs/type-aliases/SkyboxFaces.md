@@ -4,7 +4,7 @@
 
 > **SkyboxFaces** = `object`
 
-Defined in: [rendering/skybox.ts:4](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L4)
+Defined in: [rendering/skybox.ts:4](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L4)
 
 Six face image URLs for a standard cube-map skybox.
 
@@ -12,9 +12,9 @@ Six face image URLs for a standard cube-map skybox.
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="nx"></a> `nx` | `string` | -X face (left). | [rendering/skybox.ts:8](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L8) |
-| <a id="ny"></a> `ny` | `string` | -Y face (bottom). | [rendering/skybox.ts:12](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L12) |
-| <a id="nz"></a> `nz` | `string` | -Z face (back). | [rendering/skybox.ts:16](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L16) |
-| <a id="px"></a> `px` | `string` | +X face (right). | [rendering/skybox.ts:6](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L6) |
-| <a id="py"></a> `py` | `string` | +Y face (top). | [rendering/skybox.ts:10](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L10) |
-| <a id="pz"></a> `pz` | `string` | +Z face (front). | [rendering/skybox.ts:14](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/skybox.ts#L14) |
+| <a id="nx"></a> `nx` | `string` | -X face (left). | [rendering/skybox.ts:8](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L8) |
+| <a id="ny"></a> `ny` | `string` | -Y face (bottom). | [rendering/skybox.ts:12](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L12) |
+| <a id="nz"></a> `nz` | `string` | -Z face (back). | [rendering/skybox.ts:16](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L16) |
+| <a id="px"></a> `px` | `string` | +X face (right). | [rendering/skybox.ts:6](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L6) |
+| <a id="py"></a> `py` | `string` | +Y face (top). | [rendering/skybox.ts:10](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L10) |
+| <a id="pz"></a> `pz` | `string` | +Z face (front). | [rendering/skybox.ts:14](https://github.com/philbgarner/atomic-core/blob/a6de11b1799150a5470ffc41a28474d2e2819c48/src/lib/rendering/skybox.ts#L14) |

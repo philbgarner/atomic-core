@@ -2372,7 +2372,11 @@ export function createDungeonRenderer(
 	}) {
 		updateOverlayCell(e.x, e.z, e);
 	}
+	function onCellSolidChanged(_e: { x: number; z: number }) {
+		doRebuild();
+	}
 	game.events.on("cell-paint", onCellPaint);
+	game.events.on("cell-solid-changed", onCellSolidChanged);
 
 	// ── Internal addLayer ─────────────────────────────────────────────────────
 	function internalAddLayer(spec: LayerSpec): LayerHandle {
@@ -2394,6 +2398,44 @@ export function createDungeonRenderer(
 				if (i !== -1) layerEntries.splice(i, 1);
 			},
 		};
+	}
+
+	// ── Geometry rebuild ──────────────────────────────────────────────────────
+	function doRebuild() {
+		for (const mesh of [
+			floorMesh,
+			ceilMesh,
+			wallMesh,
+			floorEdgeMesh,
+			ceilEdgeMesh,
+			floorWallSkirtMesh,
+			ceilWallSkirtMesh,
+			skyPanelMesh,
+			ceilingPanelMesh,
+		]) {
+			if (mesh) {
+				scene.remove(mesh);
+				mesh.geometry.dispose();
+			}
+		}
+		floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = skyPanelMesh = ceilingPanelMesh = null;
+		meshToCellMap.clear();
+		for (const entry of layerEntries) {
+			if (entry.holder.mesh) {
+				scene.remove(entry.holder.mesh);
+				entry.holder.mesh.geometry.dispose();
+				entry.holder.mesh = null;
+			}
+		}
+		if (overlayFloor !== defSurf) { overlayFloor.tex.dispose(); overlayFloor = defSurf; }
+		if (overlayWall !== defSurf) { overlayWall.tex.dispose(); overlayWall = defSurf; }
+		if (overlayCeil !== defSurf) { overlayCeil.tex.dispose(); overlayCeil = defSurf; }
+		if (overrideCeilSkirt !== defSurf) { overrideCeilSkirt.tex.dispose(); overrideCeilSkirt = defSurf; }
+		if (overrideFloorSkirt !== defSurf) { overrideFloorSkirt.tex.dispose(); overrideFloorSkirt = defSurf; }
+		if (overrideSkyPanels !== defSurf) { overrideSkyPanels.tex.dispose(); overrideSkyPanels = defSurf; }
+		if (overrideCeilPanels !== defSurf) { overrideCeilPanels.tex.dispose(); overrideCeilPanels = defSurf; }
+		dungeonBuilt = false;
+		buildDungeon();
 	}
 
 	// ── Public handle ─────────────────────────────────────────────────────────
@@ -2541,43 +2583,7 @@ export function createDungeonRenderer(
 			}
 		},
 		rebuild() {
-			// Remove and dispose existing dungeon meshes.
-			for (const mesh of [
-				floorMesh,
-				ceilMesh,
-				wallMesh,
-				floorEdgeMesh,
-				ceilEdgeMesh,
-				floorWallSkirtMesh,
-				ceilWallSkirtMesh,
-				skyPanelMesh,
-				ceilingPanelMesh,
-			]) {
-				if (mesh) {
-					scene.remove(mesh);
-					mesh.geometry.dispose();
-				}
-			}
-			floorMesh = ceilMesh = wallMesh = floorEdgeMesh = ceilEdgeMesh = floorWallSkirtMesh = ceilWallSkirtMesh = skyPanelMesh = ceilingPanelMesh = null;
-			meshToCellMap.clear();
-			// Remove and dispose layer meshes — they will be rebuilt by buildDungeon.
-			for (const entry of layerEntries) {
-				if (entry.holder.mesh) {
-					scene.remove(entry.holder.mesh);
-					entry.holder.mesh.geometry.dispose();
-					entry.holder.mesh = null;
-				}
-			}
-			// Reset overlay and base-override textures so they are rebuilt for the new dungeon dimensions.
-			if (overlayFloor !== defSurf) { overlayFloor.tex.dispose(); overlayFloor = defSurf; }
-			if (overlayWall !== defSurf) { overlayWall.tex.dispose(); overlayWall = defSurf; }
-			if (overlayCeil !== defSurf) { overlayCeil.tex.dispose(); overlayCeil = defSurf; }
-			if (overrideCeilSkirt !== defSurf) { overrideCeilSkirt.tex.dispose(); overrideCeilSkirt = defSurf; }
-			if (overrideFloorSkirt !== defSurf) { overrideFloorSkirt.tex.dispose(); overrideFloorSkirt = defSurf; }
-			if (overrideSkyPanels !== defSurf) { overrideSkyPanels.tex.dispose(); overrideSkyPanels = defSurf; }
-			if (overrideCeilPanels !== defSurf) { overrideCeilPanels.tex.dispose(); overrideCeilPanels = defSurf; }
-			dungeonBuilt = false;
-			buildDungeon();
+			doRebuild();
 		},
 		setSkybox(opts: SkyboxOptions | null): Promise<void> {
 			if (opts === null) {
@@ -2596,6 +2602,7 @@ export function createDungeonRenderer(
 			ro.disconnect();
 			game.events.off("turn", onTurn);
 			game.events.off("cell-paint", onCellPaint);
+			game.events.off("cell-solid-changed", onCellSolidChanged);
 			canvas.removeEventListener("click", onCanvasClick);
 			canvas.removeEventListener("pointermove", onCanvasPointerMove);
 			canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
