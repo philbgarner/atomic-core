@@ -4,7 +4,7 @@
 
 > **setSkyPanelCount**(`outputs`, `cx`, `cz`, `count`): `void`
 
-Defined in: [dungeon/bsp.ts:1295](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/dungeon/bsp.ts#L1295)
+Defined in: [dungeon/bsp.ts:1295](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/dungeon/bsp.ts#L1295)
 
 Set the number of sky panels (upward-facing vertical quads above the wall) for
 a single cell. Panels are emitted on all wall faces (adjacent to solid neighbours)

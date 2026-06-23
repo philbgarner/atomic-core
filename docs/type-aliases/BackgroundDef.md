@@ -4,7 +4,7 @@
 
 > **BackgroundDef** = `object`
 
-Defined in: [ui/inventoryDialog.ts:79](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L79)
+Defined in: [ui/inventoryDialog.ts:79](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L79)
 
 Background decoration for the inventory dialog panel.
 
@@ -12,8 +12,8 @@ Background decoration for the inventory dialog panel.
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="canvas"></a> `canvas?` | (`ctx`, `w`, `h`, `dt`) => `void` | Animated canvas background — called each rAF frame with elapsed time `dt` in seconds. | [ui/inventoryDialog.ts:85](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L85) |
-| <a id="image"></a> `image?` | `string` | URL of a full-panel background image. | [ui/inventoryDialog.ts:81](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L81) |
-| <a id="nineslice"></a> `nineSlice?` | `object` | Nine-slice image background; `top` is the pixel inset used for all four borders. | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L83) |
-| `nineSlice.top` | `number` | - | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L83) |
-| `nineSlice.url` | `string` | - | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/ui/inventoryDialog.ts#L83) |
+| <a id="canvas"></a> `canvas?` | (`ctx`, `w`, `h`, `dt`) => `void` | Animated canvas background — called each rAF frame with elapsed time `dt` in seconds. | [ui/inventoryDialog.ts:85](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L85) |
+| <a id="image"></a> `image?` | `string` | URL of a full-panel background image. | [ui/inventoryDialog.ts:81](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L81) |
+| <a id="nineslice"></a> `nineSlice?` | `object` | Nine-slice image background; `top` is the pixel inset used for all four borders. | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L83) |
+| `nineSlice.top` | `number` | - | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L83) |
+| `nineSlice.url` | `string` | - | [ui/inventoryDialog.ts:83](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/ui/inventoryDialog.ts#L83) |

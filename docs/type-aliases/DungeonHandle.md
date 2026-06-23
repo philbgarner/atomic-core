@@ -4,20 +4,20 @@
 
 > **DungeonHandle** = `object`
 
-Defined in: [api/createGame.ts:211](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L211)
+Defined in: [api/createGame.ts:211](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L211)
 
 ## Properties
 
 | Property | Modifier | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ | ------ |
-| <a id="decorations"></a> `decorations` | `public` | `DecorationList` | - | [api/createGame.ts:217](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L217) |
-| <a id="height"></a> `height` | `readonly` | `number` | - | [api/createGame.ts:213](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L213) |
-| <a id="objects"></a> `objects` | `readonly` | readonly [`ObjectPlacement`](../interfaces/ObjectPlacement.md)[] | Read-only list of all stationary object placements (including billboard sprites). | [api/createGame.ts:219](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L219) |
-| <a id="outputs"></a> `outputs` | `readonly` | [`DungeonOutputs`](DungeonOutputs.md) \| `null` | - | [api/createGame.ts:216](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L216) |
-| <a id="paintmap"></a> `paintMap` | `readonly` | `ReadonlyMap`\<`string`, [`SurfacePaintTarget`](SurfacePaintTarget.md)\> | Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. | [api/createGame.ts:231](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L231) |
-| <a id="passages"></a> `passages` | `public` | `PassageList` | - | [api/createGame.ts:220](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L220) |
-| <a id="rooms"></a> `rooms` | `readonly` | `Record`\<`number`, `PublicRoom`\> | Available after generate(). | [api/createGame.ts:215](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L215) |
-| <a id="width"></a> `width` | `readonly` | `number` | - | [api/createGame.ts:212](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L212) |
+| <a id="decorations"></a> `decorations` | `public` | `DecorationList` | - | [api/createGame.ts:217](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L217) |
+| <a id="height"></a> `height` | `readonly` | `number` | - | [api/createGame.ts:213](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L213) |
+| <a id="objects"></a> `objects` | `readonly` | readonly [`ObjectPlacement`](../interfaces/ObjectPlacement.md)[] | Read-only list of all stationary object placements (including billboard sprites). | [api/createGame.ts:219](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L219) |
+| <a id="outputs"></a> `outputs` | `readonly` | [`DungeonOutputs`](DungeonOutputs.md) \| `null` | - | [api/createGame.ts:216](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L216) |
+| <a id="paintmap"></a> `paintMap` | `readonly` | `ReadonlyMap`\<`string`, [`SurfacePaintTarget`](SurfacePaintTarget.md)\> | Read-only view of the current per-cell surface paint map. Keys are "x,z" strings. | [api/createGame.ts:231](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L231) |
+| <a id="passages"></a> `passages` | `public` | `PassageList` | - | [api/createGame.ts:220](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L220) |
+| <a id="rooms"></a> `rooms` | `readonly` | `Record`\<`number`, `PublicRoom`\> | Available after generate(). | [api/createGame.ts:215](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L215) |
+| <a id="width"></a> `width` | `readonly` | `number` | - | [api/createGame.ts:212](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L212) |
 
 ## Methods
 
@@ -25,7 +25,7 @@ Defined in: [api/createGame.ts:211](https://github.com/philbgarner/atomic-core/b
 
 > **getCell**(`x`, `z`): [`CellData`](CellData.md) \| `null`
 
-Defined in: [api/createGame.ts:226](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L226)
+Defined in: [api/createGame.ts:226](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L226)
 
 Read all available per-cell state for the cell at grid coordinates `(x, z)`.
 Returns `null` if the dungeon has not been generated yet or the coordinates are out of bounds.
@@ -47,7 +47,7 @@ Returns `null` if the dungeon has not been generated yet or the coordinates are 
 
 > **paint**(`x`, `z`, `layers`): `void`
 
-Defined in: [api/createGame.ts:228](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L228)
+Defined in: [api/createGame.ts:228](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L228)
 
 Apply per-surface overlay tile names to a cell.
 
@@ -69,7 +69,7 @@ Apply per-surface overlay tile names to a cell.
 
 > **passageNear**(`x`, `z`, `radius?`): [`HiddenPassage`](../interfaces/HiddenPassage.md) \| `null`
 
-Defined in: [api/createGame.ts:221](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L221)
+Defined in: [api/createGame.ts:221](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L221)
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: [api/createGame.ts:221](https://github.com/philbgarner/atomic-core/b
 
 > **set**(`x`, `y`, `spriteName`, `options?`): `void`
 
-Defined in: [api/createGame.ts:377](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L377)
+Defined in: [api/createGame.ts:377](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L377)
 
 Write a sprite name and optional cell-state overrides to the cell at grid
 coordinates `(x, y)`.  This is the primary high-level API for modifying
@@ -246,7 +246,7 @@ generated yet, the function returns silently without writing anything.
 
 > **unpaint**(`x`, `z`): `void`
 
-Defined in: [api/createGame.ts:229](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/api/createGame.ts#L229)
+Defined in: [api/createGame.ts:229](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/api/createGame.ts#L229)
 
 #### Parameters
 

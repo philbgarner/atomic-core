@@ -4,13 +4,13 @@
 
 > **LoadingOptions** = `object`
 
-Defined in: [rendering/textureLoader.ts:67](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L67)
+Defined in: [rendering/textureLoader.ts:67](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/textureLoader.ts#L67)
 
 ## Properties
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="container"></a> `container?` | `HTMLElement` | Element to append the overlay to. Default: document.body. | [rendering/textureLoader.ts:73](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L73) |
-| <a id="loadingtext"></a> `loadingText?` | `string` | Text shown in the loading overlay. Default: "Loading...". | [rendering/textureLoader.ts:71](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L71) |
-| <a id="onprogress"></a> `onProgress?` | (`loaded`, `total`) => `void` | Progress callback (loaded steps out of total steps). | [rendering/textureLoader.ts:75](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L75) |
-| <a id="showloadingscreen"></a> `showLoadingScreen?` | `boolean` | Inject a full-screen loading overlay while fetching. Default: true. | [rendering/textureLoader.ts:69](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/textureLoader.ts#L69) |
+| <a id="container"></a> `container?` | `HTMLElement` | Element to append the overlay to. Default: document.body. | [rendering/textureLoader.ts:73](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/textureLoader.ts#L73) |
+| <a id="loadingtext"></a> `loadingText?` | `string` | Text shown in the loading overlay. Default: "Loading...". | [rendering/textureLoader.ts:71](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/textureLoader.ts#L71) |
+| <a id="onprogress"></a> `onProgress?` | (`loaded`, `total`) => `void` | Progress callback (loaded steps out of total steps). | [rendering/textureLoader.ts:75](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/textureLoader.ts#L75) |
+| <a id="showloadingscreen"></a> `showLoadingScreen?` | `boolean` | Inject a full-screen loading overlay while fetching. Default: true. | [rendering/textureLoader.ts:69](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/textureLoader.ts#L69) |

@@ -4,7 +4,7 @@
 
 > **DirectionFaceMap** = `object`
 
-Defined in: [rendering/tileAtlas.ts:34](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/tileAtlas.ts#L34)
+Defined in: [rendering/tileAtlas.ts:34](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/tileAtlas.ts#L34)
 
 Per-direction tile overrides for walls or skirt faces.
 Any direction not specified falls back to the caller's default tile ID.
@@ -13,7 +13,7 @@ Any direction not specified falls back to the caller's default tile ID.
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="east"></a> `east?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:37](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/tileAtlas.ts#L37) |
-| <a id="north"></a> `north?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:35](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/tileAtlas.ts#L35) |
-| <a id="south"></a> `south?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:36](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/tileAtlas.ts#L36) |
-| <a id="west"></a> `west?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:38](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/tileAtlas.ts#L38) |
+| <a id="east"></a> `east?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:37](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/tileAtlas.ts#L37) |
+| <a id="north"></a> `north?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:35](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/tileAtlas.ts#L35) |
+| <a id="south"></a> `south?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:36](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/tileAtlas.ts#L36) |
+| <a id="west"></a> `west?` | [`FaceTileSpec`](FaceTileSpec.md) | [rendering/tileAtlas.ts:38](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/tileAtlas.ts#L38) |

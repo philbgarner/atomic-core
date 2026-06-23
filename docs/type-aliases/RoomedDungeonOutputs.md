@@ -4,7 +4,7 @@
 
 > **RoomedDungeonOutputs** = [`DungeonOutputs`](DungeonOutputs.md) & `object`
 
-Defined in: [dungeon/bsp.ts:157](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/dungeon/bsp.ts#L157)
+Defined in: [dungeon/bsp.ts:157](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/dungeon/bsp.ts#L157)
 
 Shared output fields for any dungeon type that has a room graph.
 Both BSP and cellular dungeons produce this structure.

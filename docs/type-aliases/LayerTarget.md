@@ -4,6 +4,6 @@
 
 > **LayerTarget** = `"floor"` \| `"ceil"` \| `"wall"` \| `"floorSkirt"` \| `"ceilSkirt"`
 
-Defined in: [rendering/dungeonRenderer.ts:220](https://github.com/philbgarner/atomic-core/blob/f8e5a1712339d89f8c0fc24685360b41bb8a8d3b/src/lib/rendering/dungeonRenderer.ts#L220)
+Defined in: [rendering/dungeonRenderer.ts:220](https://github.com/philbgarner/atomic-core/blob/dc624b092583294a2eaec014536f09464d781db3/src/lib/rendering/dungeonRenderer.ts#L220)
 
 Which class of dungeon geometry a layer targets.
