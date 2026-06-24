@@ -3167,10 +3167,6 @@
 						},
 						...options.colliderFlags
 					});
-					internal.events.emit("cell-solid-changed", {
-						x,
-						z: y
-					});
 				} else if (options?.colliderFlags !== void 0) setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 				if (!options?.skipSync && internal.options.transport?.sendDungeonSet) {
 					const { skipSync: _skip, ...syncOptions } = options ?? {};

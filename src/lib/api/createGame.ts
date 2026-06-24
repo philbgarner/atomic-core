@@ -1335,7 +1335,9 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 					...derivedFlags,
 					...options.colliderFlags,
 				});
-				internal.events.emit("cell-solid-changed", { x, z: y });
+				// the idea is right, but if we're modding the map, we'll get one for every single cell change
+				// and the engine will hang under the pressure. the user will need to call doRebuild() when ready instead
+				//internal.events.emit("cell-solid-changed", { x, z: y });
 			} else if (options?.colliderFlags !== undefined) {
 				setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 			}
