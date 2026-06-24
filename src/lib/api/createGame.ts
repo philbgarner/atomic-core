@@ -1212,13 +1212,13 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			const idx = z * width + x;
 			const tex = dungeon.textures;
 
-			const solidRaw   = (tex.solid.image.data         as Uint8Array)[idx]!;
-			const flagsRaw   = (tex.colliderFlags.image.data as Uint8Array)[idx]!;
-			const regionRaw  = (tex.regionId.image.data      as Uint8Array)[idx]!;
-			const hazardRaw  = (tex.hazards.image.data       as Uint8Array)[idx]!;
-			const tempRaw    = (tex.temperature.image.data   as Uint8Array)[idx]!;
-			const floorTypeRaw   = (tex.floorType.image.data   as Uint8Array)[idx]!;
-			const wallTypeRaw    = (tex.wallType.image.data    as Uint8Array)[idx]!;
+			const solidRaw = (tex.solid.image.data as Uint8Array)[idx]!;
+			const flagsRaw = (tex.colliderFlags.image.data as Uint8Array)[idx]!;
+			const regionRaw = (tex.regionId.image.data as Uint8Array)[idx]!;
+			const hazardRaw = (tex.hazards.image.data as Uint8Array)[idx]!;
+			const tempRaw = (tex.temperature.image.data as Uint8Array)[idx]!;
+			const floorTypeRaw = (tex.floorType.image.data as Uint8Array)[idx]!;
+			const wallTypeRaw = (tex.wallType.image.data as Uint8Array)[idx]!;
 			const ceilingTypeRaw = (tex.ceilingType.image.data as Uint8Array)[idx]!;
 
 			let floorHeightOffset: number | null | undefined;
@@ -1234,26 +1234,26 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			}
 
 			const skyPanelCount = tex.skyPanelCount
-				? (tex.skyPanelCount.image.data     as Uint8Array)[idx]!
+				? (tex.skyPanelCount.image.data as Uint8Array)[idx]!
 				: undefined;
 			const ceilingPanelCount = tex.ceilingPanelCount
 				? (tex.ceilingPanelCount.image.data as Uint8Array)[idx]!
 				: undefined;
 
 			return {
-				solid:         solidRaw !== 0,
-				walkable:      (flagsRaw & IS_WALKABLE)       !== 0 && (flagsRaw & IS_BLOCKED) === 0,
-				blocked:       (flagsRaw & IS_BLOCKED)        !== 0,
+				solid: solidRaw !== 0,
+				walkable: (flagsRaw & IS_WALKABLE) !== 0 && (flagsRaw & IS_BLOCKED) === 0,
+				blocked: (flagsRaw & IS_BLOCKED) !== 0,
 				lightPassable: (flagsRaw & IS_LIGHT_PASSABLE) !== 0,
-				regionId:      regionRaw,
+				regionId: regionRaw,
 				floorHeightOffset,
 				ceilingHeightOffset,
 				skyPanelCount,
 				ceilingPanelCount,
-				hazard:      hazardRaw,
+				hazard: hazardRaw,
 				temperature: tempRaw,
-				floorType:   floorTypeRaw,
-				wallType:    wallTypeRaw,
+				floorType: floorTypeRaw,
+				wallType: wallTypeRaw,
 				ceilingType: ceilingTypeRaw,
 				paint: internal.paintMap.get(`${x},${z}`),
 			};
@@ -1328,17 +1328,15 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 
 			if (options?.solid !== undefined) {
 				setSolid(dungeon, x, y, options.solid);
-				const derivedFlags = options.solid
-					? { walkable: false, blocked: true, lightPassable: false }
-					: { walkable: true, blocked: false, lightPassable: true };
-				setColliderFlagsCell(dungeon, x, y, {
-					...derivedFlags,
-					...options.colliderFlags,
-				});
+				if (!options?.colliderFlags)	// only if we're not seting it some other way
+					options.colliderFlags = options.solid
+						? { walkable: false, blocked: true, lightPassable: false }
+						: { walkable: true, blocked: false, lightPassable: true };
 				// the idea is right, but if we're modding the map, we'll get one for every single cell change
 				// and the engine will hang under the pressure. the user will need to call doRebuild() when ready instead
 				//internal.events.emit("cell-solid-changed", { x, z: y });
-			} else if (options?.colliderFlags !== undefined) {
+			}
+			if (options?.colliderFlags !== undefined) {
 				setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 			}
 

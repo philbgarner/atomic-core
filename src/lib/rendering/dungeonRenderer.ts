@@ -978,7 +978,7 @@ export function createDungeonRenderer(
 		set(floorEdgeMat, overlayFloor.tex);
 		set(wallMat, overlayWall.tex);
 		set(ceilMat, overlayCeil.tex);
-		set(ceilEdgeMat, overlayCeil.tex);
+		set(ceilEdgeMat, overrideCeilSkirt.tex);	// ideally, if there's no override, use overlayCeil as backup
 		set(floorWallSkirtMat, overlayWall.tex);
 		set(ceilWallSkirtMat, overlayWall.tex);
 		set(skyPanelMat, overlayWall.tex);

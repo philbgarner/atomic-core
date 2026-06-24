@@ -3129,19 +3129,17 @@ function makeDungeonHandle(internal) {
 			if (options?.ceilingHeightOffset !== void 0) setCeilingHeightOffset(dungeon, x, y, options.ceilingHeightOffset);
 			if (options?.solid !== void 0) {
 				setSolid(dungeon, x, y, options.solid);
-				setColliderFlagsCell(dungeon, x, y, {
-					...options.solid ? {
-						walkable: false,
-						blocked: true,
-						lightPassable: false
-					} : {
-						walkable: true,
-						blocked: false,
-						lightPassable: true
-					},
-					...options.colliderFlags
-				});
-			} else if (options?.colliderFlags !== void 0) setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
+				if (!options?.colliderFlags) options.colliderFlags = options.solid ? {
+					walkable: false,
+					blocked: true,
+					lightPassable: false
+				} : {
+					walkable: true,
+					blocked: false,
+					lightPassable: true
+				};
+			}
+			if (options?.colliderFlags !== void 0) setColliderFlagsCell(dungeon, x, y, options.colliderFlags);
 			if (!options?.skipSync && internal.options.transport?.sendDungeonSet) {
 				const { skipSync: _skip, ...syncOptions } = options ?? {};
 				const payload = Object.keys(syncOptions).length ? {
@@ -5411,7 +5409,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		set(floorEdgeMat, overlayFloor.tex);
 		set(wallMat, overlayWall.tex);
 		set(ceilMat, overlayCeil.tex);
-		set(ceilEdgeMat, overlayCeil.tex);
+		set(ceilEdgeMat, overrideCeilSkirt.tex);
 		set(floorWallSkirtMat, overlayWall.tex);
 		set(ceilWallSkirtMat, overlayWall.tex);
 		set(skyPanelMat, overlayWall.tex);
