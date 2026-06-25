@@ -5496,6 +5496,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		const matrices = [];
 		const uvRects = [];
 		const rotations = [];
+		const offsets = [];
 		const heightScales = [];
 		const cellXs = [];
 		const cellZs = [];
@@ -5522,6 +5523,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			const id = result.tile !== void 0 ? resolveTile(result.tile, resolver) : 0;
 			uvRects.push(getUvRect(id));
 			rotations.push(result.rotation ?? 0);
+			offsets.push(offset);
 			heightScales.push(hs);
 			cellXs.push(faceCx);
 			cellZs.push(faceCz);
@@ -5556,7 +5558,7 @@ function createDungeonRenderer(element, game, options = {}) {
 					const fullPanels = Math.floor(stepH / tileSize);
 					const rem = stepH - fullPanels * tileSize;
 					for (let i = 0; i < fullPanels; i++) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + i * tileSize + tileSize / 2, mz, 0, ry, 0, tileSize, tileSize), 0, 1, cx, cz);
-					if (rem > .001) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + fullPanels * tileSize + rem / 2, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
+					if (rem > .001) tryAdd(result, makeFaceMatrix(mx, neighborFloorY + fullPanels * tileSize + rem / 2, mz, 0, ry, 0, tileSize, rem), 1 - rem / tileSize, rem / tileSize, cx, cz);
 				}
 				const nfN = openFloorVal(cx, cz - 1);
 				if (nfN !== null && nfN < floorVal) tryAddFloorSkirtTiled(nfN, wx, cz * tileSize, Math.PI, "north");
@@ -5587,7 +5589,7 @@ function createDungeonRenderer(element, game, options = {}) {
 		}
 		if (matrices.length === 0) return null;
 		const useAtlas = spec.useAtlas ?? !!packedAtlas;
-		const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, void 0, rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0, new Float32Array(cellXs), new Float32Array(cellZs), aoCornerArr.length ? new Float32Array(aoCornerArr) : void 0, faceNormals.length ? new Float32Array(faceNormals) : void 0);
+		const mesh = buildInstancedMesh(matrices, uvRects, spec.material, useAtlas, new Float32Array(offsets), rotations, spec.target === "ceilSkirt" || spec.target === "floorSkirt" ? heightScales : void 0, new Float32Array(cellXs), new Float32Array(cellZs), aoCornerArr.length ? new Float32Array(aoCornerArr) : void 0, faceNormals.length ? new Float32Array(faceNormals) : void 0);
 		if (spec.polygonOffset !== false) {
 			spec.material.polygonOffset = true;
 			spec.material.polygonOffsetFactor = -1;
@@ -5757,7 +5759,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				wallNormals.push(0, 1);
 				wallCellMap.push({
 					cx,
-					cz
+					cz: cz - 1
 				});
 				if (aoEnabled) {
 					const v = computeFaceAO(isSolid, cx, cz, "north");
@@ -5774,7 +5776,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				wallNormals.push(0, -1);
 				wallCellMap.push({
 					cx,
-					cz
+					cz: cz + 1
 				});
 				if (aoEnabled) {
 					const v = computeFaceAO(isSolid, cx, cz, "south");
@@ -5790,7 +5792,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				wallRots.push(s.rotation ?? 0);
 				wallNormals.push(1, 0);
 				wallCellMap.push({
-					cx,
+					cx: cx - 1,
 					cz
 				});
 				if (aoEnabled) {
@@ -5807,7 +5809,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				wallRots.push(s.rotation ?? 0);
 				wallNormals.push(-1, 0);
 				wallCellMap.push({
-					cx,
+					cx: cx + 1,
 					cz
 				});
 				if (aoEnabled) {
@@ -5887,7 +5889,7 @@ function createDungeonRenderer(element, game, options = {}) {
 						floorWallSkirtRots.push(s.rotation ?? 0);
 						const scale = rem / tileSize;
 						floorWallSkirtHeightScales.push(scale);
-						floorWallSkirtUvOffsets.push(0);
+						floorWallSkirtUvOffsets.push(1 - scale);
 						floorWallSkirtRowIndexes.push(fullPanels);
 						floorWallSkirtCellMap.push({
 							cx,

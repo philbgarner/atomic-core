@@ -142,13 +142,13 @@ game.events.on("audio", ({ name }) => {
 
 attachKeybindings(game, {
   bindings: {
-    moveForward: ["w", "W", "ArrowUp"],
-    moveBackward: ["s", "S", "ArrowDown"],
-    moveLeft: ["a", "A", "ArrowLeft"],
-    moveRight: ["d", "D", "ArrowRight"],
-    turnLeft: ["q", "Q"],
-    turnRight: ["e", "E"],
-    wait: [" "],
+    moveForward: ["KeyW", "ArrowUp"],
+    moveBackward: ["KeyS", "ArrowDown"],
+    moveLeft: ["KeyA", "ArrowLeft"],
+    moveRight: ["KeyD", "ArrowRight"],
+    turnLeft: ["KeyQ"],
+    turnRight: ["KeyE"],
+    wait: ["Space"],
   },
   onAction(action, event) {
     event.preventDefault();

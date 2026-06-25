@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Secret Door</title>
+        <link rel="stylesheet" href="../basic/styles.css" />
+        <style>
+            #door-status {
+                font-size: 9px;
+                line-height: 2.2;
+                color: var(--desc);
+                border-top: 1px solid var(--border);
+                padding-top: 12px;
+            }
+            #door-status span { color: var(--gold); }
+            #coords {
+                font-size: 9px;
+                line-height: 2.2;
+                color: var(--desc);
+                border-top: 1px solid var(--border);
+                padding-top: 12px;
+            }
+            #coords span { color: var(--gold); }
+        </style>
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>secret door</h1>
+
+            <div id="door-status">
+                Button: <span id="btn-state">not pressed</span><br />
+                Door: <span id="door-state">closed</span>
+            </div>
+
+            <div id="coords">
+                Player: <span id="player-pos">—</span><br />
+                Button: <span id="btn-pos">—</span>
+            </div>
+
+            <div id="controls">
+                WASD / Arrow keys — move<br />
+                Q / E — turn left / right<br />
+                Space / F — use button
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./skirt-uv.js" defer></script>
+    </body>
+</html>

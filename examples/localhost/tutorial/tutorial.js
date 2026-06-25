@@ -703,14 +703,14 @@ game.events.on("mission-complete", ({ name, turn }) => {
 
 attachKeybindings(game, {
   bindings: {
-    moveForward: ["w", "W", "ArrowUp"],
-    moveBackward: ["s", "S", "ArrowDown"],
-    moveLeft: ["a", "A", "ArrowLeft"],
-    moveRight: ["d", "D", "ArrowRight"],
-    turnLeft: ["q", "Q"],
-    turnRight: ["e", "E"],
-    wait: [" "],
-    interact: ["f", "F"],
+    moveForward: ["KeyW", "ArrowUp"],
+    moveBackward: ["KeyS", "ArrowDown"],
+    moveLeft: ["KeyA", "ArrowLeft"],
+    moveRight: ["KeyD", "ArrowRight"],
+    turnLeft: ["KeyQ"],
+    turnRight: ["KeyE"],
+    wait: ["Space"],
+    interact: ["KeyF"],
     useItem: ["u", "U"],
   },
   onAction(action, event) {

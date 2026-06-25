@@ -1153,7 +1153,7 @@ export function createDungeonRenderer(
 			const id = result.tile !== undefined ? resolveTile(result.tile, resolver) : 0;
 			uvRects.push(getUvRect(id));
 			rotations.push(result.rotation ?? 0);
-			//offsets.push(offset);	// NO, mod the geometry instead so raycasting works
+			offsets.push(offset);
 			heightScales.push(hs);
 			cellXs.push(faceCx);
 			cellZs.push(faceCz);
@@ -1269,7 +1269,7 @@ export function createDungeonRenderer(
 						}
 						if (rem > 0.001) {
 							const midY = neighborFloorY + fullPanels * tileSize + rem / 2;
-							tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 0, rem / tileSize, cx, cz);
+							tryAdd(result, makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem), 1.0 - rem / tileSize, rem / tileSize, cx, cz);
 						}
 					}
 					const nfN = openFloorVal(cx, cz - 1);
@@ -1324,7 +1324,7 @@ export function createDungeonRenderer(
 			uvRects,
 			spec.material,
 			useAtlas,
-			undefined/*new Float32Array(offsets)*/,
+			new Float32Array(offsets),
 			rotations,
 			(spec.target === "ceilSkirt" || spec.target === "floorSkirt") ? heightScales : undefined,
 			new Float32Array(cellXs),
@@ -1559,7 +1559,7 @@ export function createDungeonRenderer(
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(0, 1);   // north wall faces south (+Z)
-					wallCellMap.push({ cx, cz });
+					wallCellMap.push({ cx, cz: cz - 1 }); // solid cell to the north
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "north"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx, cz + 1)) {
@@ -1582,7 +1582,7 @@ export function createDungeonRenderer(
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(0, -1);  // south wall faces north (-Z)
-					wallCellMap.push({ cx, cz });
+					wallCellMap.push({ cx, cz: cz + 1 }); // solid cell to the south
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "south"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx - 1, cz)) {
@@ -1605,7 +1605,7 @@ export function createDungeonRenderer(
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(1, 0);   // west wall faces east (+X)
-					wallCellMap.push({ cx, cz });
+					wallCellMap.push({ cx: cx - 1, cz }); // solid cell to the west
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "west"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 				if (isSolid(cx + 1, cz)) {
@@ -1628,7 +1628,7 @@ export function createDungeonRenderer(
 					wallRects.push(getUvRect(resolveTile(s.tile, resolver)));
 					wallRots.push(s.rotation ?? 0);
 					wallNormals.push(-1, 0);  // east wall faces west (-X)
-					wallCellMap.push({ cx, cz });
+					wallCellMap.push({ cx: cx + 1, cz }); // solid cell to the east
 					if (aoEnabled) { const v = computeFaceAO(isSolid, cx, cz, "east"); wallsAo.push(v[0], v[1], v[2], v[3]); }
 				}
 
@@ -1716,7 +1716,7 @@ export function createDungeonRenderer(
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							const scale = rem / tileSize;
 							floorWallSkirtHeightScales.push(scale);	// was rem / tileSize);
-							floorWallSkirtUvOffsets.push(0);	//1.0 - scale);
+							floorWallSkirtUvOffsets.push(1.0 - scale);
 							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({ cx, cz });
 							if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
