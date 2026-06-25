@@ -160,7 +160,9 @@ const game = createGame(document.body, {
 // Door trigger
 // ---------------------------------------------------------------------------
 
-function triggerDoor() {
+function triggerDoor(openDown) {
+  if (openDown === undefined) openDown = false;
+
   if (doorTriggered) return;
   doorTriggered = true;
 
@@ -174,7 +176,6 @@ function triggerDoor() {
   const outputs = game.dungeon.outputs;
   const solidData = outputs.textures.solid.image.data;
   const cfData = outputs.textures.colliderFlags.image.data;
-  const ceilData = outputs.textures.ceilingHeightOffset.image.data;
 
   const dIdx = DOOR_Z * DW + DOOR_X;
   solidData[dIdx] = 0;
@@ -182,24 +183,32 @@ function triggerDoor() {
   outputs.textures.solid.needsUpdate = true;
   outputs.textures.colliderFlags.needsUpdate = true;
 
-  // 3. Set door ceiling to one step above the floor (nearly closed).
-  //    ceilSkirtTiles uses the wall texture, so the region below the ceiling
-  //    looks like a stone door panel that rises as the ceiling climbs.
-  ceilData[dIdx] = CEIL_CLOSED;
-  outputs.textures.ceilingHeightOffset.needsUpdate = true;
+  // 3. Pick the height texture to animate and set the door to its closed position.
+  //    openUp  (default): ceiling starts low (CEIL_CLOSED) and rises to CEIL_OPEN.
+  //      ceilSkirtTiles fills the gap below with wall texture → panel slides up.
+  //    openDown: floor starts raised (CEIL_CLOSED) and drops to 128 (normal).
+  //      floorSkirtTiles fills the gap above with wall texture → panel slides down.
+  //    Both directions animate from 151 → 128 (same delta, different texture).
+  const heightTex = openDown
+    ? outputs.textures.floorHeightOffset
+    : outputs.textures.ceilingHeightOffset;
+  const heightData = heightTex.image.data;
+
+  heightData[dIdx] = CEIL_CLOSED;
+  heightTex.needsUpdate = true;
 
   renderer?.rebuild();
   if (doorStateEl) doorStateEl.textContent = "opening…";
 
-  // 4. Animate the ceiling upward one step per interval.
-  let ceilVal = CEIL_CLOSED;
+  // 4. Animate the height down from CEIL_CLOSED (151) to CEIL_OPEN (128).
+  let heightVal = CEIL_CLOSED;
   const interval = setInterval(() => {
-    ceilVal--;
-    ceilData[dIdx] = ceilVal;
-    outputs.textures.ceilingHeightOffset.needsUpdate = true;
+    heightVal -= 1;
+    heightData[dIdx] = heightVal;
+    heightTex.needsUpdate = true;
     renderer?.rebuild();
 
-    if (ceilVal <= CEIL_OPEN) {
+    if (heightVal <= CEIL_OPEN) {
       clearInterval(interval);
       if (doorStateEl) doorStateEl.textContent = "open";
     }
@@ -224,10 +233,19 @@ async function init() {
     floorTile: "flagstone_floor_stone.png",
     ceilTile: "plaster_ceiling.png",
     wallTile: "cobble_wall_stone.png",
-    // The rising door is a ceiling skirt (the gap between the door cell's
-    // low ceiling and the adjacent room's ceiling). Using the wall tile here
-    // makes it look like a stone door panel sliding upward.
+    // Ceiling skirt: used when the door opens upward. The gap between the door
+    // cell's low ceiling and the neighbouring room's ceiling renders as a stone
+    // panel sliding up.
     ceilSkirtTiles: {
+      north: { tile: "cobble_wall_stone.png" },
+      south: { tile: "cobble_wall_stone.png" },
+      east: { tile: "cobble_wall_stone.png" },
+      west: { tile: "cobble_wall_stone.png" },
+    },
+    // Floor skirt: used when the door opens downward. The gap between the door
+    // cell's raised floor and the neighbouring room's floor renders as a stone
+    // panel sliding down.
+    floorSkirtTiles: {
       north: { tile: "cobble_wall_stone.png" },
       south: { tile: "cobble_wall_stone.png" },
       east: { tile: "cobble_wall_stone.png" },
@@ -267,7 +285,7 @@ attachKeybindings(game, {
       const fx = Math.round(-Math.sin(yaw));
       const fz = Math.round(-Math.cos(yaw));
       if (game.player.x + fx === BTN_X && game.player.z + fz === BTN_Z) {
-        triggerDoor();
+        triggerDoor(true);
       }
       return;
     }
