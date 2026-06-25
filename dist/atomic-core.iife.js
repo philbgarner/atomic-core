@@ -5547,7 +5547,6 @@ void main() {
 				const id = result.tile !== void 0 ? resolveTile(result.tile, resolver) : 0;
 				uvRects.push(getUvRect(id));
 				rotations.push(result.rotation ?? 0);
-				offsets.push(offset);
 				heightScales.push(hs);
 				cellXs.push(faceCx);
 				cellZs.push(faceCz);
