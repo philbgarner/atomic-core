@@ -139,7 +139,7 @@ const game = createGame(document.body, {
 
       // Paint button overlay onto the button wall cell.
       game.dungeon.paint(BTN_X, BTN_Z, {
-        wall: ["trap_hole.png"],
+        wall: ["overlay_button_notPressed_stone.png"],
       });
     },
   },
@@ -166,7 +166,7 @@ function triggerDoor() {
 
   // 1. Update button overlay to pressed state.
   game.dungeon.paint(BTN_X, BTN_Z, {
-    wall: ["trap_hole.png"],
+    wall: ["overlay_button_pressed_stone.png"],
   });
   if (btnStateEl) btnStateEl.textContent = "pressed";
 
@@ -250,13 +250,13 @@ init();
 
 attachKeybindings(game, {
   bindings: {
-    moveForward:  ["KeyW", "ArrowUp"],
+    moveForward: ["KeyW", "ArrowUp"],
     moveBackward: ["KeyS", "ArrowDown"],
-    moveLeft:     ["KeyA", "ArrowLeft"],
-    moveRight:    ["KeyD", "ArrowRight"],
-    turnLeft:     ["KeyQ"],
-    turnRight:    ["KeyE"],
-    use:          ["Space", "KeyF"],
+    moveLeft: ["KeyA", "ArrowLeft"],
+    moveRight: ["KeyD", "ArrowRight"],
+    turnLeft: ["KeyQ"],
+    turnRight: ["KeyE"],
+    use: ["Space", "KeyF"],
   },
   onAction(action, event) {
     event.preventDefault();
