@@ -4836,9 +4836,9 @@ function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expecte
 			pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
 			const centerX = (opaqueBounds.left + opaqueBounds.right) * .5;
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * .5;
-			pickMesh.position.set(centerX * sprW, centerY * sprH, 0);
 			const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 			const overrides = spriteMap.angles?.[angleKey];
+			let s = 1;
 			for (const entry of layerEntries) {
 				const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
 				const rect = getRect(override?.tile ?? entry.baseLayer.tile);
@@ -4848,14 +4848,15 @@ function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expecte
 				layerMat.uniforms.uUvW.value = rect.w;
 				layerMat.uniforms.uUvH.value = rect.h;
 				layerMat.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
-				const s = entry.baseLayer.scale ?? 1;
+				s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
 				const bob = entry.baseLayer.bob;
 				const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 				const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
 				const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
-				entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY, entry.layerIndex * .01);
+				entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY + sprH * (s - 1) * .5, entry.layerIndex * .01);
 			}
+			pickMesh.position.set(centerX * sprW, centerY * sprH + sprH * (s - 1) * .5, 0);
 		},
 		getPickObject() {
 			return pickMesh;
