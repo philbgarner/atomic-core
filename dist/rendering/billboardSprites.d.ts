@@ -19,6 +19,8 @@ export interface SpriteLayer {
     offsetX?: number;
     /** Vertical offset from billboard center, in world units. Default 0. */
     offsetY?: number;
+    /** other offset from billboard center, in world units. Default 0. */
+    offsetZ?: number;
     /** Uniform scale multiplier. Default 1. */
     scale?: number;
     /** Alpha multiplier [0,1]. Default 1. */

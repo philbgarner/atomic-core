@@ -4832,7 +4832,7 @@ void main() {
 			const mesh = new three.Mesh(geo, mat);
 			mesh.renderOrder = 1;
 			const s = layer.scale ?? 1;
-			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, layerIndex * .03);
+			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, (layer.offsetX ?? 0) + layerIndex * .03);
 			mesh.scale.set(s, s, 1);
 			group.add(mesh);
 			return {
@@ -4861,7 +4861,7 @@ void main() {
 				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5;
 				const centerY = (opaqueBounds.top + opaqueBounds.bottom) * .5;
 				const l1 = layerEntries[0]?.baseLayer, sc = l1?.scale ?? 1;
-				pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sc * (l1?.offsetY ?? 0) + sprH * (sc - 1) * .5, 0);
+				pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sc * (l1?.offsetY ?? 0) + sprH * (sc - 1) * .5, l1?.offsetZ ?? 0);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {
@@ -4879,7 +4879,7 @@ void main() {
 					const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 					const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
 					const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
-					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY + sprH * (s - 1) * .5, entry.layerIndex * .03);
+					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY + sprH * (s - 1) * .5, (entry.baseLayer.offsetZ ?? 0) + entry.layerIndex * .03);
 				}
 			},
 			getPickObject() {

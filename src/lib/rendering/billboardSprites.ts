@@ -33,6 +33,8 @@ export interface SpriteLayer {
 	offsetX?: number;
 	/** Vertical offset from billboard center, in world units. Default 0. */
 	offsetY?: number;
+	/** other offset from billboard center, in world units. Default 0. */
+	offsetZ?: number;
 	/** Uniform scale multiplier. Default 1. */
 	scale?: number;
 	/** Alpha multiplier [0,1]. Default 1. */
@@ -359,7 +361,7 @@ export function createBillboard(
 			mesh.position.set(
 				layer.offsetX ?? 0,
 				layer.offsetY ?? 0,
-				layerIndex * 0.03,
+				(layer.offsetX ?? 0) + layerIndex * 0.03,
 			);
 			mesh.scale.set(s, s, 1);
 
@@ -398,7 +400,8 @@ export function createBillboard(
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			// minor inconvenience, pickmesh assumes scale constant across all layers
 			const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1);
-			pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sc * (l1?.offsetY ?? 0) + (sprH * (sc - 1) * 0.5), 0);
+			pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0),
+				centerY * sprH + sc * (l1?.offsetY ?? 0) + (sprH * (sc - 1) * 0.5), (l1?.offsetZ ?? 0));
 
 			const facing = (ent as { facing?: number }).facing ?? 0;
 			const angleKey = selectAngleKey(facing, cameraYaw);
@@ -426,7 +429,7 @@ export function createBillboard(
 				entry.mesh.position.set(
 					(entry.baseLayer.offsetX ?? 0) + bobX,
 					(entry.baseLayer.offsetY ?? 0) + bobY + (sprH * (s - 1) * 0.5),
-					entry.layerIndex * 0.03,	// was 0.001 but occasionally order was observed to be wrong
+					(entry.baseLayer.offsetZ ?? 0) +entry.layerIndex * 0.03,	// was 0.001 but occasionally order was observed to be wrong
 					// 0.03 is the smallest number observed to correctly work. no idea why.
 				);
 			}
