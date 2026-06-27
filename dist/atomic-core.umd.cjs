@@ -4862,7 +4862,8 @@ void main() {
 				pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
 				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5;
 				const centerY = (opaqueBounds.top + opaqueBounds.bottom) * .5;
-				pickMesh.position.set(centerX * sprW, centerY * sprH + sprH * ((layerEntries[0]?.baseLayer.scale ?? 1) - 1) * .5, 0);
+				const l1 = layerEntries[0]?.baseLayer, sc = l1?.scale ?? 1;
+				pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sc * (l1?.offsetY ?? 0) + sprH * (sc - 1) * .5, 0);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
 				for (const entry of layerEntries) {

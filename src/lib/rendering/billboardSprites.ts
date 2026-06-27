@@ -187,7 +187,7 @@ export interface BillboardFog {
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
  */
-let sharedAtlasTex : THREE.Texture;
+let sharedAtlasTex: THREE.Texture;
 export function createBillboard(
 	tileSize: number,
 	entity: EntityBase & { spriteMap: SpriteMap },
@@ -214,7 +214,7 @@ export function createBillboard(
 	if (!sharedAtlasTex) {
 		sharedAtlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
 		sharedAtlasTex.magFilter = THREE.NearestFilter;
-		sharedAtlasTex.minFilter = THREE.NearestFilter;		
+		sharedAtlasTex.minFilter = THREE.NearestFilter;
 	}
 	sharedAtlasTex.needsUpdate = true;
 	/*const atlasTex = new THREE.Texture(packedAtlas.texture as HTMLCanvasElement);
@@ -397,12 +397,13 @@ export function createBillboard(
 			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5;
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			// minor inconvenience, pickmesh assumes scale constant across all layers
-			pickMesh.position.set(centerX * sprW, centerY * sprH+ (sprH * ((layerEntries[0]?.baseLayer.scale ?? 1) - 1) * 0.5), 0);
+			const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1);
+			pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sc * (l1?.offsetY ?? 0) + (sprH * (sc - 1) * 0.5), 0);
 
 			const facing = (ent as { facing?: number }).facing ?? 0;
 			const angleKey = selectAngleKey(facing, cameraYaw);
 			const overrides = spriteMap.angles?.[angleKey];
-			
+
 			for (const entry of layerEntries) {
 				const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
 				const rawTile = override?.tile ?? entry.baseLayer.tile;
