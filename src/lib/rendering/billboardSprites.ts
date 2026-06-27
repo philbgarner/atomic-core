@@ -359,7 +359,7 @@ export function createBillboard(
 			mesh.position.set(
 				layer.offsetX ?? 0,
 				layer.offsetY ?? 0,
-				layerIndex * 0.001,
+				layerIndex * 0.03,
 			);
 			mesh.scale.set(s, s, 1);
 
@@ -424,7 +424,8 @@ export function createBillboard(
 				entry.mesh.position.set(
 					(entry.baseLayer.offsetX ?? 0) + bobX,
 					(entry.baseLayer.offsetY ?? 0) + bobY + (sprH * (s - 1) * 0.5),
-					entry.layerIndex * 0.01,	// was 0.001 but occasionally order was observed to be wrong
+					entry.layerIndex * 0.03,	// was 0.001 but occasionally order was observed to be wrong
+					// 0.03 is the smallest number observed to correctly work. no idea why.
 				);
 			}
 			// minor inconvenience, pickmesh assumes scale constant across all layers

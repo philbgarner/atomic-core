@@ -4834,7 +4834,7 @@ void main() {
 			const mesh = new three.Mesh(geo, mat);
 			mesh.renderOrder = 1;
 			const s = layer.scale ?? 1;
-			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, layerIndex * .001);
+			mesh.position.set(layer.offsetX ?? 0, layer.offsetY ?? 0, layerIndex * .03);
 			mesh.scale.set(s, s, 1);
 			group.add(mesh);
 			return {
@@ -4880,7 +4880,7 @@ void main() {
 					const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
 					const bobX = bob ? (bob.amplitudeX ?? 0) * Math.sin(bobTheta) : 0;
 					const bobY = bob ? (bob.amplitudeY ?? 0) * (1 + Math.sin(bobTheta)) : 0;
-					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY + sprH * (s - 1) * .5, entry.layerIndex * .01);
+					entry.mesh.position.set((entry.baseLayer.offsetX ?? 0) + bobX, (entry.baseLayer.offsetY ?? 0) + bobY + sprH * (s - 1) * .5, entry.layerIndex * .03);
 				}
 				pickMesh.position.set(centerX * sprW, centerY * sprH + sprH * (s - 1) * .5, 0);
 			},
