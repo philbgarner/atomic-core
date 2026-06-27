@@ -400,8 +400,10 @@ export function createBillboard(
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			// minor inconvenience, pickmesh assumes scale constant across all layers
 			const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1);
-			pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0),
-				centerY * sprH + sc * (l1?.offsetY ?? 0) + (sprH * (sc - 1) * 0.5), (l1?.offsetZ ?? 0));
+			pickMesh.position.set(
+				centerX * sprW + sc * (l1?.offsetX ?? 0),
+				centerY * sprH + (sprH * (sc - 1) * 0.5),	// do not offsetY here because the object itself has already taken this into account
+				(l1?.offsetZ ?? 0));
 
 			const facing = (ent as { facing?: number }).facing ?? 0;
 			const angleKey = selectAngleKey(facing, cameraYaw);
@@ -429,7 +431,7 @@ export function createBillboard(
 				entry.mesh.position.set(
 					(entry.baseLayer.offsetX ?? 0) + bobX,
 					(entry.baseLayer.offsetY ?? 0) + bobY + (sprH * (s - 1) * 0.5),
-					(entry.baseLayer.offsetZ ?? 0) +entry.layerIndex * 0.03,	// was 0.001 but occasionally order was observed to be wrong
+					(entry.baseLayer.offsetZ ?? 0) + entry.layerIndex * 0.03,	// was 0.001 but occasionally order was observed to be wrong
 					// 0.03 is the smallest number observed to correctly work. no idea why.
 				);
 			}
