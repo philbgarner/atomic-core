@@ -396,12 +396,13 @@ export function createBillboard(
 			pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
 			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5;
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
+			// minor inconvenience, pickmesh assumes scale constant across all layers
+			pickMesh.position.set(centerX * sprW, centerY * sprH+ (sprH * ((layerEntries[0]?.baseLayer.scale ?? 1) - 1) * 0.5), 0);
 
 			const facing = (ent as { facing?: number }).facing ?? 0;
 			const angleKey = selectAngleKey(facing, cameraYaw);
 			const overrides = spriteMap.angles?.[angleKey];
-
-			let s=1;
+			
 			for (const entry of layerEntries) {
 				const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
 				const rawTile = override?.tile ?? entry.baseLayer.tile;
@@ -413,7 +414,7 @@ export function createBillboard(
 				layerMat.uniforms.uUvH!.value = rect.h;
 				layerMat.uniforms.uOpacity!.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
 
-				s = entry.baseLayer.scale ?? 1;
+				const s = entry.baseLayer.scale ?? 1;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
 
 				const bob = entry.baseLayer.bob;
@@ -428,9 +429,6 @@ export function createBillboard(
 					// 0.03 is the smallest number observed to correctly work. no idea why.
 				);
 			}
-			// minor inconvenience, pickmesh assumes scale constant across all layers
-			pickMesh.position.set(centerX * sprW, centerY * sprH+ (sprH * (s - 1) * 0.5), 0);
-
 		},
 
 		getPickObject() {
