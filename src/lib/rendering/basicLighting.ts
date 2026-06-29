@@ -284,10 +284,10 @@ void main() {
   vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
   int  rowIdx    = int(vRowIndex + 0.5);
   float baseTileId = 0.0;
-  if      (rowIdx == 0) baseTileId = floor(baseSlots.r * 255.0 + 0.5);
-  else if (rowIdx == 1) baseTileId = floor(baseSlots.g * 255.0 + 0.5);
-  else if (rowIdx == 2) baseTileId = floor(baseSlots.b * 255.0 + 0.5);
-  else                  baseTileId = floor(baseSlots.a * 255.0 + 0.5);
+  if      (rowIdx == 0) baseTileId = floor(baseSlots.r + 0.5);
+  else if (rowIdx == 1) baseTileId = floor(baseSlots.g + 0.5);
+  else if (rowIdx == 2) baseTileId = floor(baseSlots.b + 0.5);
+  else                  baseTileId = floor(baseSlots.a + 0.5);
 
   vec4 color;
   if (baseTileId > 0.5) {
@@ -306,16 +306,16 @@ void main() {
   // IDs are stored as uint8 [0,255] in the texture and recovered via *255+0.5.
   vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
 
-  float id0 = floor(slots.r * 255.0 + 0.5);
+  float id0 = floor(slots.r + 0.5);
   if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id1 = floor(slots.g * 255.0 + 0.5);
+  float id1 = floor(slots.g + 0.5);
   if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id2 = floor(slots.b * 255.0 + 0.5);
+  float id2 = floor(slots.b + 0.5);
   if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id3 = floor(slots.a * 255.0 + 0.5);
+  float id3 = floor(slots.a + 0.5);
   if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   // ── 3. Skirt overlays (4 slots, same RGBA encoding) ───────────────────────
@@ -323,13 +323,13 @@ void main() {
   // the main wall/floor/ceiling overlay, so skirt tile overrides don't bleed
   // onto the base surface.
   vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
-  float sk0 = floor(skirtSlots.r * 255.0 + 0.5);
+  float sk0 = floor(skirtSlots.r + 0.5);
   if (sk0 > 0.5) { vec4 oc = sampleOverlayTile(sk0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk1 = floor(skirtSlots.g * 255.0 + 0.5);
+  float sk1 = floor(skirtSlots.g + 0.5);
   if (sk1 > 0.5) { vec4 oc = sampleOverlayTile(sk1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk2 = floor(skirtSlots.b * 255.0 + 0.5);
+  float sk2 = floor(skirtSlots.b + 0.5);
   if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk3 = floor(skirtSlots.a * 255.0 + 0.5);
+  float sk3 = floor(skirtSlots.a + 0.5);
   if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   // ── 4. Ambient occlusion ──────────────────────────────────────────────────

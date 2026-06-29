@@ -4215,10 +4215,10 @@ void main() {
   vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
   int  rowIdx    = int(vRowIndex + 0.5);
   float baseTileId = 0.0;
-  if      (rowIdx == 0) baseTileId = floor(baseSlots.r * 255.0 + 0.5);
-  else if (rowIdx == 1) baseTileId = floor(baseSlots.g * 255.0 + 0.5);
-  else if (rowIdx == 2) baseTileId = floor(baseSlots.b * 255.0 + 0.5);
-  else                  baseTileId = floor(baseSlots.a * 255.0 + 0.5);
+  if      (rowIdx == 0) baseTileId = floor(baseSlots.r + 0.5);
+  else if (rowIdx == 1) baseTileId = floor(baseSlots.g + 0.5);
+  else if (rowIdx == 2) baseTileId = floor(baseSlots.b + 0.5);
+  else                  baseTileId = floor(baseSlots.a + 0.5);
 
   vec4 color;
   if (baseTileId > 0.5) {
@@ -4237,16 +4237,16 @@ void main() {
   // IDs are stored as uint8 [0,255] in the texture and recovered via *255+0.5.
   vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
 
-  float id0 = floor(slots.r * 255.0 + 0.5);
+  float id0 = floor(slots.r + 0.5);
   if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id1 = floor(slots.g * 255.0 + 0.5);
+  float id1 = floor(slots.g + 0.5);
   if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id2 = floor(slots.b * 255.0 + 0.5);
+  float id2 = floor(slots.b + 0.5);
   if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
-  float id3 = floor(slots.a * 255.0 + 0.5);
+  float id3 = floor(slots.a + 0.5);
   if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   // ── 3. Skirt overlays (4 slots, same RGBA encoding) ───────────────────────
@@ -4254,13 +4254,13 @@ void main() {
   // the main wall/floor/ceiling overlay, so skirt tile overrides don't bleed
   // onto the base surface.
   vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
-  float sk0 = floor(skirtSlots.r * 255.0 + 0.5);
+  float sk0 = floor(skirtSlots.r + 0.5);
   if (sk0 > 0.5) { vec4 oc = sampleOverlayTile(sk0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk1 = floor(skirtSlots.g * 255.0 + 0.5);
+  float sk1 = floor(skirtSlots.g + 0.5);
   if (sk1 > 0.5) { vec4 oc = sampleOverlayTile(sk1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk2 = floor(skirtSlots.b * 255.0 + 0.5);
+  float sk2 = floor(skirtSlots.b + 0.5);
   if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
-  float sk3 = floor(skirtSlots.a * 255.0 + 0.5);
+  float sk3 = floor(skirtSlots.a + 0.5);
   if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
 
   // ── 4. Ambient occlusion ──────────────────────────────────────────────────
@@ -5269,13 +5269,13 @@ void main() {
 			tileUvLookupTex.minFilter = three.NearestFilter;
 			tileUvLookupTex.needsUpdate = true;
 		}
-		const _defaultOverlayTex = new three.DataTexture(new Uint8Array(4), 1, 1, three.RGBAFormat);
+		const _defaultOverlayTex = new three.DataTexture(new Float32Array(4), 1, 1, three.RGBAFormat, three.FloatType);
 		_defaultOverlayTex.magFilter = three.NearestFilter;
 		_defaultOverlayTex.minFilter = three.NearestFilter;
 		_defaultOverlayTex.needsUpdate = true;
 		const defSurf = {
 			tex: _defaultOverlayTex,
-			data: new Uint8Array(4)
+			data: new Float32Array(4)
 		};
 		let overlayFloor = defSurf;
 		let overlayWall = defSurf;
@@ -5285,7 +5285,7 @@ void main() {
 		let overrideSkyPanels = defSurf;
 		let overrideCeilPanels = defSurf;
 		function makeOverlayTex(data, width, height) {
-			const t = new three.DataTexture(data, width, height, three.RGBAFormat, three.UnsignedByteType);
+			const t = new three.DataTexture(data, width, height, three.RGBAFormat, three.FloatType);
 			t.magFilter = three.NearestFilter;
 			t.minFilter = three.NearestFilter;
 			t.flipY = false;
@@ -5296,13 +5296,13 @@ void main() {
 		function rebuildOverlayTexture(width, height) {
 			if (!resolver) return;
 			const n = width * height * 4;
-			const fd = new Uint8Array(n);
-			const wd = new Uint8Array(n);
-			const cd = new Uint8Array(n);
-			const csd = new Uint8Array(n);
-			const fsd = new Uint8Array(n);
-			const spd = new Uint8Array(n);
-			const cpd = new Uint8Array(n);
+			const fd = new Float32Array(n);
+			const wd = new Float32Array(n);
+			const cd = new Float32Array(n);
+			const csd = new Float32Array(n);
+			const fsd = new Float32Array(n);
+			const spd = new Float32Array(n);
+			const cpd = new Float32Array(n);
 			for (const [key, paint] of game.dungeon.paintMap) {
 				const comma = key.indexOf(",");
 				const x = parseInt(key.slice(0, comma), 10);
@@ -5311,13 +5311,13 @@ void main() {
 				const idx = (z * width + x) * 4;
 				const write = (arr, layers) => {
 					if (!layers) return;
-					for (let i = 0; i < Math.min(layers.length, 4); i++) arr[idx + i] = resolver(layers[i]) & 255;
+					for (let i = 0; i < Math.min(layers.length, 4); i++) arr[idx + i] = resolver(layers[i]);
 				};
 				const writeNullable = (arr, layers) => {
 					if (!layers) return;
 					for (let i = 0; i < Math.min(layers.length, 4); i++) {
 						const name = layers[i];
-						arr[idx + i] = name != null ? resolver(name) & 255 : 0;
+						arr[idx + i] = name != null ? resolver(name) : 0;
 					}
 				};
 				write(fd, paint.floor);
@@ -5375,7 +5375,7 @@ void main() {
 			const write = (surf, layers) => {
 				if (layers === void 0) return;
 				surf.data[idx] = surf.data[idx + 1] = surf.data[idx + 2] = surf.data[idx + 3] = 0;
-				for (let i = 0; i < Math.min(layers.length, 4); i++) surf.data[idx + i] = resolver(layers[i]) & 255;
+				for (let i = 0; i < Math.min(layers.length, 4); i++) surf.data[idx + i] = resolver(layers[i]);
 				surf.tex.needsUpdate = true;
 			};
 			const writeNullable = (surf, layers) => {
@@ -5383,7 +5383,7 @@ void main() {
 				surf.data[idx] = surf.data[idx + 1] = surf.data[idx + 2] = surf.data[idx + 3] = 0;
 				for (let i = 0; i < Math.min(layers.length, 4); i++) {
 					const name = layers[i];
-					surf.data[idx + i] = name != null ? resolver(name) & 255 : 0;
+					surf.data[idx + i] = name != null ? resolver(name) : 0;
 				}
 				surf.tex.needsUpdate = true;
 			};

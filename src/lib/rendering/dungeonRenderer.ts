@@ -848,22 +848,23 @@ export function createDungeonRenderer(
     tileUvLookupTex.needsUpdate = true;
   }
 
-  // Per-surface W×H Uint8 RGBA overlay textures. Rebuilt after each generate().
-  // Each channel = one overlay slot tile ID (0 = none). Max 4 slots per surface per cell.
+  // Per-surface W×H Float32 RGBA overlay textures. Rebuilt after each generate().
+  // Each channel = one overlay slot tile ID (0 = none). No upper limit on sprite count.
   const _defaultOverlayTex = new THREE.DataTexture(
-    new Uint8Array(4),
+    new Float32Array(4),
     1,
     1,
     THREE.RGBAFormat,
+    THREE.FloatType,
   );
   _defaultOverlayTex.magFilter = THREE.NearestFilter;
   _defaultOverlayTex.minFilter = THREE.NearestFilter;
   _defaultOverlayTex.needsUpdate = true;
 
-  type OverlaySurface = { tex: THREE.DataTexture; data: Uint8Array };
+  type OverlaySurface = { tex: THREE.DataTexture; data: Float32Array };
   const defSurf: OverlaySurface = {
     tex: _defaultOverlayTex,
-    data: new Uint8Array(4),
+    data: new Float32Array(4),
   };
 
   let overlayFloor: OverlaySurface = defSurf;
@@ -875,7 +876,7 @@ export function createDungeonRenderer(
   let overrideCeilPanels: OverlaySurface = defSurf;
 
   function makeOverlayTex(
-    data: Uint8Array,
+    data: Float32Array,
     width: number,
     height: number,
   ): THREE.DataTexture {
@@ -884,7 +885,7 @@ export function createDungeonRenderer(
       width,
       height,
       THREE.RGBAFormat,
-      THREE.UnsignedByteType,
+      THREE.FloatType,
     );
     t.magFilter = THREE.NearestFilter;
     t.minFilter = THREE.NearestFilter;
@@ -897,13 +898,13 @@ export function createDungeonRenderer(
   function rebuildOverlayTexture(width: number, height: number): void {
     if (!resolver) return;
     const n = width * height * 4;
-    const fd = new Uint8Array(n);
-    const wd = new Uint8Array(n);
-    const cd = new Uint8Array(n);
-    const csd = new Uint8Array(n);
-    const fsd = new Uint8Array(n);
-    const spd = new Uint8Array(n);
-    const cpd = new Uint8Array(n);
+    const fd = new Float32Array(n);
+    const wd = new Float32Array(n);
+    const cd = new Float32Array(n);
+    const csd = new Float32Array(n);
+    const fsd = new Float32Array(n);
+    const spd = new Float32Array(n);
+    const cpd = new Float32Array(n);
 
     for (const [key, paint] of game.dungeon.paintMap) {
       const comma = key.indexOf(",");
@@ -911,19 +912,19 @@ export function createDungeonRenderer(
       const z = parseInt(key.slice(comma + 1), 10);
       if (x < 0 || z < 0 || x >= width || z >= height) continue;
       const idx = (z * width + x) * 4;
-      const write = (arr: Uint8Array, layers: string[] | undefined) => {
+      const write = (arr: Float32Array, layers: string[] | undefined) => {
         if (!layers) return;
         for (let i = 0; i < Math.min(layers.length, 4); i++)
-          arr[idx + i] = resolver!(layers[i]!) & 0xff;
+          arr[idx + i] = resolver!(layers[i]!);
       };
       const writeNullable = (
-        arr: Uint8Array,
+        arr: Float32Array,
         layers: (string | null)[] | undefined,
       ) => {
         if (!layers) return;
         for (let i = 0; i < Math.min(layers.length, 4); i++) {
           const name = layers[i];
-          arr[idx + i] = name != null ? resolver!(name) & 0xff : 0;
+          arr[idx + i] = name != null ? resolver!(name) : 0;
         }
       };
       write(fd, paint.floor);
@@ -980,7 +981,7 @@ export function createDungeonRenderer(
         surf.data[idx + 3] =
           0;
       for (let i = 0; i < Math.min(layers.length, 4); i++)
-        surf.data[idx + i] = resolver!(layers[i]!) & 0xff;
+        surf.data[idx + i] = resolver!(layers[i]!);
       surf.tex.needsUpdate = true;
     };
     const writeNullable = (
@@ -995,7 +996,7 @@ export function createDungeonRenderer(
           0;
       for (let i = 0; i < Math.min(layers.length, 4); i++) {
         const name = layers[i];
-        surf.data[idx + i] = name != null ? resolver!(name) & 0xff : 0;
+        surf.data[idx + i] = name != null ? resolver!(name) : 0;
       }
       surf.tex.needsUpdate = true;
     };
