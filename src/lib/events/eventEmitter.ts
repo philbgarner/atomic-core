@@ -86,6 +86,19 @@ export interface GameEventMap {
     door: DoorRecord;
     reason: 'open' | 'close' | 'lock' | 'unlock' | 'locked-attempt';
   };
+  /**
+   * A player or entity dropped from a higher floor cell to a lower one by at
+   * least `DungeonOptions.fallDamageHeight` steps while moving. Notification
+   * only — the engine does not apply damage; read `height` and apply
+   * whatever damage/logic you want in your own handler.
+   */
+  'fall-damage': {
+    entity: EventEntity;
+    /** Downward step delta (positive, in the same units as `CellData.floorHeightOffset`). Always >= `fallDamageHeight`. */
+    height: number;
+    from: { x: number; z: number };
+    to: { x: number; z: number };
+  };
 }
 
 // ---------------------------------------------------------------------------

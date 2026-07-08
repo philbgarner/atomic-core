@@ -30,6 +30,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - BSP dungeon generator or cellular automata generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
 - Built-in dungeon themes (`dungeon`, `crypt`, `catacomb`, `industrial`, `ruins`) with `registerTheme()` for custom themes
 - Ceiling and floor height offsets; pit markers that omit floor tiles
+- Fall damage notification — `fallDamageHeight` dungeon option (floor-height steps, default `0`/disabled) emits a `'fall-damage'` event when a player or entity drops between cells by at least that many steps; the engine only reports the drop, you apply the damage
 - Dungeon serialization - save and restore `DungeonOutputs` to/from JSON
 - Renderer layer system - stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts

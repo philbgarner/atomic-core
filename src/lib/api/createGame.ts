@@ -544,6 +544,20 @@ export type DungeonOptions =
 		 * }
 		 */
 		onChooseSpawn?: (ctx: SpawnChooserContext) => number;
+		/**
+		 * Minimum downward step count between two cells' `floorHeightOffset`
+		 * values that triggers a `'fall-damage'` event when a player or entity
+		 * moves between them. Same unit as `CellData.floorHeightOffset` /
+		 * `SetCellOptions.floorHeightOffset` (signed step count, not world units).
+		 *
+		 * Default `0` — fall damage detection is disabled entirely: no event
+		 * ever fires and no per-cell height data is read on the move path.
+		 *
+		 * The engine only detects and reports the drop; it never applies damage
+		 * itself. Apply whatever damage/logic you want in your own
+		 * `game.events.on('fall-damage', ...)` handler.
+		 */
+		fallDamageHeight?: number;
 	})
 	| (CellularOptions & {
 		cellular: true;
@@ -562,6 +576,8 @@ export type DungeonOptions =
 		 * The player will be placed at that room's centre cell.
 		 */
 		onChooseSpawn?: (ctx: SpawnChooserContext) => number;
+		/** Same as the BSP variant's `fallDamageHeight` — see there for details. Default `0` (disabled). */
+		fallDamageHeight?: number;
 	})
 	| {
 		tiled: { map: unknown } & Omit<TiledMapOptions, "layers"> & {
@@ -570,6 +586,8 @@ export type DungeonOptions =
 		cellular?: never;
 		onPlace?: (ctx: OnPlaceContext) => void;
 		onChooseSpawn?: never;
+		/** Same as the BSP variant's `fallDamageHeight` — see there for details. Default `0` (disabled). */
+		fallDamageHeight?: number;
 	};
 
 export type CombatOptions = {
@@ -797,6 +815,24 @@ function getCellFlags(
 ): number {
 	if (x < 0 || y < 0 || x >= width || y >= height) return 0x02; // IS_BLOCKED for OOB
 	return flagsData[y * width + x] ?? 0x02;
+}
+
+/**
+ * Decode a cell's `floorHeightOffset` texture value into signed steps.
+ * `null` means a pit (no floor geometry); `undefined` means the texture is
+ * absent entirely (e.g. tiled dungeons).
+ */
+function readFloorHeightSteps(
+	dungeon: RoomedDungeonOutputs | TiledMapOutputs,
+	x: number,
+	z: number,
+): number | null | undefined {
+	const tex = dungeon.textures;
+	if (!tex.floorHeightOffset) return undefined;
+	const { width, height } = dungeon;
+	if (x < 0 || z < 0 || x >= width || z >= height) return undefined;
+	const raw = (tex.floorHeightOffset.image.data as Uint8Array)[z * width + x]!;
+	return raw === 0 ? null : raw - 128;
 }
 
 function syncEntityFromActor(
@@ -1101,6 +1137,23 @@ function makeApplyAction(
 			});
 		}
 
+		const fallDamageHeight = internal.options.dungeon.fallDamageHeight;
+		if (fallDamageHeight && internal.dungeonOutputs && movingEntity) {
+			const fromSteps = readFloorHeightSteps(internal.dungeonOutputs, actor.x, actor.y);
+			const toSteps = readFloorHeightSteps(internal.dungeonOutputs, nx, ny);
+			if (fromSteps != null && toSteps != null) {
+				const drop = fromSteps - toSteps;
+				if (drop >= fallDamageHeight) {
+					internal.events.emit("fall-damage", {
+						entity: movingEntity,
+						height: drop,
+						from: { x: actor.x, z: actor.y },
+						to: { x: nx, z: ny },
+					});
+				}
+			}
+		}
+
 		return {
 			...state,
 			actors: { ...state.actors, [actorId]: { ...actor, x: nx, y: ny } },
@@ -1381,11 +1434,7 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			const wallTypeRaw = (tex.wallType.image.data as Uint8Array)[idx]!;
 			const ceilingTypeRaw = (tex.ceilingType.image.data as Uint8Array)[idx]!;
 
-			let floorHeightOffset: number | null | undefined;
-			if (tex.floorHeightOffset) {
-				const raw = (tex.floorHeightOffset.image.data as Uint8Array)[idx]!;
-				floorHeightOffset = raw === 0 ? null : raw - 128;
-			}
+			const floorHeightOffset = readFloorHeightSteps(dungeon, x, z);
 
 			let ceilingHeightOffset: number | null | undefined;
 			if (tex.ceilingHeightOffset) {
