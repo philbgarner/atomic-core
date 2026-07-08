@@ -7,6 +7,7 @@ import { FactionRegistry } from '../combat/factions';
 import { CombatResolver } from '../combat/combat';
 import { HiddenPassage, ObjectPlacement, EntityBase } from '../entities/types';
 import { SpriteMap } from '../rendering/billboardSprites';
+import { DoorRecord } from '../dungeon/doors';
 import { PlayerHandle } from './player';
 import { KeybindingsOptions } from './keybindings';
 import { ActionTransport } from '../transport/types';
@@ -37,6 +38,43 @@ export type DecorationList = {
 export type PassageList = {
     toggle(id: number): void;
     list: HiddenPassage[];
+};
+/**
+ * `game.dungeon.doors` — register and control animated door cells.
+ *
+ * Doors are rendered as a double-sided frame/pane/frame sandwich (see
+ * `rendering/doorRenderer.ts`) and drive per-cell `colliderFlags` directly —
+ * they never touch the `solid` texture, so no `renderer.rebuild()` is needed
+ * when a door's state changes. Call `renderer.setDoors(game.dungeon.doors.list)`
+ * once after `generate()` (and again after adding/removing doors) to sync the
+ * render layer; open/closed/locked state changes are picked up automatically
+ * each frame since `DoorRecord`s are mutated in place.
+ */
+export type DoorsHandle = {
+    /** Live list of registered doors. Records are mutated in place on state changes. */
+    readonly list: DoorRecord[];
+    /** Register a door at a cell. `open` defaults to `false` (closed). */
+    add(spec: Omit<DoorRecord, "open"> & {
+        open?: boolean;
+    }): DoorRecord;
+    /** Unregister a door. Does not restore the cell's collider flags. */
+    remove(id: string): void;
+    get(id: string): DoorRecord | undefined;
+    /** Find the door registered at a given cell, if any. */
+    at(x: number, z: number): DoorRecord | undefined;
+    /** Open the door. No-op if locked or already open. */
+    open(id: string): void;
+    /** Close the door. No-op if already closed. */
+    close(id: string): void;
+    /** Lock the door (forces it closed). */
+    lock(id: string): void;
+    /** Unlock the door (leaves it closed; call `open()` separately). */
+    unlock(id: string): void;
+    /**
+     * Toggle open/closed. If the door is locked, no state change occurs and a
+     * `'door-state'` event fires with `reason: 'locked-attempt'` instead.
+     */
+    toggle(id: string): void;
 };
 export type ApplyTarget = "floor" | "wall" | "ceiling";
 export type ColliderFlags = {
@@ -124,6 +162,7 @@ export type DungeonHandle = {
     readonly objects: readonly ObjectPlacement[];
     passages: PassageList;
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
+    doors: DoorsHandle;
     /**
      * Read all available per-cell state for the cell at grid coordinates `(x, z)`.
      * Returns `null` if the dungeon has not been generated yet or the coordinates are out of bounds.

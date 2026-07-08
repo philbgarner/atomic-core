@@ -42,6 +42,16 @@ export type { SpriteMap } from "./billboardSprites";
 import { loadSkybox } from "./skybox";
 import type { SkyboxOptions } from "./skybox";
 export type { SkyboxFaces, SkyboxOptions } from "./skybox";
+import {
+  HALF_PI,
+  computeFaceAO,
+  computeSkirtFaceAO,
+  makeFaceMatrix,
+  buildInstancedMesh,
+} from "./atlasGeometry";
+import type { DoorRecord } from "../dungeon/doors";
+import { createDoorMesh } from "./doorRenderer";
+import type { DoorHandle } from "./doorRenderer";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -339,6 +349,18 @@ export type DungeonRenderer = {
    */
   setObjects(objects: ObjectPlacement[]): void;
   /**
+   * Register doors to render. Call once after `game.generate()` (or pass
+   * `game.dungeon.doors.list` directly), and again whenever a door is added
+   * or removed via `game.dungeon.doors`. Open/closed/locked state changes are
+   * picked up automatically each frame — no need to call this again for those.
+   *
+   * Each door renders as a double-sided frame/pane/frame sandwich using the
+   * same atlas shader as wall geometry, so lighting/AO/fog match adjacent
+   * walls exactly. Requires `packedAtlas` to have been passed to
+   * `createDungeonRenderer` — a no-op otherwise.
+   */
+  setDoors(doors: DoorRecord[]): void;
+  /**
    * Project a dungeon grid cell to 2D pixel coordinates relative to the
    * renderer's container element, using the current camera state.
    *
@@ -459,219 +481,9 @@ export type DungeonRenderer = {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const HALF_PI = Math.PI / 2;
 /** Eye height as a fraction of ceiling height (same as PerspectiveDungeonView). */
 // using the d&d standard of 7.5ft shrinking cubes, 0.66x gives eye level for a medium creature at about 5ft which is what we expect.
 const EYE_HEIGHT_FACTOR = 0.66;
-
-function vertexAO(s1: boolean, s2: boolean, c: boolean): number {
-  if (s1 && s2) return 0;
-  return 3 - ((s1 ? 1 : 0) + (s2 ? 1 : 0) + (c ? 1 : 0));
-}
-
-/**
- * Compute per-corner AO for one face, returned as [tl, tr, bl, br] in [0,1].
- * Corners map to face-local UV space: tl=UV(0,1), tr=UV(1,1), bl=UV(0,0), br=UV(1,0).
- * For wall faces the top and bottom of each column share the same value.
- * UV orientation per direction is derived from the face rotation used in buildDungeon.
- */
-function computeFaceAO(
-  isSol: (x: number, z: number) => boolean,
-  cx: number,
-  cz: number,
-  dir: "floor" | "ceil" | "north" | "south" | "east" | "west",
-): [number, number, number, number] {
-  const n = isSol;
-  if (dir === "floor") {
-    // R_x(-π/2): UV(0,1)→world(-x,-z), UV(1,1)→(+x,-z), UV(0,0)→(-x,+z), UV(1,0)→(+x,+z)
-    return [
-      vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3,
-      vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3,
-      vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3,
-      vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3,
-    ];
-  }
-  if (dir === "ceil") {
-    // R_x(+π/2): UV(0,1)→world(-x,+z), UV(1,1)→(+x,+z), UV(0,0)→(-x,-z), UV(1,0)→(+x,-z)
-    return [
-      vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3,
-      vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3,
-      vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3,
-      vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3,
-    ];
-  }
-  // Walls: s2 is always the solid cell behind the wall (always true by definition).
-  // Only horizontal neighbors vary; top/bottom of each column share the same AO value.
-  if (dir === "north") {
-    // ry=0: UV x≈0 → world left (cx side), UV x≈1 → world right ((cx+1) side)
-    const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
-    const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
-    return [aoL, aoR, aoL, aoR];
-  }
-  if (dir === "south") {
-    // ry=π: UV x≈0 → world right ((cx+1) side), UV x≈1 → world left (cx side)
-    const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
-    const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
-    return [aoR, aoL, aoR, aoL];
-  }
-  if (dir === "west") {
-    // ry=+π/2: UV x≈0 → world south ((cz+1) side), UV x≈1 → world north (cz side)
-    const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
-    const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
-    return [aoS, aoN, aoS, aoN];
-  }
-  if (dir === "east") {
-    // ry=-π/2: UV x≈0 → world north (cz side), UV x≈1 → world south ((cz+1) side)
-    const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
-    const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
-    return [aoN, aoS, aoN, aoS];
-  }
-  return [1, 1, 1, 1];
-}
-
-/**
- * Per-corner AO for a vertical skirt face (floor-step or ceiling-step panel).
- * Skirts face AWAY from the current cell toward the lower/higher neighbour,
- * so their UV x-axis is mirrored relative to the matching wall direction.
- * Returns [tl, tr, bl, br] in [0,1].
- */
-function computeSkirtFaceAO(
-  isSol: (x: number, z: number) => boolean,
-  cx: number,
-  cz: number,
-  dir: "north" | "south" | "east" | "west",
-): [number, number, number, number] {
-  const n = isSol;
-  if (dir === "north") {
-    // ry=π (same UV as south wall): x=0 → east (+X), x=1 → west (-X). Neighbour at cz-1.
-    const aoE = vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3;
-    const aoW = vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3;
-    return [aoE, aoW, aoE, aoW];
-  }
-  if (dir === "south") {
-    // ry=0 (same UV as north wall): x=0 → west (-X), x=1 → east (+X). Neighbour at cz+1.
-    const aoW = vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3;
-    const aoE = vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3;
-    return [aoW, aoE, aoW, aoE];
-  }
-  if (dir === "west") {
-    // ry=-π/2 (same UV as east wall): x=0 → north (-Z), x=1 → south (+Z). Neighbour at cx-1.
-    const aoN = vertexAO(n(cx, cz - 1), n(cx - 1, cz), n(cx - 1, cz - 1)) / 3;
-    const aoS = vertexAO(n(cx, cz + 1), n(cx - 1, cz), n(cx - 1, cz + 1)) / 3;
-    return [aoN, aoS, aoN, aoS];
-  }
-  if (dir === "east") {
-    // ry=+π/2 (same UV as west wall): x=0 → south (+Z), x=1 → north (-Z). Neighbour at cx+1.
-    const aoS = vertexAO(n(cx, cz + 1), n(cx + 1, cz), n(cx + 1, cz + 1)) / 3;
-    const aoN = vertexAO(n(cx, cz - 1), n(cx + 1, cz), n(cx + 1, cz - 1)) / 3;
-    return [aoS, aoN, aoS, aoN];
-  }
-  return [1, 1, 1, 1];
-}
-
-function makeFaceMatrix(
-  x: number,
-  y: number,
-  z: number,
-  rx: number,
-  ry: number,
-  rz: number,
-  w: number,
-  h: number,
-): THREE.Matrix4 {
-  return new THREE.Matrix4().compose(
-    new THREE.Vector3(x, y, z),
-    new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
-    new THREE.Vector3(w, h, 1),
-  );
-}
-
-/**
- * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
- * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
- */
-function buildInstancedMesh(
-  matrices: THREE.Matrix4[],
-  uvRects: UvRect[],
-  material: THREE.Material,
-  useAtlas: boolean,
-  heightOffsets?: Float32Array,
-  uvRotations?: number[],
-  uvHeightScales?: number[],
-  cellX?: Float32Array,
-  cellZ?: Float32Array,
-  aoCorners?: Float32Array,
-  faceNormals?: Float32Array,
-  rowIndexes?: number[],
-  uvOffsets?: number[],
-): THREE.InstancedMesh {
-  const geo = new THREE.PlaneGeometry(1, 1);
-
-  if (useAtlas) {
-    const n = matrices.length;
-
-    // aUvRect (vec4, 1 slot): .xy = atlas UV origin, .zw = atlas UV size.
-    const uvRectArr = new Float32Array(n * 4);
-    uvRects.forEach((r, i) => {
-      uvRectArr[i * 4] = r.x;
-      uvRectArr[i * 4 + 1] = r.y;
-      uvRectArr[i * 4 + 2] = r.w;
-      uvRectArr[i * 4 + 3] = r.h;
-    });
-    geo.setAttribute(
-      "aUvRect",
-      new THREE.InstancedBufferAttribute(uvRectArr, 4),
-    );
-
-    // aSurface (vec4, 1 slot): .x=heightOffset, .y=uvRotation, .z=uvHeightScale.
-    const surfaceArr = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) {
-      surfaceArr[i * 4] = 0; // was heightOffsets ? (heightOffsets[i] ?? 0) : 0; we now bake offset into the mesh so raycasting works correctly
-      surfaceArr[i * 4 + 1] = uvRotations ? (uvRotations[i] ?? 0) : 0;
-      surfaceArr[i * 4 + 2] = uvHeightScales ? (uvHeightScales[i] ?? 1.0) : 1.0;
-      surfaceArr[i * 4 + 3] = uvOffsets ? (uvOffsets[i] ?? 0.0) : 0.0;
-    }
-    geo.setAttribute(
-      "aSurface",
-      new THREE.InstancedBufferAttribute(surfaceArr, 4),
-    );
-
-    // aAoCorners (vec4, 1 slot): [tl, tr, bl, br] in [0,1]; all-ones = fully lit.
-    const aoArr = aoCorners ?? new Float32Array(n * 4).fill(1.0);
-    geo.setAttribute(
-      "aAoCorners",
-      new THREE.InstancedBufferAttribute(aoArr, 4),
-    );
-
-    // aCellFace (vec4, 1 slot): .xy=grid cell (col,row), .zw=XZ outward face normal.
-    const cellFaceArr = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) {
-      cellFaceArr[i * 4] = cellX ? (cellX[i] ?? 0) : 0;
-      cellFaceArr[i * 4 + 1] = cellZ ? (cellZ[i] ?? 0) : 0;
-      cellFaceArr[i * 4 + 2] = faceNormals ? (faceNormals[i * 2] ?? 0) : 0;
-      cellFaceArr[i * 4 + 3] = faceNormals ? (faceNormals[i * 2 + 1] ?? 0) : 0;
-    }
-    geo.setAttribute(
-      "aCellFace",
-      new THREE.InstancedBufferAttribute(cellFaceArr, 4),
-    );
-
-    // aRowIndex (float, 1 slot): per-panel row index for uBaseOverride lookup.
-    const rowArr = new Float32Array(n);
-    if (rowIndexes) {
-      for (let i = 0; i < n; i++) rowArr[i] = rowIndexes[i] ?? 0;
-    }
-    geo.setAttribute(
-      "aRowIndex",
-      new THREE.InstancedBufferAttribute(rowArr, 1),
-    );
-  }
-
-  const mesh = new THREE.InstancedMesh(geo, material, matrices.length);
-  matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
-  mesh.instanceMatrix.needsUpdate = true;
-  return mesh;
-}
 
 // ---------------------------------------------------------------------------
 // createDungeonRenderer
@@ -2518,7 +2330,47 @@ export function createDungeonRenderer(
   const entityMeshMap = new Map<string, THREE.Mesh>();
   const billboardMap = new Map<string, BillboardHandle>();
   const objectBillboardMap = new Map<string, BillboardHandle>();
+  const doorMap = new Map<string, DoorHandle>();
   let currentObjects: ObjectPlacement[] = [];
+
+  function makeIsSolid(): (x: number, z: number) => boolean {
+    const outputs = game.dungeon.outputs;
+    const solidData = outputs?.textures.solid.image.data as Uint8Array | undefined;
+    const width = outputs?.width ?? 0;
+    const height = outputs?.height ?? 0;
+    return (x, z) => {
+      if (x < 0 || z < 0 || x >= width || z >= height) return true;
+      return solidData ? (solidData[z * width + x] ?? 0) > 0 : false;
+    };
+  }
+
+  function syncDoors(doors: DoorRecord[]) {
+    const activeIds = new Set(doors.map((d) => d.id));
+    for (const [id, handle] of doorMap) {
+      if (!activeIds.has(id)) {
+        handle.dispose();
+        doorMap.delete(id);
+      }
+    }
+    if (!packedAtlas) return;
+    const isSolidForDoors = makeIsSolid();
+    for (const door of doors) {
+      if (doorMap.has(door.id)) continue;
+      doorMap.set(
+        door.id,
+        createDoorMesh(door, {
+          scene,
+          tileSize,
+          ceilingHeight: ceilingH,
+          packedAtlas,
+          resolver,
+          isSolid: isSolidForDoors,
+          createFrameMaterial: () => makeAtlasMaterial(-1.0),
+          createPaneMaterial: () => makeAtlasMaterialDoubleSide(-1.0),
+        }),
+      );
+    }
+  }
 
   function syncObjects(objects: ObjectPlacement[]) {
     const activeKeys = new Set(
@@ -2729,6 +2581,8 @@ export function createDungeonRenderer(
             );
         }
       }
+      // Advance door slide animations.
+      for (const handle of doorMap.values()) handle.update(t);
     }
 
     glRenderer.render(scene, camera);
@@ -2795,6 +2649,7 @@ export function createDungeonRenderer(
         ...pickable,
         ...Array.from(billboardMap.values(), (b) => b.getPickObject()),
         ...Array.from(objectBillboardMap.values(), (b) => b.getPickObject()),
+        ...Array.from(doorMap.values(), (d) => d.getPickObject()),
       ],
       false,
     );
@@ -3006,6 +2861,9 @@ export function createDungeonRenderer(
       currentObjects = objects;
       syncObjects(objects);
     },
+    setDoors(doors) {
+      syncDoors(doors);
+    },
     worldToScreen(gridX, gridZ, worldY) {
       const wx = (gridX + 0.5) * tileSize;
       const wy = worldY ?? ceilingH * 0.4;
@@ -3180,6 +3038,7 @@ export function createDungeonRenderer(
       for (const mat of entityMatCache.values()) mat.dispose();
       for (const handle of billboardMap.values()) handle.dispose();
       for (const handle of objectBillboardMap.values()) handle.dispose();
+      for (const handle of doorMap.values()) handle.dispose();
       sharedAtlasTex?.dispose();
       tileUvLookupTex?.dispose();
       if (overlayFloor !== defSurf) overlayFloor.tex.dispose();

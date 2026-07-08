@@ -2781,22 +2781,26 @@ function makeApplyAction(internal, combatOpts, onAnimEvent) {
 					});
 				}
 				if (action.targetId !== void 0) {
-					const target = internal.entityById.get(action.targetId);
-					if (target) {
-						const targetType = target.type;
-						if (targetType === "chest") {
-							internal.events.emit("chest-open", {
-								chest: target,
-								loot: []
-							});
-							internal.events.emit("audio", {
-								name: "chest-open",
-								position: [target.x, target.z]
-							});
-						} else if (targetType === "door") internal.events.emit("audio", {
-							name: "door-open",
-							position: [target.x, target.z]
-						});
+					const door = internal.doors.get(action.targetId);
+					if (door) if (door.locked) internal.events.emit("door-state", {
+						door,
+						reason: "locked-attempt"
+					});
+					else setDoorOpen(internal, door, !door.open);
+					else {
+						const target = internal.entityById.get(action.targetId);
+						if (target) {
+							if (target.type === "chest") {
+								internal.events.emit("chest-open", {
+									chest: target,
+									loot: []
+								});
+								internal.events.emit("audio", {
+									name: "chest-open",
+									position: [target.x, target.z]
+								});
+							}
+						}
 					}
 				}
 			}
@@ -2894,6 +2898,13 @@ function makeApplyAction(internal, combatOpts, onAnimEvent) {
 			}
 			return state;
 		}
+		if (internal.dungeonOutputs) {
+			const door = findDoorAt(internal, nx, ny);
+			if (door && !door.locked && !door.open) {
+				if (internal.entityById.get(actorId)?.opensDoors === false) return state;
+				setDoorOpen(internal, door, true);
+			}
+		}
 		if (!internal.colliderFlagsData || !internal.dungeonOutputs) return state;
 		if (!isWalkableCell(getCellFlags(nx, ny, internal.colliderFlagsData, internal.dungeonOutputs.width, internal.dungeonOutputs.height))) return state;
 		if (internal.decorations.some((d) => d.blocksMove && d.x === nx && d.z === ny)) return state;
@@ -2966,6 +2977,40 @@ function syncAllEntitiesFromTurnState(internal) {
 		if (entity) syncEntityFromActor(entity, actor);
 	}
 }
+/** Write the collider flags implied by a door's current locked/open state. */
+function applyDoorColliderFlags(internal, door) {
+	if (!internal.dungeonOutputs) return;
+	const flags = door.locked ? {
+		walkable: false,
+		blocked: true,
+		lightPassable: false
+	} : door.open ? {
+		walkable: true,
+		blocked: false,
+		lightPassable: true
+	} : {
+		walkable: true,
+		blocked: false,
+		lightPassable: false
+	};
+	setColliderFlagsCell(internal.dungeonOutputs, door.x, door.z, flags);
+}
+function findDoorAt(internal, x, z) {
+	for (const door of internal.doors.values()) if (door.x === x && door.z === z) return door;
+}
+function setDoorOpen(internal, door, open) {
+	if (door.locked || door.open === open) return;
+	door.open = open;
+	applyDoorColliderFlags(internal, door);
+	internal.events.emit("door-state", {
+		door,
+		reason: open ? "open" : "close"
+	});
+	internal.events.emit("audio", {
+		name: open ? "door-open" : "door-close",
+		position: [door.x, door.z]
+	});
+}
 function makeDungeonHandle(internal) {
 	let _roomsCache = null;
 	return {
@@ -3033,6 +3078,78 @@ function makeDungeonHandle(internal) {
 				}
 			}
 			return best;
+		},
+		doors: {
+			get list() {
+				return Array.from(internal.doors.values());
+			},
+			add(spec) {
+				const door = {
+					...spec,
+					open: spec.open ?? false
+				};
+				internal.doors.set(door.id, door);
+				applyDoorColliderFlags(internal, door);
+				return door;
+			},
+			remove(id) {
+				internal.doors.delete(id);
+			},
+			get(id) {
+				return internal.doors.get(id);
+			},
+			at(x, z) {
+				return findDoorAt(internal, x, z);
+			},
+			open(id) {
+				const door = internal.doors.get(id);
+				if (door) setDoorOpen(internal, door, true);
+			},
+			close(id) {
+				const door = internal.doors.get(id);
+				if (door) setDoorOpen(internal, door, false);
+			},
+			lock(id) {
+				const door = internal.doors.get(id);
+				if (!door || door.locked) return;
+				door.locked = true;
+				door.open = false;
+				applyDoorColliderFlags(internal, door);
+				internal.events.emit("door-state", {
+					door,
+					reason: "lock"
+				});
+				internal.events.emit("audio", {
+					name: "door-lock",
+					position: [door.x, door.z]
+				});
+			},
+			unlock(id) {
+				const door = internal.doors.get(id);
+				if (!door || !door.locked) return;
+				door.locked = false;
+				applyDoorColliderFlags(internal, door);
+				internal.events.emit("door-state", {
+					door,
+					reason: "unlock"
+				});
+				internal.events.emit("audio", {
+					name: "door-unlock",
+					position: [door.x, door.z]
+				});
+			},
+			toggle(id) {
+				const door = internal.doors.get(id);
+				if (!door) return;
+				if (door.locked) {
+					internal.events.emit("door-state", {
+						door,
+						reason: "locked-attempt"
+					});
+					return;
+				}
+				setDoorOpen(internal, door, !door.open);
+			}
 		},
 		getCell(x, z) {
 			const dungeon = internal.dungeonOutputs;
@@ -3549,6 +3666,7 @@ function createGame(canvas, options) {
 		paintMap: /* @__PURE__ */ new Map(),
 		passages: [],
 		passageMask: null,
+		doors: /* @__PURE__ */ new Map(),
 		turnCounter: 0,
 		minimapState: null,
 		spawnerCb: null,
@@ -3788,6 +3906,7 @@ function createGame(canvas, options) {
 			internal.decorations.length = 0;
 			internal.objectPlacements.length = 0;
 			internal.paintMap.clear();
+			internal.doors.clear();
 			internal.turnCounter = 0;
 			const playerOpts = internal.options.player ?? {};
 			const maxHp = playerOpts.maxHp ?? playerOpts.hp ?? 30;
@@ -4913,34 +5032,8 @@ function loadSkybox(opts) {
 	});
 }
 //#endregion
-//#region src/lib/rendering/dungeonRenderer.ts
-/**
-* dungeonRenderer.ts
-*
-* Plain Three.js first-person dungeon renderer — no React or R3F required.
-* Designed for script-tag usage: create it after `game.generate()` is wired
-* up, and it will visualise the dungeon and player/entity positions.
-*
-* Usage (plain colours):
-*   const renderer = createDungeonRenderer(document.getElementById('viewport'), game);
-*
-* Usage (tile atlas):
-*   const packed = await loadTextureAtlas('sprites.png', atlasJson);
-*   const resolver = packedAtlasResolver(packed);
-*   const renderer = createDungeonRenderer(el, game, {
-*     packedAtlas: packed,
-*     tileNameResolver: resolver,
-*     floorTile: 'stone_floor',
-*     ceilTile:  'ceiling_stone',
-*     wallTile:  'brick_wall',
-*   });
-*
-*   // Pass live entity list on every turn:
-*   game.events.on('turn', () => renderer.setEntities(enemies));
-*/
+//#region src/lib/rendering/atlasGeometry.ts
 var HALF_PI = Math.PI / 2;
-/** Eye height as a fraction of ceiling height (same as PerspectiveDungeonView). */
-var EYE_HEIGHT_FACTOR = .66;
 function vertexAO(s1, s2, c) {
 	if (s1 && s2) return 0;
 	return 3 - ((s1 ? 1 : 0) + (s2 ? 1 : 0) + (c ? 1 : 0));
@@ -4966,8 +5059,9 @@ function computeFaceAO(isSol, cx, cz, dir) {
 		vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3
 	];
 	if (dir === "north") {
-		const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz - 1)) / 3;
-		const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz - 1)) / 3;
+		const s2 = n(cx, cz - 1);
+		const aoL = vertexAO(n(cx - 1, cz), s2, n(cx - 1, cz - 1)) / 3;
+		const aoR = vertexAO(n(cx + 1, cz), s2, n(cx + 1, cz - 1)) / 3;
 		return [
 			aoL,
 			aoR,
@@ -4976,8 +5070,9 @@ function computeFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "south") {
-		const aoR = vertexAO(n(cx + 1, cz), true, n(cx + 1, cz + 1)) / 3;
-		const aoL = vertexAO(n(cx - 1, cz), true, n(cx - 1, cz + 1)) / 3;
+		const s2 = n(cx, cz + 1);
+		const aoR = vertexAO(n(cx + 1, cz), s2, n(cx + 1, cz + 1)) / 3;
+		const aoL = vertexAO(n(cx - 1, cz), s2, n(cx - 1, cz + 1)) / 3;
 		return [
 			aoR,
 			aoL,
@@ -4986,8 +5081,9 @@ function computeFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "west") {
-		const aoS = vertexAO(n(cx, cz + 1), true, n(cx - 1, cz + 1)) / 3;
-		const aoN = vertexAO(n(cx, cz - 1), true, n(cx - 1, cz - 1)) / 3;
+		const s2 = n(cx - 1, cz);
+		const aoS = vertexAO(n(cx, cz + 1), s2, n(cx - 1, cz + 1)) / 3;
+		const aoN = vertexAO(n(cx, cz - 1), s2, n(cx - 1, cz - 1)) / 3;
 		return [
 			aoS,
 			aoN,
@@ -4996,8 +5092,9 @@ function computeFaceAO(isSol, cx, cz, dir) {
 		];
 	}
 	if (dir === "east") {
-		const aoN = vertexAO(n(cx, cz - 1), true, n(cx + 1, cz - 1)) / 3;
-		const aoS = vertexAO(n(cx, cz + 1), true, n(cx + 1, cz + 1)) / 3;
+		const s2 = n(cx + 1, cz);
+		const aoN = vertexAO(n(cx, cz - 1), s2, n(cx + 1, cz - 1)) / 3;
+		const aoS = vertexAO(n(cx, cz + 1), s2, n(cx + 1, cz + 1)) / 3;
 		return [
 			aoN,
 			aoS,
@@ -5113,6 +5210,351 @@ function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets
 	mesh.instanceMatrix.needsUpdate = true;
 	return mesh;
 }
+//#endregion
+//#region src/lib/animations/easing.ts
+var linear = (t) => t;
+var easeInQuad = (t) => t * t;
+var easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
+var easeInOutQuad = (t) => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+var easeInCubic = (t) => t * t * t;
+var easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+var easeInOutCubic = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+var EASINGS = {
+	linear,
+	easeInQuad,
+	easeOutQuad,
+	easeInOutQuad,
+	easeInCubic,
+	easeOutCubic,
+	easeInOutCubic
+};
+/** Resolve a named easing or pass a custom function through unchanged. */
+function resolveEasing(easing) {
+	if (typeof easing === "function") return easing;
+	return EASINGS[easing ?? "easeInOutQuad"];
+}
+//#endregion
+//#region src/lib/dungeon/doors.ts
+/**
+* Compute a door's pane slide progress at time `now`, in [0, 1]
+* (0 = fully closed, 1 = fully open). Pure function — no THREE.js dependency —
+* so it can be unit tested and shared between renderer implementations.
+*/
+function computeDoorProgress(anim, now, visual) {
+	const duration = visual.duration ?? 400;
+	const target = anim.toOpen ? 1 : 0;
+	if (duration <= 0) return target;
+	const t = Math.min(Math.max((now - anim.startTime) / duration, 0), 1);
+	const easing = resolveEasing(visual.easing);
+	return anim.fromProgress + (target - anim.fromProgress) * easing(t);
+}
+/**
+* Find door candidate locations — one per corridor-to-room opening, centered
+* on the opening's median threshold cell.
+*
+* Identification convention (caller must match this):
+* - Corridor cell: solid=0 AND regionId=0
+* - Room cell:     solid=0 AND regionId≠0
+*
+* Pass the pre-assignment regionId data where corridors still have value 0.
+* After `generateBspDungeon` the regionId texture has unique non-zero IDs for
+* corridors (baked by `assignCorridorRegions`), so it cannot be used directly here.
+*
+* Grouping: threshold cells (corridor cells adjacent to a room cell) are grouped
+* by their corridor axis and fixed coordinate, so each opening (a contiguous run
+* of threshold cells along one wall) becomes a single candidate. The door is placed
+* at the median cell of each group.
+*
+* `yaw` is 0 for doors facing Z (dx=0) and π/2 for doors facing X.
+*/
+function findDoorCandidates(regionIdData, solidData, W, H) {
+	function isCorridor(x, z) {
+		if (x < 0 || z < 0 || x >= W || z >= H) return false;
+		const i = z * W + x;
+		return solidData[i] === 0 && regionIdData[i] === 0;
+	}
+	function isRoom(x, z) {
+		if (x < 0 || z < 0 || x >= W || z >= H) return false;
+		const i = z * W + x;
+		return solidData[i] === 0 && (regionIdData[i] ?? 0) !== 0;
+	}
+	const DIRS4 = [
+		[0, -1],
+		[0, 1],
+		[-1, 0],
+		[1, 0]
+	];
+	const groups = /* @__PURE__ */ new Map();
+	for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
+		if (!isCorridor(x, z)) continue;
+		for (const [dx, dz] of DIRS4) if (isRoom(x + dx, z + dz)) {
+			const key = `${dx}_${dz}_${dx === 0 ? z : x}`;
+			if (!groups.has(key)) groups.set(key, []);
+			const adjRoomId = regionIdData[(z + dz) * W + (x + dx)] ?? 0;
+			groups.get(key).push({
+				x,
+				z,
+				dx,
+				dz,
+				roomId: adjRoomId
+			});
+			break;
+		}
+	}
+	const candidates = [];
+	for (const cells of groups.values()) {
+		if (cells.length === 0) continue;
+		const { dx, dz } = cells[0];
+		cells.sort((a, b) => dx === 0 ? a.x - b.x : a.z - b.z);
+		const midIdx = Math.floor(cells.length / 2);
+		const mid = cells[midIdx];
+		candidates.push({
+			x: mid.x,
+			z: mid.z,
+			dx,
+			dz,
+			yaw: dx === 0 ? 0 : Math.PI / 2,
+			roomId: mid.roomId,
+			groupCells: cells.map((c) => ({
+				x: c.x,
+				z: c.z
+			})),
+			midIdx
+		});
+	}
+	return candidates;
+}
+/**
+* Narrow a door opening to exactly one cell (the median) by walling off the
+* surrounding cells.
+*
+* Two kinds of cells are walled (solid set to 1, colliderFlags set to IS_BLOCKED):
+* 1. All cells in `candidate.groupCells` except the median at `midIdx`.
+* 2. The two corridor cells flanking the door perpendicularly — i.e., the cells at
+*    (doorX ± dz, doorZ ∓ dx) — if they are floor corridor cells (solid=0, regionId=0).
+*    This prevents diagonal walk-through at the door frame.
+*
+* Modifies `solidData`, `colliderFlagsData`, and `regionIdData` in-place.
+* The caller must set `needsUpdate = true` on the corresponding textures.
+*/
+function wallOffDoorGroup(candidate, solidData, colliderFlagsData, regionIdData, W, H) {
+	const { x: doorX, z: doorZ, dx, dz, groupCells, midIdx } = candidate;
+	for (let i = 0; i < groupCells.length; i++) {
+		if (i === midIdx) continue;
+		const cell = groupCells[i];
+		const idx = cell.z * W + cell.x;
+		solidData[idx] = 1;
+		colliderFlagsData[idx] = 2;
+	}
+	for (const [fx, fz] of [[doorX - dz, doorZ + dx], [doorX + dz, doorZ - dx]]) {
+		if (fx < 0 || fz < 0 || fx >= W || fz >= H) continue;
+		const fi = fz * W + fx;
+		if (solidData[fi] === 0 && (regionIdData[fi] ?? 0) === 0) {
+			solidData[fi] = 1;
+			colliderFlagsData[fi] = 2;
+		}
+	}
+}
+//#endregion
+//#region src/lib/rendering/doorRenderer.ts
+/**
+* Which two wall-style directions a door's frames face, derived from `yaw`.
+* By convention side A is the lower-coordinate neighbour (north/west) and
+* side B is the higher-coordinate neighbour (south/east) — `DoorVisual`'s
+* `frameTile`/`frameTileBack` map to A/B in that order.
+*/
+function axisDirs(yaw) {
+	const normalized = (yaw % Math.PI + Math.PI) % Math.PI;
+	return normalized < Math.PI / 4 || normalized > Math.PI * 3 / 4 ? {
+		a: "north",
+		b: "south"
+	} : {
+		a: "west",
+		b: "east"
+	};
+}
+/** Position/rotation/outward-normal for the wall-style boundary in `dir`, matching the main wall-emission convention exactly. */
+function boundaryFor(dir, x, z, tileSize) {
+	switch (dir) {
+		case "north": return {
+			px: (x + .5) * tileSize,
+			pz: z * tileSize,
+			ry: 0,
+			nx: 0,
+			nz: 1
+		};
+		case "south": return {
+			px: (x + .5) * tileSize,
+			pz: (z + 1) * tileSize,
+			ry: Math.PI,
+			nx: 0,
+			nz: -1
+		};
+		case "west": return {
+			px: x * tileSize,
+			pz: (z + .5) * tileSize,
+			ry: HALF_PI,
+			nx: 1,
+			nz: 0
+		};
+		case "east": return {
+			px: (x + 1) * tileSize,
+			pz: (z + .5) * tileSize,
+			ry: -HALF_PI,
+			nx: -1,
+			nz: 0
+		};
+	}
+}
+function tileUvRect(tile, packedAtlas, resolver) {
+	const id = resolveTile(tile, resolver);
+	const sprite = packedAtlas?.getById(id);
+	return sprite ? spriteToUvRect(sprite) : {
+		x: 0,
+		y: 0,
+		w: 0,
+		h: 0
+	};
+}
+/**
+* How far each frame sits in front of the (centred) pane, along its own
+* outward normal — i.e. toward whichever side actually sees that frame.
+* Keeps the frame reliably drawing in front of the pane instead of flush
+* with (or behind) it, without pushing it all the way out to the cell edge.
+*/
+var FRAME_DEPTH_OFFSET = .1;
+/** Build the renderable meshes for one door and return its control handle. */
+function createDoorMesh(door, deps) {
+	const { scene, tileSize, ceilingHeight, packedAtlas, resolver, isSolid } = deps;
+	const wallMidY = ceilingHeight / 2;
+	const { a: dirA, b: dirB } = axisDirs(door.yaw);
+	const boundaryA = boundaryFor(dirA, door.x, door.z, tileSize);
+	const boundaryB = boundaryFor(dirB, door.x, door.z, tileSize);
+	const centerX = (door.x + .5) * tileSize;
+	const centerZ = (door.z + .5) * tileSize;
+	const frameMatrices = [makeFaceMatrix(centerX + boundaryA.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryA.nz * FRAME_DEPTH_OFFSET, 0, boundaryA.ry, 0, tileSize, ceilingHeight), makeFaceMatrix(centerX + boundaryB.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryB.nz * FRAME_DEPTH_OFFSET, 0, boundaryB.ry, 0, tileSize, ceilingHeight)];
+	const frameUvRects = [tileUvRect(door.visual.frameTile, packedAtlas, resolver), tileUvRect(door.visual.frameTileBack ?? door.visual.frameTile, packedAtlas, resolver)];
+	const frameAo = new Float32Array(8);
+	frameAo.set(computeFaceAO(isSolid, door.x, door.z, dirA), 0);
+	frameAo.set(computeFaceAO(isSolid, door.x, door.z, dirB), 4);
+	const frameCellX = new Float32Array([door.x, door.x]);
+	const frameCellZ = new Float32Array([door.z, door.z]);
+	const frameNormals = new Float32Array([
+		boundaryA.nx,
+		boundaryA.nz,
+		boundaryB.nx,
+		boundaryB.nz
+	]);
+	const frameMat = deps.createFrameMaterial();
+	const frameMesh = buildInstancedMesh(frameMatrices, frameUvRects, frameMat, true, void 0, void 0, void 0, frameCellX, frameCellZ, frameAo, frameNormals);
+	scene.add(frameMesh);
+	const paneMat = deps.createPaneMaterial();
+	const paneBasePos = new THREE.Vector3(centerX, wallMidY, centerZ);
+	const paneQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, boundaryB.ry, 0));
+	const paneScale = new THREE.Vector3(tileSize, ceilingHeight, 1);
+	const paneMesh = buildInstancedMesh([new THREE.Matrix4().compose(paneBasePos, paneQuat, paneScale)], [tileUvRect(currentPaneTile(door), packedAtlas, resolver)], paneMat, true, void 0, void 0, void 0, new Float32Array([door.x]), new Float32Array([door.z]), void 0, new Float32Array([boundaryB.nx, boundaryB.nz]));
+	scene.add(paneMesh);
+	function currentPaneTile(d) {
+		return d.locked ? d.visual.paneTileLocked ?? d.visual.paneTile : d.visual.paneTile;
+	}
+	const axis = door.visual.axis ?? "vertical";
+	const slideDistance = door.visual.slideDistance ?? 1;
+	const isZFacingAxis = dirA === "north" || dirA === "south";
+	const tangentX = isZFacingAxis ? 1 : 0;
+	const tangentZ = isZFacingAxis ? 0 : 1;
+	let anim = {
+		fromProgress: door.open ? 1 : 0,
+		toOpen: door.open,
+		startTime: performance.now()
+	};
+	let lastOpen = door.open;
+	let lastLocked = door.locked;
+	const pickMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+	pickMesh.visible = false;
+	pickMesh.userData.entity = {
+		id: door.id,
+		x: door.x,
+		z: door.z
+	};
+	pickMesh.position.copy(paneBasePos);
+	pickMesh.quaternion.copy(paneQuat);
+	pickMesh.scale.copy(paneScale);
+	scene.add(pickMesh);
+	function syncPaneTexture() {
+		const rect = tileUvRect(currentPaneTile(door), packedAtlas, resolver);
+		const attr = paneMesh.geometry.getAttribute("aUvRect");
+		attr.setXYZW(0, rect.x, rect.y, rect.w, rect.h);
+		attr.needsUpdate = true;
+	}
+	return {
+		update(now) {
+			if (door.open !== lastOpen) {
+				anim = {
+					fromProgress: computeDoorProgress(anim, now, door.visual),
+					toOpen: door.open,
+					startTime: now
+				};
+				lastOpen = door.open;
+			}
+			if (door.locked !== lastLocked) {
+				lastLocked = door.locked;
+				syncPaneTexture();
+			}
+			const offset = computeDoorProgress(anim, now, door.visual) * slideDistance;
+			const pos = paneBasePos.clone();
+			if (axis === "vertical") pos.y += offset * ceilingHeight;
+			else {
+				pos.x += offset * tileSize * tangentX;
+				pos.z += offset * tileSize * tangentZ;
+			}
+			const matrix = new THREE.Matrix4().compose(pos, paneQuat, paneScale);
+			paneMesh.setMatrixAt(0, matrix);
+			paneMesh.instanceMatrix.needsUpdate = true;
+		},
+		getPickObject() {
+			return pickMesh;
+		},
+		dispose() {
+			scene.remove(frameMesh);
+			scene.remove(paneMesh);
+			scene.remove(pickMesh);
+			frameMesh.geometry.dispose();
+			frameMat.dispose();
+			paneMesh.geometry.dispose();
+			paneMat.dispose();
+			pickMesh.geometry.dispose();
+			pickMesh.material.dispose();
+		}
+	};
+}
+//#endregion
+//#region src/lib/rendering/dungeonRenderer.ts
+/**
+* dungeonRenderer.ts
+*
+* Plain Three.js first-person dungeon renderer — no React or R3F required.
+* Designed for script-tag usage: create it after `game.generate()` is wired
+* up, and it will visualise the dungeon and player/entity positions.
+*
+* Usage (plain colours):
+*   const renderer = createDungeonRenderer(document.getElementById('viewport'), game);
+*
+* Usage (tile atlas):
+*   const packed = await loadTextureAtlas('sprites.png', atlasJson);
+*   const resolver = packedAtlasResolver(packed);
+*   const renderer = createDungeonRenderer(el, game, {
+*     packedAtlas: packed,
+*     tileNameResolver: resolver,
+*     floorTile: 'stone_floor',
+*     ceilTile:  'ceiling_stone',
+*     wallTile:  'brick_wall',
+*   });
+*
+*   // Pass live entity list on every turn:
+*   game.events.on('turn', () => renderer.setEntities(enemies));
+*/
+/** Eye height as a fraction of ceiling height (same as PerspectiveDungeonView). */
+var EYE_HEIGHT_FACTOR = .66;
 /**
 * Mount a Three.js first-person dungeon renderer into `element`.
 *
@@ -6126,7 +6568,40 @@ function createDungeonRenderer(element, game, options = {}) {
 	const entityMeshMap = /* @__PURE__ */ new Map();
 	const billboardMap = /* @__PURE__ */ new Map();
 	const objectBillboardMap = /* @__PURE__ */ new Map();
+	const doorMap = /* @__PURE__ */ new Map();
 	let currentObjects = [];
+	function makeIsSolid() {
+		const outputs = game.dungeon.outputs;
+		const solidData = outputs?.textures.solid.image.data;
+		const width = outputs?.width ?? 0;
+		const height = outputs?.height ?? 0;
+		return (x, z) => {
+			if (x < 0 || z < 0 || x >= width || z >= height) return true;
+			return solidData ? (solidData[z * width + x] ?? 0) > 0 : false;
+		};
+	}
+	function syncDoors(doors) {
+		const activeIds = new Set(doors.map((d) => d.id));
+		for (const [id, handle] of doorMap) if (!activeIds.has(id)) {
+			handle.dispose();
+			doorMap.delete(id);
+		}
+		if (!packedAtlas) return;
+		const isSolidForDoors = makeIsSolid();
+		for (const door of doors) {
+			if (doorMap.has(door.id)) continue;
+			doorMap.set(door.id, createDoorMesh(door, {
+				scene,
+				tileSize,
+				ceilingHeight: ceilingH,
+				packedAtlas,
+				resolver,
+				isSolid: isSolidForDoors,
+				createFrameMaterial: () => makeAtlasMaterial(-1),
+				createPaneMaterial: () => makeAtlasMaterialDoubleSide(-1)
+			}));
+		}
+	}
 	function syncObjects(objects) {
 		const activeKeys = new Set(objects.filter((o) => o.spriteMap).map((o) => `${o.type}_${o.x}_${o.z}`));
 		for (const [id, handle] of objectBillboardMap) if (!activeKeys.has(id)) {
@@ -6270,6 +6745,7 @@ function createDungeonRenderer(element, game, options = {}) {
 					if (inRange) handle.update(obj, curYaw, tileSize, ceilingH, floorY);
 				}
 			}
+			for (const handle of doorMap.values()) handle.update(t);
 		}
 		glRenderer.render(scene, camera);
 	}
@@ -6315,7 +6791,8 @@ function createDungeonRenderer(element, game, options = {}) {
 		const hit = raycaster.intersectObjects([
 			...pickable,
 			...Array.from(billboardMap.values(), (b) => b.getPickObject()),
-			...Array.from(objectBillboardMap.values(), (b) => b.getPickObject())
+			...Array.from(objectBillboardMap.values(), (b) => b.getPickObject()),
+			...Array.from(doorMap.values(), (d) => d.getPickObject())
 		], false)[0];
 		if (!hit) return null;
 		let cx = 0, cz = 0;
@@ -6473,6 +6950,9 @@ function createDungeonRenderer(element, game, options = {}) {
 			currentObjects = objects;
 			syncObjects(objects);
 		},
+		setDoors(doors) {
+			syncDoors(doors);
+		},
 		worldToScreen(gridX, gridZ, worldY) {
 			const wx = (gridX + .5) * tileSize;
 			const wy = worldY ?? ceilingH * .4;
@@ -6608,6 +7088,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			for (const mat of entityMatCache.values()) mat.dispose();
 			for (const handle of billboardMap.values()) handle.dispose();
 			for (const handle of objectBillboardMap.values()) handle.dispose();
+			for (const handle of doorMap.values()) handle.dispose();
 			sharedAtlasTex?.dispose();
 			tileUvLookupTex?.dispose();
 			if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
@@ -7648,7 +8129,8 @@ function exportDungeonMap(dungeon, options) {
 		generatorOptions: options.generatorOptions,
 		rendererOptions: options.rendererOptions ? stripNonSerializable(options.rendererOptions) : {},
 		dungeon: serializeDungeon(dungeon, options.paintMap),
-		...options.objectPlacements && options.objectPlacements.length > 0 ? { objectPlacements: options.objectPlacements } : {}
+		...options.objectPlacements && options.objectPlacements.length > 0 ? { objectPlacements: options.objectPlacements } : {},
+		...options.doors && options.doors.length > 0 ? { doors: options.doors } : {}
 	};
 }
 /**
@@ -7674,7 +8156,8 @@ function importDungeonMap(data) {
 		meta: data.meta,
 		version: data.version,
 		...data.dungeon.paintMap !== void 0 ? { paintMap: data.dungeon.paintMap } : {},
-		...data.objectPlacements !== void 0 ? { objectPlacements: data.objectPlacements } : {}
+		...data.objectPlacements !== void 0 ? { objectPlacements: data.objectPlacements } : {},
+		...data.doors !== void 0 ? { doors: data.doors } : {}
 	};
 }
 /**
@@ -7684,6 +8167,6 @@ function dungeonMapFromJson(json) {
 	return importDungeonMap(JSON.parse(json));
 }
 //#endregion
-export { IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, exportDungeonMap, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, makeRng, packedAtlasResolver, registerTheme, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingHeightOffset, setCeilingPanelCount, setFloorHeightOffset, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation };
+export { EASINGS, IS_BLOCKED, IS_LIGHT_PASSABLE, IS_WALKABLE, THEMES, THEME_KEYS, attachDecorator, attachKeybindings, attachMinimap, attachSpawner, attachSurfacePainter, buildColliderFlags, colliderFlagsFromSolid, computeDoorProgress, createDoorMesh, createDungeonRenderer, createEntity, createFactionRegistry, createFactionRegistryFromTable, createGame, createItem, createWebSocketTransport, dungeonMapFromJson, dungeonMapToJson, easeInCubic, easeInOutCubic, easeInOutQuad, easeInQuad, easeOutCubic, easeOutQuad, exportDungeonMap, findDoorCandidates, generateCellularDungeon, getTheme, importDungeonMap, isBlockedCell, isLightPassableCell, isWalkableCell, linear, loadMultiAtlas, loadSkybox, loadTextureAtlas, loadTiledMap, makeRng, packedAtlasResolver, registerTheme, resolveEasing, resolveSprite, resolveTheme, setCeilSkirtTiles, setCeilingHeightOffset, setCeilingPanelCount, setFloorHeightOffset, setFloorSkirtTiles, setSkyPanelCount, showInventory, spriteToUvRect, toFaceRotation, wallOffDoorGroup };
 
 //# sourceMappingURL=atomic-core.js.map

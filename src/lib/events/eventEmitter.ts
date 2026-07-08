@@ -2,6 +2,8 @@
 // GameEventMap — payload types for all named game events
 // ---------------------------------------------------------------------------
 
+import type { DoorRecord } from '../dungeon/doors';
+
 /** Minimal entity shape used in event payloads. Full entity types live in Phase 4. */
 export interface EventEntity {
   id: string;
@@ -75,6 +77,15 @@ export interface GameEventMap {
    * trigger a rebuild manually.
    */
   'cell-solid-changed': { x: number; z: number };
+  /**
+   * A door's state changed (or a locked door was interacted with).
+   * `reason` distinguishes a settled state transition from a rejected
+   * attempt so UI code (tooltips, "it's locked!" prompts) can react to both.
+   */
+  'door-state': {
+    door: DoorRecord;
+    reason: 'open' | 'close' | 'lock' | 'unlock' | 'locked-attempt';
+  };
 }
 
 // ---------------------------------------------------------------------------

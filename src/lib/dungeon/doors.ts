@@ -1,6 +1,8 @@
 // src/lib/dungeon/doors.ts
 
 import { IS_BLOCKED } from './colliderFlags';
+import type { EasingFn, EasingName } from '../animations/easing';
+import { resolveEasing } from '../animations/easing';
 
 export type DoorCandidate = {
   x: number;
@@ -14,6 +16,35 @@ export type DoorCandidate = {
   groupCells: { x: number; z: number }[];
   /** Index into groupCells that is the chosen door position (median). */
   midIdx: number;
+};
+
+/** Slide direction for the animated door pane: straight up, or sideways. */
+export type DoorAxis = 'vertical' | 'horizontal';
+
+/** Logical open/closed state of a door (independent of in-flight animation progress). */
+export type DoorState = 'closed' | 'open';
+
+/**
+ * Rendering and animation configuration for a door. Passed to
+ * `game.dungeon.doors.add()` alongside the door's grid placement.
+ */
+export type DoorVisual = {
+  /** Frame texture facing the side the door was approached from when placed (side A). */
+  frameTile: string;
+  /** Frame texture facing side B. Defaults to `frameTile`. */
+  frameTileBack?: string;
+  /** Pane texture (e.g. a portcullis grille) shown when the door is unlocked. */
+  paneTile: string;
+  /** Pane texture shown while the door is locked. Defaults to `paneTile`. */
+  paneTileLocked?: string;
+  /** Slide direction. Default `'vertical'` (portcullis-style, slides up into the ceiling). */
+  axis?: DoorAxis;
+  /** How far the pane slides, as a fraction of a cell. Default `1` (fully retracts). */
+  slideDistance?: number;
+  /** Slide animation duration in milliseconds. Default `400`. */
+  duration?: number;
+  /** Named easing or a custom `(t: number) => number` function. Default `'easeInOutQuad'`. */
+  easing?: EasingName | EasingFn;
 };
 
 export type DoorRecord = {
@@ -30,7 +61,41 @@ export type DoorRecord = {
   roomId: number;
   locked: boolean;
   open: boolean;
+  /** Rendering/animation configuration for this door. */
+  visual: DoorVisual;
 };
+
+/**
+ * In-flight (or settled) slide-animation state for a door, tracked by the
+ * renderer. `fromProgress`/`startTime` are captured whenever `open` flips so
+ * a transition can be interrupted mid-slide without jumping.
+ */
+export type DoorAnimState = {
+  /** Progress the current transition started from, in [0, 1] (0 = closed, 1 = open). */
+  fromProgress: number;
+  /** Target state of the in-flight transition. */
+  toOpen: boolean;
+  /** `performance.now()` timestamp the transition began. */
+  startTime: number;
+};
+
+/**
+ * Compute a door's pane slide progress at time `now`, in [0, 1]
+ * (0 = fully closed, 1 = fully open). Pure function — no THREE.js dependency —
+ * so it can be unit tested and shared between renderer implementations.
+ */
+export function computeDoorProgress(
+  anim: DoorAnimState,
+  now: number,
+  visual: DoorVisual,
+): number {
+  const duration = visual.duration ?? 400;
+  const target = anim.toOpen ? 1 : 0;
+  if (duration <= 0) return target;
+  const t = Math.min(Math.max((now - anim.startTime) / duration, 0), 1);
+  const easing = resolveEasing(visual.easing);
+  return anim.fromProgress + (target - anim.fromProgress) * easing(t);
+}
 
 /**
  * Find door candidate locations — one per corridor-to-room opening, centered

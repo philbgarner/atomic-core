@@ -7,6 +7,7 @@ import type { SerializedDungeon } from "./serialize";
 import { serializeDungeon, deserializeDungeon } from "./serialize";
 import type { DungeonRendererOptions } from "../rendering/dungeonRenderer";
 import type { ObjectPlacement } from "../entities/types";
+import type { DoorRecord } from "./doors";
 
 declare const __PACKAGE_VERSION__: string;
 
@@ -55,6 +56,8 @@ export type DungeonMapFile = {
   dungeon: SerializedDungeon;
   /** Stationary object placements, including billboard sprites. */
   objectPlacements?: ObjectPlacement[];
+  /** Registered doors, including their locked/open state and visual config. */
+  doors?: DoorRecord[];
 };
 
 /** Options passed to exportDungeonMap. */
@@ -79,6 +82,11 @@ export type ExportOptions = {
    * SpriteMap data is plain JSON so no stripping is needed.
    */
   objectPlacements?: readonly ObjectPlacement[];
+  /**
+   * Supply game.dungeon.doors.list here to persist registered doors
+   * (locked/open state and visual config included).
+   */
+  doors?: readonly DoorRecord[];
 };
 
 /** Returned by importDungeonMap / dungeonMapFromJson. */
@@ -99,6 +107,12 @@ export type ImportResult = {
    * Pass to place.billboard() inside onPlace, or to renderer.setObjects() directly.
    */
   objectPlacements?: ObjectPlacement[];
+  /**
+   * Restored doors, if the file contained them. Re-register each via
+   * `game.dungeon.doors.add()` after `game.generate()`, then pass the list to
+   * `renderer.setDoors()`.
+   */
+  doors?: DoorRecord[];
 };
 
 // --------------------------------
@@ -143,6 +157,9 @@ export function exportDungeonMap(
     ...(options.objectPlacements && options.objectPlacements.length > 0
       ? { objectPlacements: options.objectPlacements as ObjectPlacement[] }
       : {}),
+    ...(options.doors && options.doors.length > 0
+      ? { doors: options.doors as DoorRecord[] }
+      : {}),
   };
 }
 
@@ -174,6 +191,7 @@ export function importDungeonMap(data: DungeonMapFile): ImportResult {
     version: data.version,
     ...(data.dungeon.paintMap !== undefined ? { paintMap: data.dungeon.paintMap } : {}),
     ...(data.objectPlacements !== undefined ? { objectPlacements: data.objectPlacements } : {}),
+    ...(data.doors !== undefined ? { doors: data.doors } : {}),
   };
 }
 

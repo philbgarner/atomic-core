@@ -3,6 +3,7 @@ import { EntityBase, ObjectPlacement } from '../entities/types';
 import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
 import { SkyboxOptions } from './skybox';
+import { DoorRecord } from '../dungeon/doors';
 /**
  * dungeonRenderer.ts
  *
@@ -299,6 +300,18 @@ export type DungeonRenderer = {
      * objects without one are ignored by the renderer.
      */
     setObjects(objects: ObjectPlacement[]): void;
+    /**
+     * Register doors to render. Call once after `game.generate()` (or pass
+     * `game.dungeon.doors.list` directly), and again whenever a door is added
+     * or removed via `game.dungeon.doors`. Open/closed/locked state changes are
+     * picked up automatically each frame — no need to call this again for those.
+     *
+     * Each door renders as a double-sided frame/pane/frame sandwich using the
+     * same atlas shader as wall geometry, so lighting/AO/fog match adjacent
+     * walls exactly. Requires `packedAtlas` to have been passed to
+     * `createDungeonRenderer` — a no-op otherwise.
+     */
+    setDoors(doors: DoorRecord[]): void;
     /**
      * Project a dungeon grid cell to 2D pixel coordinates relative to the
      * renderer's container element, using the current camera state.

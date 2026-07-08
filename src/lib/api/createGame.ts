@@ -62,6 +62,7 @@ import {
 import type { HiddenPassage, ObjectPlacement } from "../entities/types";
 import type { EntityBase } from "../entities/types";
 import type { SpriteMap } from "../rendering/billboardSprites";
+import type { DoorRecord } from "../dungeon/doors";
 import { createPlayerHandle } from "./player";
 import type { PlayerHandle, PlayerState } from "./player";
 import { createKeybindings } from "./keybindings";
@@ -127,6 +128,42 @@ export type DecorationList = {
 export type PassageList = {
 	toggle(id: number): void;
 	list: HiddenPassage[];
+};
+
+/**
+ * `game.dungeon.doors` — register and control animated door cells.
+ *
+ * Doors are rendered as a double-sided frame/pane/frame sandwich (see
+ * `rendering/doorRenderer.ts`) and drive per-cell `colliderFlags` directly —
+ * they never touch the `solid` texture, so no `renderer.rebuild()` is needed
+ * when a door's state changes. Call `renderer.setDoors(game.dungeon.doors.list)`
+ * once after `generate()` (and again after adding/removing doors) to sync the
+ * render layer; open/closed/locked state changes are picked up automatically
+ * each frame since `DoorRecord`s are mutated in place.
+ */
+export type DoorsHandle = {
+	/** Live list of registered doors. Records are mutated in place on state changes. */
+	readonly list: DoorRecord[];
+	/** Register a door at a cell. `open` defaults to `false` (closed). */
+	add(spec: Omit<DoorRecord, "open"> & { open?: boolean }): DoorRecord;
+	/** Unregister a door. Does not restore the cell's collider flags. */
+	remove(id: string): void;
+	get(id: string): DoorRecord | undefined;
+	/** Find the door registered at a given cell, if any. */
+	at(x: number, z: number): DoorRecord | undefined;
+	/** Open the door. No-op if locked or already open. */
+	open(id: string): void;
+	/** Close the door. No-op if already closed. */
+	close(id: string): void;
+	/** Lock the door (forces it closed). */
+	lock(id: string): void;
+	/** Unlock the door (leaves it closed; call `open()` separately). */
+	unlock(id: string): void;
+	/**
+	 * Toggle open/closed. If the door is locked, no state change occurs and a
+	 * `'door-state'` event fires with `reason: 'locked-attempt'` instead.
+	 */
+	toggle(id: string): void;
 };
 
 export type ApplyTarget = "floor" | "wall" | "ceiling";
@@ -219,6 +256,7 @@ export type DungeonHandle = {
 	readonly objects: readonly ObjectPlacement[];
 	passages: PassageList;
 	passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
+	doors: DoorsHandle;
 	/**
 	 * Read all available per-cell state for the cell at grid coordinates `(x, z)`.
 	 * Returns `null` if the dungeon has not been generated yet or the coordinates are out of bounds.
@@ -704,6 +742,10 @@ type GameInternal = {
 	passages: HiddenPassage[];
 	passageMask: Uint8Array | null;
 
+	// Doors (id -> record; records are mutated in place, live references may be
+	// held by the renderer for animation, so identity is preserved across state changes)
+	doors: Map<string, DoorRecord>;
+
 	// Turn counter
 	turnCounter: number;
 
@@ -867,22 +909,29 @@ function makeApplyAction(
 					});
 				}
 				if (action.targetId !== undefined) {
-					const target = internal.entityById.get(action.targetId);
-					if (target) {
-						const targetType = (target as Record<string, unknown>).type as
-							| string
-							| undefined;
-						if (targetType === "chest") {
-							internal.events.emit("chest-open", { chest: target, loot: [] });
-							internal.events.emit("audio", {
-								name: "chest-open",
-								position: [target.x, target.z],
+					const door = internal.doors.get(action.targetId);
+					if (door) {
+						if (door.locked) {
+							internal.events.emit("door-state", {
+								door,
+								reason: "locked-attempt",
 							});
-						} else if (targetType === "door") {
-							internal.events.emit("audio", {
-								name: "door-open",
-								position: [target.x, target.z],
-							});
+						} else {
+							setDoorOpen(internal, door, !door.open);
+						}
+					} else {
+						const target = internal.entityById.get(action.targetId);
+						if (target) {
+							const targetType = (target as Record<string, unknown>).type as
+								| string
+								| undefined;
+							if (targetType === "chest") {
+								internal.events.emit("chest-open", { chest: target, loot: [] });
+								internal.events.emit("audio", {
+									name: "chest-open",
+									position: [target.x, target.z],
+								});
+							}
 						}
 					}
 				}
@@ -1001,6 +1050,21 @@ function makeApplyAction(
 			return state;
 		}
 
+		// Door bump-to-open: walking into a closed-but-unlocked door opens it in the
+		// same action (matches the existing "walk into a chest" style of interaction).
+		// A locked door is left alone here — its colliderFlags already carry
+		// IS_BLOCKED, so the walkability check below rejects the move as usual.
+		// Entities with `opensDoors === false` (e.g. mindless monsters) are blocked
+		// by a closed-but-unlocked door without mutating the door's shared state.
+		if (internal.dungeonOutputs) {
+			const door = findDoorAt(internal, nx, ny);
+			if (door && !door.locked && !door.open) {
+				const mover = internal.entityById.get(actorId);
+				if (mover?.opensDoors === false) return state;
+				setDoorOpen(internal, door, true);
+			}
+		}
+
 		// Walkability check
 		if (!internal.colliderFlagsData || !internal.dungeonOutputs) return state;
 		if (
@@ -1106,6 +1170,47 @@ function syncAllEntitiesFromTurnState(internal: GameInternal): void {
 }
 
 // ---------------------------------------------------------------------------
+// Door helpers — shared by the DoorsHandle and the movement bump-to-open path
+// ---------------------------------------------------------------------------
+
+/** Write the collider flags implied by a door's current locked/open state. */
+function applyDoorColliderFlags(internal: GameInternal, door: DoorRecord): void {
+	if (!internal.dungeonOutputs) return;
+	const flags = door.locked
+		? { walkable: false, blocked: true, lightPassable: false }
+		: door.open
+			? { walkable: true, blocked: false, lightPassable: true }
+			: { walkable: true, blocked: false, lightPassable: false };
+	setColliderFlagsCell(internal.dungeonOutputs, door.x, door.z, flags);
+}
+
+function findDoorAt(
+	internal: GameInternal,
+	x: number,
+	z: number,
+): DoorRecord | undefined {
+	for (const door of internal.doors.values()) {
+		if (door.x === x && door.z === z) return door;
+	}
+	return undefined;
+}
+
+function setDoorOpen(
+	internal: GameInternal,
+	door: DoorRecord,
+	open: boolean,
+): void {
+	if (door.locked || door.open === open) return;
+	door.open = open;
+	applyDoorColliderFlags(internal, door);
+	internal.events.emit("door-state", { door, reason: open ? "open" : "close" });
+	internal.events.emit("audio", {
+		name: open ? "door-open" : "door-close",
+		position: [door.x, door.z],
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Dungeon handle factory
 // ---------------------------------------------------------------------------
 
@@ -1201,6 +1306,61 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 				}
 			}
 			return best;
+		},
+
+		doors: {
+			get list() {
+				return Array.from(internal.doors.values());
+			},
+			add(spec) {
+				const door: DoorRecord = { ...spec, open: spec.open ?? false };
+				internal.doors.set(door.id, door);
+				applyDoorColliderFlags(internal, door);
+				return door;
+			},
+			remove(id: string) {
+				internal.doors.delete(id);
+			},
+			get(id: string) {
+				return internal.doors.get(id);
+			},
+			at(x: number, z: number) {
+				return findDoorAt(internal, x, z);
+			},
+			open(id: string) {
+				const door = internal.doors.get(id);
+				if (door) setDoorOpen(internal, door, true);
+			},
+			close(id: string) {
+				const door = internal.doors.get(id);
+				if (door) setDoorOpen(internal, door, false);
+			},
+			lock(id: string) {
+				const door = internal.doors.get(id);
+				if (!door || door.locked) return;
+				door.locked = true;
+				door.open = false;
+				applyDoorColliderFlags(internal, door);
+				internal.events.emit("door-state", { door, reason: "lock" });
+				internal.events.emit("audio", { name: "door-lock", position: [door.x, door.z] });
+			},
+			unlock(id: string) {
+				const door = internal.doors.get(id);
+				if (!door || !door.locked) return;
+				door.locked = false;
+				applyDoorColliderFlags(internal, door);
+				internal.events.emit("door-state", { door, reason: "unlock" });
+				internal.events.emit("audio", { name: "door-unlock", position: [door.x, door.z] });
+			},
+			toggle(id: string) {
+				const door = internal.doors.get(id);
+				if (!door) return;
+				if (door.locked) {
+					internal.events.emit("door-state", { door, reason: "locked-attempt" });
+					return;
+				}
+				setDoorOpen(internal, door, !door.open);
+			},
 		},
 
 		getCell(x: number, z: number): CellData | null {
@@ -2023,6 +2183,7 @@ export function createGame(
 		paintMap: new Map(),
 		passages: [],
 		passageMask: null,
+		doors: new Map(),
 		turnCounter: 0,
 		minimapState: null,
 		spawnerCb: null,
@@ -2300,6 +2461,7 @@ export function createGame(
 			internal.decorations.length = 0;
 			internal.objectPlacements.length = 0;
 			internal.paintMap.clear();
+			internal.doors.clear();
 			internal.turnCounter = 0;
 			const playerOpts = internal.options.player ?? {};
 			const maxHp = playerOpts.maxHp ?? playerOpts.hp ?? 30;

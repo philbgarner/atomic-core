@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Doors</title>
+        <link rel="stylesheet" href="../basic/styles.css" />
+        <style>
+            #door-status {
+                font-size: 9px;
+                line-height: 2.2;
+                color: var(--desc);
+                border-top: 1px solid var(--border);
+                padding-top: 12px;
+            }
+            #door-status span { color: var(--gold); }
+            #tooltip {
+                position: absolute;
+                pointer-events: none;
+                background: var(--panel);
+                border: 1px solid var(--border);
+                color: var(--gold);
+                font-size: 9px;
+                padding: 4px 8px;
+                display: none;
+                z-index: 10;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>doors</h1>
+
+            <div id="door-status">
+                Door: <span id="door-open-state">closed</span><br />
+                Lock: <span id="door-lock-state">locked</span>
+            </div>
+
+            <div id="controls">
+                WASD / Arrow keys — move<br />
+                Q / E — turn left / right<br />
+                Space / F — open / close (bump also opens)<br />
+                U — unlock the door
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport" style="position:relative;"></div>
+            <div id="tooltip"></div>
+        </div>
+
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./doors-demo.js" defer></script>
+    </body>
+</html>

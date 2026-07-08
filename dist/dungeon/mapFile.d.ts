@@ -2,6 +2,7 @@ import { BspDungeonOptions, BspDungeonOutputs } from './bsp';
 import { SerializedDungeon } from './serialize';
 import { DungeonRendererOptions } from '../rendering/dungeonRenderer';
 import { ObjectPlacement } from '../entities/types';
+import { DoorRecord } from './doors';
 /** Optional author-supplied metadata embedded in the map file. */
 export type DungeonMapMeta = {
     title?: string;
@@ -38,6 +39,8 @@ export type DungeonMapFile = {
     dungeon: SerializedDungeon;
     /** Stationary object placements, including billboard sprites. */
     objectPlacements?: ObjectPlacement[];
+    /** Registered doors, including their locked/open state and visual config. */
+    doors?: DoorRecord[];
 };
 /** Options passed to exportDungeonMap. */
 export type ExportOptions = {
@@ -65,6 +68,11 @@ export type ExportOptions = {
      * SpriteMap data is plain JSON so no stripping is needed.
      */
     objectPlacements?: readonly ObjectPlacement[];
+    /**
+     * Supply game.dungeon.doors.list here to persist registered doors
+     * (locked/open state and visual config included).
+     */
+    doors?: readonly DoorRecord[];
 };
 /** Returned by importDungeonMap / dungeonMapFromJson. */
 export type ImportResult = {
@@ -88,6 +96,12 @@ export type ImportResult = {
      * Pass to place.billboard() inside onPlace, or to renderer.setObjects() directly.
      */
     objectPlacements?: ObjectPlacement[];
+    /**
+     * Restored doors, if the file contained them. Re-register each via
+     * `game.dungeon.doors.add()` after `game.generate()`, then pass the list to
+     * `renderer.setDoors()`.
+     */
+    doors?: DoorRecord[];
 };
 /**
  * Snapshot a dungeon and all settings needed to reproduce it into a

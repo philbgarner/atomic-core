@@ -11,8 +11,11 @@ src/lib/
   animations/
     types.ts
     animationRegistry.ts
+    easing.ts
   rendering/
     dungeonRenderer.ts
+    atlasGeometry.ts
+    doorRenderer.ts
     torchLighting.ts
     basicLighting.ts
     camera.ts
@@ -25,6 +28,7 @@ src/lib/
     bsp.ts
     cellular.ts
     colliderFlags.ts
+    doors.ts
     serialize.ts
     mapFile.ts
     tiled.ts
@@ -185,7 +189,7 @@ Both generators produce a `RoomedDungeonOutputs` (extends `DungeonOutputs`) with
 
 ### Collider flags (per-cell movement and LOS)
 
-Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture). Default values are derived from the `solid` texture by all generators. Drives `isWalkable` in the turn system, A* pathfinding, monster AI, FOV/LOS, and both camera types.
+Bitwise flags stored in `DungeonOutputs.textures.colliderFlags` (R8 DataTexture). Default values are derived from the `solid` texture by all generators. Drives `isWalkable` in the turn system, A* pathfinding, monster AI, FOV/LOS, and both camera types. Also the mechanism doors (see "Doors" below) use to toggle locked/open state without touching `solid` or triggering a geometry rebuild.
 
 | Flag | Bit | Meaning |
 |---|---|---|
@@ -281,6 +285,32 @@ Generation (`runGenerate`) advances through `tickUntilPlayer()` (step 11), then 
 - `passages/mask.ts` — `buildPassageMask()`, `enablePassageInMask()`, `disablePassageInMask()`, `stampPassageToMask()`
 - `entities/types.ts` — `HiddenPassage` interface
 - `api/createGame.ts` — `game.dungeon.passages` object; `toggle(id)`, `.list`, `passageNear(x, z)` API methods
+
+---
+
+### Doors
+
+Lockable, animated doors registered via `game.dungeon.doors`, modeled on the `passages` handle. A door renders as a double-sided "sandwich" of three atlas-shaded planes — frame (side A), a sliding double-sided pane, frame (side B) — built with the exact same wall shader/material as regular wall geometry (`makeAtlasMaterial()`/`makeAtlasMaterialDoubleSide()`), so lighting, baked AO, and fog match adjacent walls exactly; this is a deliberate departure from the billboard shader (`billboardSprites.ts`), which only accumulates ambient/point lights and has no baked AO or facing-angle brightness.
+
+Door state drives per-cell `colliderFlags` only (never `solid`), so state changes need no `renderer.rebuild()`: locked → `IS_BLOCKED`; unlocked+closed → `IS_WALKABLE` (blocks sight, not movement — walking into it auto-opens it, "bump to open"); unlocked+open → `IS_WALKABLE | IS_LIGHT_PASSABLE`. Player and monster movement/pathfinding/FOV all read the same `colliderFlags` bits, so a door's lock state is enforced identically for both without extra code. Entities with `opensDoors === false` are blocked by a closed-but-unlocked door without mutating the shared door state (for "can't open doors" monsters).
+
+Slide animation is driven by a small pure easing/progress model (no THREE.js dependency), advanced each RAF tick alongside billboards; the pane's texture swaps between `paneTile`/`paneTileLocked` based on lock state. A door's pick target is registered into the renderer's raycast pickable list exactly like a billboard's invisible pick-mesh, so `onCellHover`/`onCellClick` work without any dev-side plumbing.
+
+`dungeon/doors.ts` also has dungeon-generation-time placement helpers (`findDoorCandidates`, `wallOffDoorGroup`) for locating a single door cell per corridor-to-room opening and walling off the rest of a multi-cell threshold — used by a dev's `onPlace` callback to decide where to register doors.
+
+**Files:**
+- `dungeon/doors.ts` — `DoorCandidate`, `DoorRecord` (extended with `visual: DoorVisual`), `DoorVisual` (`frameTile`, `frameTileBack?`, `paneTile`, `paneTileLocked?`, `axis?`, `slideDistance?`, `duration?`, `easing?`), `DoorAxis`, `DoorState`, `DoorAnimState`; `findDoorCandidates()` / `wallOffDoorGroup()` placement helpers; `computeDoorProgress(anim, now, visual)` pure slide-progress function shared by the renderer
+- `animations/easing.ts` — `EasingFn`, `EasingName`, named easing functions (`linear`, `easeInQuad`/`easeOutQuad`/`easeInOutQuad`, `easeInCubic`/`easeOutCubic`/`easeInOutCubic`), `EASINGS` lookup, `resolveEasing()`
+- `api/createGame.ts` — `internal.doors: Map<string, DoorRecord>`; `DoorsHandle` (`list`, `add`, `remove`, `get`, `at`, `open`, `close`, `lock`, `unlock`, `toggle`) exposed as `game.dungeon.doors`; `applyDoorColliderFlags()` / `findDoorAt()` / `setDoorOpen()` helpers shared by the handle and the movement path; `customApplyAction`'s move branch bumps open a closed-unlocked door before the walkability check (honoring `entity.opensDoors === false`); the `interact` action's door branch resolves `internal.doors.get(targetId)` and emits `'door-state'` (`locked-attempt` when locked, otherwise toggles); `regenerate()` clears `internal.doors`
+- `rendering/atlasGeometry.ts` — `computeFaceAO()`, `computeSkirtFaceAO()`, `makeFaceMatrix()`, `buildInstancedMesh()`, `HALF_PI`; split out of `dungeonRenderer.ts` so both it and `doorRenderer.ts` can share these atlas-shader geometry helpers without a circular import
+- `rendering/doorRenderer.ts` — `createDoorMesh(door, deps)` builds the frame (2-instance InstancedMesh, one material) + pane (1-instance, double-sided material) + invisible pick mesh for one door; returns a `DoorHandle` (`update(now)`, `getPickObject()`, `dispose()`); `axisDirs()`/`boundaryFor()` derive the two frame-facing directions and their wall-matching boundary transforms from `door.yaw`
+- `rendering/dungeonRenderer.ts` — `doorMap: Map<string, DoorHandle>`; public `setDoors(doors)` method (mirrors `setObjects`) using `makeIsSolid()` for frame AO; RAF `tick()` advances each door's animation; `getCellAtPointer()`'s pickable array includes door pick objects; `destroy()` disposes all door handles
+- `events/eventEmitter.ts` — `'door-state': { door: DoorRecord; reason: 'open'|'close'|'lock'|'unlock'|'locked-attempt' }` event
+- `dungeon/mapFile.ts` — optional `doors?: DoorRecord[]` on `DungeonMapFile`/`ExportOptions`/`ImportResult`, following the same optional/backwards-compatible pattern as `objectPlacements`
+- `index.ts` — exports `findDoorCandidates`, `wallOffDoorGroup`, `computeDoorProgress`, `createDoorMesh`, door/easing types, and the easing functions
+
+**Example:**
+- `examples/localhost/doors/` — two rooms separated by a single-cell wall column; the whole column is authored as a corridor-style opening and narrowed to one door cell via `findDoorCandidates()` + `wallOffDoorGroup()`; door starts locked (solid metal gate texture), `U` unlocks it (swaps to a grille pane), walking into it opens it with an eased vertical slide, hovering shows a tooltip via the door's pick object
 
 ---
 

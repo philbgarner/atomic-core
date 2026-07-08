@@ -10,7 +10,7 @@ export {
   attachSurfacePainter,
   attachKeybindings,
 } from './api/createGame'
-export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget, ColliderFlags, DungeonHandle, CellData } from './api/createGame'
+export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget, ColliderFlags, DungeonHandle, CellData, DoorsHandle } from './api/createGame'
 
 export { createEntity }                              from './entities/factory'
 export type { EntityCoreOpts }                       from './entities/factory'
@@ -65,3 +65,13 @@ export type { EntityBase, HiddenPassage, ObjectPlacement } from './entities/type
 export type { Item, InventorySlot }                  from './entities/inventory'
 export type { TurnAction, TurnActionKind }           from './turn/types'
 export { makeRng }                                   from './utils/rng'
+
+// Doors
+export { findDoorCandidates, wallOffDoorGroup, computeDoorProgress } from './dungeon/doors'
+export type { DoorCandidate, DoorRecord, DoorVisual, DoorAxis, DoorState, DoorAnimState } from './dungeon/doors'
+export { createDoorMesh } from './rendering/doorRenderer'
+export type { DoorMeshDeps, DoorHandle } from './rendering/doorRenderer'
+
+// Easing
+export { linear, easeInQuad, easeOutQuad, easeInOutQuad, easeInCubic, easeOutCubic, easeInOutCubic, EASINGS, resolveEasing } from './animations/easing'
+export type { EasingFn, EasingName } from './animations/easing'

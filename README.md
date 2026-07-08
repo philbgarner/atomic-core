@@ -41,6 +41,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Minimap with entity overlays
 - Chest drops and item pickups
 - Hidden passage traversal
+- **Doors** — `game.dungeon.doors` registers lockable, animated doors rendered as a double-sided frame/pane/frame sandwich using the exact wall shader (matching lighting, AO, and fog); `open()`/`close()`/`lock()`/`unlock()`/`toggle()` drive per-cell collider flags so movement and line-of-sight update automatically for player and monsters alike; walking into a closed-but-unlocked door opens it ("bump to open"); configurable slide axis, distance, duration, and easing
 - Callback-driven enemy spawning
 - Stationary decoration entities (props, furniture, fixtures)
 - Atlas surface painting - apply tile layers to walls, floors, and ceilings per-tile; per-row base-tile overrides for skirt rows, sky panels, and ceiling panels via `SurfacePaintTarget`
