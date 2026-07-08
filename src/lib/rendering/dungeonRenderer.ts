@@ -2361,7 +2361,8 @@ export function createDungeonRenderer(
         createDoorMesh(door, {
           scene,
           tileSize,
-          ceilingHeight: ceilingH,
+		  doorHeight: ceilingH,
+          floor: getFloorOffset(door.x, door.z),
           packedAtlas,
           resolver,
           isSolid: isSolidForDoors,

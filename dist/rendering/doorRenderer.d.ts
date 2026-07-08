@@ -4,7 +4,8 @@ import * as THREE from "three";
 export interface DoorMeshDeps {
     scene: THREE.Scene;
     tileSize: number;
-    ceilingHeight: number;
+    floor: number;
+    doorHeight: number;
     packedAtlas: PackedAtlas | undefined;
     resolver: ((name: string) => number) | undefined;
     /** Solid-cell predicate, used to compute AO for the two frame faces. */

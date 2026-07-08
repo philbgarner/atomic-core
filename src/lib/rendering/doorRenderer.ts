@@ -32,7 +32,8 @@ import {
 export interface DoorMeshDeps {
   scene: THREE.Scene;
   tileSize: number;
-  ceilingHeight: number;
+  floor: number;	// floor level for the door
+  doorHeight: number;
   packedAtlas: PackedAtlas | undefined;
   resolver: ((name: string) => number) | undefined;
   /** Solid-cell predicate, used to compute AO for the two frame faces. */
@@ -117,8 +118,8 @@ const FRAME_DEPTH_OFFSET = 0.1;
 
 /** Build the renderable meshes for one door and return its control handle. */
 export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle {
-  const { scene, tileSize, ceilingHeight, packedAtlas, resolver, isSolid } = deps;
-  const wallMidY = ceilingHeight / 2;
+  const { scene, tileSize, floor, doorHeight, packedAtlas, resolver, isSolid } = deps;
+  const wallMidY = floor+doorHeight / 2;
   const { a: dirA, b: dirB } = axisDirs(door.yaw);
   const boundaryA = boundaryFor(dirA, door.x, door.z, tileSize);
   const boundaryB = boundaryFor(dirB, door.x, door.z, tileSize);
@@ -138,7 +139,7 @@ export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle
       boundaryA.ry,
       0,
       tileSize,
-      ceilingHeight,
+      doorHeight,
     ),
     makeFaceMatrix(
       centerX + boundaryB.nx * FRAME_DEPTH_OFFSET,
@@ -148,7 +149,7 @@ export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle
       boundaryB.ry,
       0,
       tileSize,
-      ceilingHeight,
+      doorHeight,
     ),
   ];
   const frameUvRects = [
@@ -187,7 +188,7 @@ export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle
   const paneMat = deps.createPaneMaterial();
   const paneBasePos = new THREE.Vector3(centerX, wallMidY, centerZ);
   const paneQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, boundaryB.ry, 0));
-  const paneScale = new THREE.Vector3(tileSize, ceilingHeight, 1);
+  const paneScale = new THREE.Vector3(tileSize, doorHeight, 1);
 
   const paneMesh = buildInstancedMesh(
     [new THREE.Matrix4().compose(paneBasePos, paneQuat, paneScale)],
@@ -257,7 +258,7 @@ export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle
       const offset = progress * slideDistance;
       const pos = paneBasePos.clone();
       if (axis === "vertical") {
-        pos.y += offset * ceilingHeight;
+        pos.y += offset * doorHeight;
       } else {
         pos.x += offset * tileSize * tangentX;
         pos.z += offset * tileSize * tangentZ;

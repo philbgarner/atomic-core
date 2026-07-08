@@ -5425,14 +5425,14 @@ function tileUvRect(tile, packedAtlas, resolver) {
 var FRAME_DEPTH_OFFSET = .1;
 /** Build the renderable meshes for one door and return its control handle. */
 function createDoorMesh(door, deps) {
-	const { scene, tileSize, ceilingHeight, packedAtlas, resolver, isSolid } = deps;
-	const wallMidY = ceilingHeight / 2;
+	const { scene, tileSize, floor, doorHeight, packedAtlas, resolver, isSolid } = deps;
+	const wallMidY = floor + doorHeight / 2;
 	const { a: dirA, b: dirB } = axisDirs(door.yaw);
 	const boundaryA = boundaryFor(dirA, door.x, door.z, tileSize);
 	const boundaryB = boundaryFor(dirB, door.x, door.z, tileSize);
 	const centerX = (door.x + .5) * tileSize;
 	const centerZ = (door.z + .5) * tileSize;
-	const frameMatrices = [makeFaceMatrix(centerX + boundaryA.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryA.nz * FRAME_DEPTH_OFFSET, 0, boundaryA.ry, 0, tileSize, ceilingHeight), makeFaceMatrix(centerX + boundaryB.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryB.nz * FRAME_DEPTH_OFFSET, 0, boundaryB.ry, 0, tileSize, ceilingHeight)];
+	const frameMatrices = [makeFaceMatrix(centerX + boundaryA.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryA.nz * FRAME_DEPTH_OFFSET, 0, boundaryA.ry, 0, tileSize, doorHeight), makeFaceMatrix(centerX + boundaryB.nx * FRAME_DEPTH_OFFSET, wallMidY, centerZ + boundaryB.nz * FRAME_DEPTH_OFFSET, 0, boundaryB.ry, 0, tileSize, doorHeight)];
 	const frameUvRects = [tileUvRect(door.visual.frameTile, packedAtlas, resolver), tileUvRect(door.visual.frameTileBack ?? door.visual.frameTile, packedAtlas, resolver)];
 	const frameAo = new Float32Array(8);
 	frameAo.set(computeFaceAO(isSolid, door.x, door.z, dirA), 0);
@@ -5451,7 +5451,7 @@ function createDoorMesh(door, deps) {
 	const paneMat = deps.createPaneMaterial();
 	const paneBasePos = new THREE.Vector3(centerX, wallMidY, centerZ);
 	const paneQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, boundaryB.ry, 0));
-	const paneScale = new THREE.Vector3(tileSize, ceilingHeight, 1);
+	const paneScale = new THREE.Vector3(tileSize, doorHeight, 1);
 	const paneMesh = buildInstancedMesh([new THREE.Matrix4().compose(paneBasePos, paneQuat, paneScale)], [tileUvRect(currentPaneTile(door), packedAtlas, resolver)], paneMat, true, void 0, void 0, void 0, new Float32Array([door.x]), new Float32Array([door.z]), void 0, new Float32Array([boundaryB.nx, boundaryB.nz]));
 	scene.add(paneMesh);
 	function currentPaneTile(d) {
@@ -5502,7 +5502,7 @@ function createDoorMesh(door, deps) {
 			}
 			const offset = computeDoorProgress(anim, now, door.visual) * slideDistance;
 			const pos = paneBasePos.clone();
-			if (axis === "vertical") pos.y += offset * ceilingHeight;
+			if (axis === "vertical") pos.y += offset * doorHeight;
 			else {
 				pos.x += offset * tileSize * tangentX;
 				pos.z += offset * tileSize * tangentZ;
@@ -6593,7 +6593,8 @@ function createDungeonRenderer(element, game, options = {}) {
 			doorMap.set(door.id, createDoorMesh(door, {
 				scene,
 				tileSize,
-				ceilingHeight: ceilingH,
+				doorHeight: ceilingH,
+				floor: getFloorOffset(door.x, door.z),
 				packedAtlas,
 				resolver,
 				isSolid: isSolidForDoors,
