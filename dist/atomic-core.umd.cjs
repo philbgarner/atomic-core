@@ -2736,6 +2736,19 @@
 		if (x < 0 || y < 0 || x >= width || y >= height) return 2;
 		return flagsData[y * width + x] ?? 2;
 	}
+	/**
+	* Decode a cell's `floorHeightOffset` texture value into signed steps.
+	* `null` means a pit (no floor geometry); `undefined` means the texture is
+	* absent entirely (e.g. tiled dungeons).
+	*/
+	function readFloorHeightSteps(dungeon, x, z) {
+		const tex = dungeon.textures;
+		if (!tex.floorHeightOffset) return void 0;
+		const { width, height } = dungeon;
+		if (x < 0 || z < 0 || x >= width || z >= height) return void 0;
+		const raw = tex.floorHeightOffset.image.data[z * width + x];
+		return raw === 0 ? null : raw - 128;
+	}
 	function syncEntityFromActor(entity, actor) {
 		entity.x = actor.x;
 		entity.z = actor.y;
@@ -2951,6 +2964,26 @@
 					z: ny
 				}
 			});
+			const fallDamageHeight = internal.options.dungeon.fallDamageHeight;
+			if (fallDamageHeight && internal.dungeonOutputs && movingEntity) {
+				const fromSteps = readFloorHeightSteps(internal.dungeonOutputs, actor.x, actor.y);
+				const toSteps = readFloorHeightSteps(internal.dungeonOutputs, nx, ny);
+				if (fromSteps != null && toSteps != null) {
+					const drop = fromSteps - toSteps;
+					if (drop >= fallDamageHeight) internal.events.emit("fall-damage", {
+						entity: movingEntity,
+						height: drop,
+						from: {
+							x: actor.x,
+							z: actor.y
+						},
+						to: {
+							x: nx,
+							z: ny
+						}
+					});
+				}
+			}
 			return {
 				...state,
 				actors: {
@@ -3192,11 +3225,7 @@
 				const floorTypeRaw = tex.floorType.image.data[idx];
 				const wallTypeRaw = tex.wallType.image.data[idx];
 				const ceilingTypeRaw = tex.ceilingType.image.data[idx];
-				let floorHeightOffset;
-				if (tex.floorHeightOffset) {
-					const raw = tex.floorHeightOffset.image.data[idx];
-					floorHeightOffset = raw === 0 ? null : raw - 128;
-				}
+				const floorHeightOffset = readFloorHeightSteps(dungeon, x, z);
 				let ceilingHeightOffset;
 				if (tex.ceilingHeightOffset) {
 					const raw = tex.ceilingHeightOffset.image.data[idx];
@@ -5135,61 +5164,6 @@ void main() {
 			1
 		];
 	}
-	/**
-	* Per-corner AO for a vertical skirt face (floor-step or ceiling-step panel).
-	* Skirts face AWAY from the current cell toward the lower/higher neighbour,
-	* so their UV x-axis is mirrored relative to the matching wall direction.
-	* Returns [tl, tr, bl, br] in [0,1].
-	*/
-	function computeSkirtFaceAO(isSol, cx, cz, dir) {
-		const n = isSol;
-		if (dir === "north") {
-			const aoE = vertexAO(n(cx + 1, cz), n(cx, cz - 1), n(cx + 1, cz - 1)) / 3;
-			const aoW = vertexAO(n(cx - 1, cz), n(cx, cz - 1), n(cx - 1, cz - 1)) / 3;
-			return [
-				aoE,
-				aoW,
-				aoE,
-				aoW
-			];
-		}
-		if (dir === "south") {
-			const aoW = vertexAO(n(cx - 1, cz), n(cx, cz + 1), n(cx - 1, cz + 1)) / 3;
-			const aoE = vertexAO(n(cx + 1, cz), n(cx, cz + 1), n(cx + 1, cz + 1)) / 3;
-			return [
-				aoW,
-				aoE,
-				aoW,
-				aoE
-			];
-		}
-		if (dir === "west") {
-			const aoN = vertexAO(n(cx, cz - 1), n(cx - 1, cz), n(cx - 1, cz - 1)) / 3;
-			const aoS = vertexAO(n(cx, cz + 1), n(cx - 1, cz), n(cx - 1, cz + 1)) / 3;
-			return [
-				aoN,
-				aoS,
-				aoN,
-				aoS
-			];
-		}
-		if (dir === "east") {
-			const aoS = vertexAO(n(cx, cz + 1), n(cx + 1, cz), n(cx + 1, cz + 1)) / 3;
-			const aoN = vertexAO(n(cx, cz - 1), n(cx + 1, cz), n(cx + 1, cz - 1)) / 3;
-			return [
-				aoS,
-				aoN,
-				aoS,
-				aoN
-			];
-		}
-		return [
-			1,
-			1,
-			1,
-			1
-		];
-	}
 	function makeFaceMatrix(x, y, z, rx, ry, rz, w, h) {
 		return new three.Matrix4().compose(new three.Vector3(x, y, z), new three.Quaternion().setFromEuler(new three.Euler(rx, ry, rz)), new three.Vector3(w, h, 1));
 	}
@@ -6293,8 +6267,7 @@ void main() {
 						const stepH = currentFloorY - neighborFloorY;
 						const fullPanels = Math.floor(stepH / tileSize);
 						const rem = stepH - fullPanels * tileSize;
-						const isBlockingFloor = (nx, nz) => isSolid(nx, nz) || (openFloorVal(nx, nz) ?? 128) > nfVal;
-						const ao = aoEnabled ? computeSkirtFaceAO(isBlockingFloor, cx, cz, dir) : null;
+						const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 						for (let i = 0; i < fullPanels; i++) {
 							const midY = neighborFloorY + i * tileSize + tileSize / 2;
 							floorEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
@@ -6357,7 +6330,7 @@ void main() {
 							floorWallSkirtRots.push(s.rotation ?? 0);
 							const scale = rem / tileSize;
 							floorWallSkirtHeightScales.push(scale);
-							floorWallSkirtUvOffsets.push(1 - scale);
+							floorWallSkirtUvOffsets.push(0);
 							floorWallSkirtRowIndexes.push(fullPanels);
 							floorWallSkirtCellMap.push({
 								cx,
@@ -6402,11 +6375,10 @@ void main() {
 						const h = (ncVal - ceilVal) * offsetStep;
 						const fullPanels = Math.floor(h / tileSize);
 						const rem = h - fullPanels * tileSize;
-						const isBlockingCeil = (nx, nz) => isSolid(nx, nz) || (openCeilVal(nx, nz) ?? 128) < ncVal;
-						const ao = aoEnabled ? computeSkirtFaceAO(isBlockingCeil, cx, cz, dir) : null;
+						const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
 						for (let i = 0; i < fullPanels; i++) {
 							const midY = yCurrent - i * tileSize - tileSize / 2;
-							ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize));
+							ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, -tileSize, tileSize));
 							ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							ceilEdgeRots.push(s.rotation ?? 0);
 							ceilEdgeHeightScales.push(1);
@@ -6418,7 +6390,7 @@ void main() {
 						}
 						if (rem > .001) {
 							const midY = yCurrent - fullPanels * tileSize - rem / 2;
-							ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem));
+							ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, -tileSize, rem));
 							ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
 							ceilEdgeRots.push(s.rotation ?? 0);
 							ceilEdgeHeightScales.push(rem / tileSize);
@@ -7513,7 +7485,7 @@ void main() {
 		let selectedSlotIndex = -1;
 		let renderGrid = null;
 		function handleDialogKey(e) {
-			const action = keyToAction.get(e.key);
+			const action = keyToAction.get(e.code);
 			if (!action) return;
 			e.preventDefault();
 			switch (action) {

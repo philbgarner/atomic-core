@@ -281,7 +281,7 @@ export function showInventory(opts: InventoryOptions = {}): InventoryHandle {
   let renderGrid: ((inv: InventorySlot[]) => void) | null = null;
 
   function handleDialogKey(e: KeyboardEvent): void {
-    const action = keyToAction.get(e.key);
+    const action = keyToAction.get(e.code);	// must use e.code not e.key so it supports AZERTY
     if (!action) return;
     e.preventDefault();
     switch (action) {

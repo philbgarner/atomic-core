@@ -1698,9 +1698,7 @@ export function createDungeonRenderer(
             const rem = stepH - fullPanels * tileSize;
             const isBlockingFloor = (nx: number, nz: number) =>
               isSolid(nx, nz) || (openFloorVal(nx, nz) ?? 128) > nfVal;
-            const ao = aoEnabled
-              ? computeSkirtFaceAO(isBlockingFloor, cx, cz, dir)
-              : null;
+            const ao = aoEnabled? computeFaceAO(isSolid, cx, cz, dir): null;
             for (let i = 0; i < fullPanels; i++) {
               const midY = neighborFloorY + i * tileSize + tileSize / 2;
               floorEdges.push(
@@ -1758,21 +1756,8 @@ export function createDungeonRenderer(
             const ao = aoEnabled ? computeFaceAO(isSolid, cx, cz, dir) : null;
             for (let i = 0; i < fullPanels; i++) {
               const midY = i * tileSize + tileSize / 2;
-              floorWallSkirtEdges.push(
-                makeFaceMatrix(
-                  mx,
-                  floor + tileSize + midY,
-                  mz,
-                  0,
-                  ry,
-                  0,
-                  tileSize,
-                  tileSize,
-                ),
-              );
-              floorWallSkirtRects.push(
-                getUvRect(resolveTile(s.tile, resolver)),
-              );
+              floorWallSkirtEdges.push(makeFaceMatrix(mx,floor + tileSize + midY,mz,0,ry,0,tileSize,tileSize,),);
+              floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)),);
               floorWallSkirtRots.push(s.rotation ?? 0);
               floorWallSkirtHeightScales.push(1.0);
               floorWallSkirtUvOffsets.push(0);
@@ -1782,25 +1767,14 @@ export function createDungeonRenderer(
             }
             if (rem > 0.001) {
               const midY = fullPanels * tileSize + rem / 2;
-              floorWallSkirtEdges.push(
-                makeFaceMatrix(
-                  mx,
-                  floor + tileSize + midY,
-                  mz,
-                  0,
-                  ry,
-                  0,
-                  tileSize,
-                  rem,
-                ),
-              );
-              floorWallSkirtRects.push(
-                getUvRect(resolveTile(s.tile, resolver)),
-              );
+              floorWallSkirtEdges.push(makeFaceMatrix(mx,floor + tileSize + midY,mz,0,ry,0,tileSize,rem,),);
+              floorWallSkirtRects.push(getUvRect(resolveTile(s.tile, resolver)),);
               floorWallSkirtRots.push(s.rotation ?? 0);
               const scale = rem / tileSize;
               floorWallSkirtHeightScales.push(scale); // was rem / tileSize);
-              floorWallSkirtUvOffsets.push(1.0 - scale);
+              floorWallSkirtUvOffsets.push(0);	// 0 makes walls rise from the base, whereas 1.0 - scale makes them descend from ceiling
+			  // we need this to be 0. i can't find a justification for 1-scale at the current time? surely 0 is correct for a rising
+			  // secret passage wall too? we *do* need 1-scale for lowering secret passage walls tho..
               floorWallSkirtRowIndexes.push(fullPanels);
               floorWallSkirtCellMap.push({ cx, cz });
               if (ao) floorWallSkirtAo.push(ao[0], ao[1], ao[2], ao[3]);
@@ -1903,14 +1877,16 @@ export function createDungeonRenderer(
             const rem = h - fullPanels * tileSize;
             const isBlockingCeil = (nx: number, nz: number) =>
               isSolid(nx, nz) || (openCeilVal(nx, nz) ?? 128) < ncVal;
-            const ao = aoEnabled
-              ? computeSkirtFaceAO(isBlockingCeil, cx, cz, dir)
-              : null;
+			// we used to use computeSkirtFaceAO here, apparently because the texture was flipped. 
+			// but why was it flipped in the first place?! that was wrong. so now we use computeFaceAO and it works.
+			// there's a possibility not using openCeilVal is bad somehow, but i can't find any evidence to support that
+            const ao = aoEnabled? computeFaceAO(isSolid, cx, cz, dir): null;	//computeSkirtFaceAO(isBlockingCeil, cx, cz, dir);
+			
+			// for unknown reasons, textures here are flipped. i couldn't find what caused this, so
+			// i've "fixed" it by using -tileSize to flip again. we should track down the real bug tho..
             for (let i = 0; i < fullPanels; i++) {
               const midY = yCurrent - i * tileSize - tileSize / 2;
-              ceilEdges.push(
-                makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, tileSize),
-              );
+              ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, -tileSize, tileSize),);
               ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
               ceilEdgeRots.push(s.rotation ?? 0);
               ceilEdgeHeightScales.push(1.0);
@@ -1919,9 +1895,7 @@ export function createDungeonRenderer(
             }
             if (rem > 0.001) {
               const midY = yCurrent - fullPanels * tileSize - rem / 2;
-              ceilEdges.push(
-                makeFaceMatrix(mx, midY, mz, 0, ry, 0, tileSize, rem),
-              );
+              ceilEdges.push(makeFaceMatrix(mx, midY, mz, 0, ry, 0, -tileSize, rem),);
               ceilEdgeRects.push(getUvRect(resolveTile(s.tile, resolver)));
               ceilEdgeRots.push(s.rotation ?? 0);
               ceilEdgeHeightScales.push(rem / tileSize);
@@ -1995,18 +1969,8 @@ export function createDungeonRenderer(
             offs: number,
           ) {
             for (let i = 0; i < skyCount; i++) {
-              skyPanelEdges.push(
-                makeFaceMatrix(
-                  mx,
-                  offs + tileSize + i * tileSize + tileSize / 2,
-                  mz,
-                  0,
-                  ry + Math.PI,
-                  0,
-                  tileSize,
-                  tileSize,
-                ),
-              );
+              skyPanelEdges.push(makeFaceMatrix(mx,offs + tileSize + i * tileSize + tileSize / 2,
+                  mz,0,ry + Math.PI,0,tileSize,tileSize,),);
               skyPanelRects.push(getUvRect(wallId));
               skyPanelRots.push(0);
               skyPanelHeightScales.push(1.0);

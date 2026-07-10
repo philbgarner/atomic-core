@@ -414,6 +414,20 @@ export type DungeonOptions = (BspDungeonOptions & {
      * }
      */
     onChooseSpawn?: (ctx: SpawnChooserContext) => number;
+    /**
+     * Minimum downward step count between two cells' `floorHeightOffset`
+     * values that triggers a `'fall-damage'` event when a player or entity
+     * moves between them. Same unit as `CellData.floorHeightOffset` /
+     * `SetCellOptions.floorHeightOffset` (signed step count, not world units).
+     *
+     * Default `0` — fall damage detection is disabled entirely: no event
+     * ever fires and no per-cell height data is read on the move path.
+     *
+     * The engine only detects and reports the drop; it never applies damage
+     * itself. Apply whatever damage/logic you want in your own
+     * `game.events.on('fall-damage', ...)` handler.
+     */
+    fallDamageHeight?: number;
 }) | (CellularOptions & {
     cellular: true;
     tiled?: never;
@@ -431,6 +445,8 @@ export type DungeonOptions = (BspDungeonOptions & {
      * The player will be placed at that room's centre cell.
      */
     onChooseSpawn?: (ctx: SpawnChooserContext) => number;
+    /** Same as the BSP variant's `fallDamageHeight` — see there for details. Default `0` (disabled). */
+    fallDamageHeight?: number;
 }) | {
     tiled: {
         map: unknown;
@@ -440,6 +456,8 @@ export type DungeonOptions = (BspDungeonOptions & {
     cellular?: never;
     onPlace?: (ctx: OnPlaceContext) => void;
     onChooseSpawn?: never;
+    /** Same as the BSP variant's `fallDamageHeight` — see there for details. Default `0` (disabled). */
+    fallDamageHeight?: number;
 };
 export type CombatOptions = {
     /**
