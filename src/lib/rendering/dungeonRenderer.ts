@@ -52,6 +52,10 @@ import {
 import type { DoorRecord } from "../dungeon/doors";
 import { createDoorMesh } from "./doorRenderer";
 import type { DoorHandle } from "./doorRenderer";
+import { computeEntityMovePosition } from "../entities/moveAnim";
+import type { EntityMoveAnimState } from "../entities/moveAnim";
+import type { EasingName, EasingFn } from "../animations/easing";
+import type { AnimationEventMap } from "../animations/types";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -86,6 +90,10 @@ export type DungeonRendererOptions = {
   fogColor?: string;
   /** Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18. */
   lerpFactor?: number;
+  /** Duration (ms) of the visual glide when an entity's logical x/z changes. Default: 130. Set 0 to disable. */
+  moveAnimMs?: number;
+  /** Easing for the entity move glide. Default: 'easeOutQuad'. */
+  moveAnimEasing?: EasingName | EasingFn;
   /** When provided the dungeon geometry uses the packed atlas shader instead of plain MeshStandardMaterial. */
   packedAtlas?: PackedAtlas;
   /**
@@ -526,6 +534,8 @@ export function createDungeonRenderer(
   const fogFar = options.fogFar ?? 24;
   const fogHex = options.fogColor ?? "#000000";
   const lerpFactor = options.lerpFactor ?? 0.18;
+  const moveAnimMs = options.moveAnimMs ?? 130;
+  const moveAnimEasing = options.moveAnimEasing ?? "easeOutQuad";
   const offsetStep = tileSize * (options.offsetFactor ?? 0.5);
   let snapToFloor = options.snapCameraToFloor ?? false;
   const fogColor = new THREE.Color(fogHex);
@@ -2295,6 +2305,7 @@ export function createDungeonRenderer(
   const billboardMap = new Map<string, BillboardHandle>();
   const objectBillboardMap = new Map<string, BillboardHandle>();
   const doorMap = new Map<string, DoorHandle>();
+  const entityMoveAnimMap = new Map<string, EntityMoveAnimState>();
   let currentObjects: ObjectPlacement[] = [];
 
   function makeIsSolid(): (x: number, z: number) => boolean {
@@ -2471,6 +2482,26 @@ export function createDungeonRenderer(
 
   game.events.on("turn", onTurn);
 
+  // Glide an entity's rendered x/z toward its new grid position instead of
+  // snapping, driven by the 'move' animation event (fires before the entity's
+  // raw x/z are mutated). Mirrors doorRenderer.ts's interrupt-safe tween.
+  const onEntityMove = (event: AnimationEventMap["move"]) => {
+    if (moveAnimMs <= 0) return;
+    const now = performance.now();
+    const existing = entityMoveAnimMap.get(event.entity.id);
+    const from = existing
+      ? computeEntityMovePosition(existing, now, moveAnimMs, moveAnimEasing)
+      : event.from;
+    entityMoveAnimMap.set(event.entity.id, {
+      fromX: from.x,
+      fromZ: from.z,
+      toX: event.to.x,
+      toZ: event.to.z,
+      startTime: now,
+    });
+  };
+  game.animations.on("move", onEntityMove);
+
   // ── RAF loop ──────────────────────────────────────────────────────────────
   let rafId = 0;
   let lastT = 0;
@@ -2514,15 +2545,36 @@ export function createDungeonRenderer(
         const dz = (e.z + 0.5) * tileSize - curZ;
         const floorY = getFloorOffset(e.x, e.z);
         const inRange = dx * dx + dz * dz <= fogFar2;
+
+        const anim = entityMoveAnimMap.get(e.id);
+        let rx = e.x,
+          rz = e.z;
+        if (anim) {
+          if (t - anim.startTime >= moveAnimMs) {
+            entityMoveAnimMap.delete(e.id);
+          } else {
+            const pos = computeEntityMovePosition(anim, t, moveAnimMs, moveAnimEasing);
+            rx = pos.x;
+            rz = pos.z;
+          }
+        }
+
         if (e.spriteMap) {
           const handle = billboardMap.get(e.id);
           if (handle) {
             handle.setVisible(inRange);
-            if (inRange) handle.update(e, curYaw, tileSize, ceilingH, floorY);
+            if (inRange) {
+              const renderEntity = rx === e.x && rz === e.z ? e : { ...e, x: rx, z: rz };
+              handle.update(renderEntity, curYaw, tileSize, ceilingH, floorY);
+            }
           }
         } else {
           const mesh = entityMeshMap.get(e.id);
-          if (mesh) mesh.visible = inRange;
+          if (mesh) {
+            mesh.visible = inRange;
+            mesh.position.setX((rx + 0.5) * tileSize);
+            mesh.position.setZ((rz + 0.5) * tileSize);
+          }
         }
       }
       // Update stationary object billboards; cull beyond fogFar.
@@ -2996,6 +3048,8 @@ export function createDungeonRenderer(
       game.events.off("turn", onTurn);
       game.events.off("cell-paint", onCellPaint);
       game.events.off("cell-solid-changed", onCellSolidChanged);
+      game.animations.off("move", onEntityMove);
+      entityMoveAnimMap.clear();
       canvas.removeEventListener("click", onCanvasClick);
       canvas.removeEventListener("pointermove", onCanvasPointerMove);
       canvas.removeEventListener("pointerleave", onCanvasPointerLeave);

@@ -51,6 +51,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - **Inventory dialog UI** - `showInventory()` renders a two-column RPG inventory screen (character profile, item grid, equipment paper-doll, stat bars, indicators, action buttons) with full drag-and-drop support; pass `customLayout: true` for a bare `<dialog>` you control
 - Mission / quest system — `game.missions.add()` registers evaluator-driven missions that auto-complete each turn, emit `mission-complete` events, and optionally broadcast completions to multiplayer peers
 - Turn-animation callback system — register async handlers on `game.animations` for `damage`, `death`, `move`, `attack`, `miss`, `heal`, and `xp-gain`; engine awaits all handlers between turn resolution and entity-position sync
+- Entity move glide — entities visually glide to their new grid cell over a short tween instead of snapping instantly; tunable via `moveAnimMs` (default `130`, `0` disables) and `moveAnimEasing` on `createDungeonRenderer`
 - Audio hooks (Howler.js compatible)
 - Optional multiplayer transport layer (WebSocket-based, server-authoritative)
 - **6-texture skybox** — `skybox` option on `createDungeonRenderer` or `renderer.setSkybox()` at runtime; accepts 6 image URL strings or a pre-loaded `THREE.CubeTexture`; optional `rotationY` aligns the front face to the dungeon's north axis

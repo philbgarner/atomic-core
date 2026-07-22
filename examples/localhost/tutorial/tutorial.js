@@ -214,6 +214,13 @@ const game = createGame(document.body, {
 // game.animations.on() registers async handlers that fire between turn
 // resolution and entity-position sync. Entities are still at their
 // pre-move positions when these run, so tweens/floats land correctly.
+//
+// The 'move' event isn't hooked here (the player moves every turn, so a
+// floating-text handler would spam the screen) — but the dungeon renderer
+// itself subscribes to it internally to glide each entity's billboard/mesh
+// to its new cell over `moveAnimMs` instead of snapping there instantly.
+// See examples/localhost/billboard-sprites for a demo with a visible
+// `game.animations.on('move', ...)` handler.
 // ---------------------------------------------------------------------------
 
 const canvasWrapEl = document.getElementById("canvas-wrap");

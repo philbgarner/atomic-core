@@ -4,6 +4,7 @@ import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
 import { SkyboxOptions } from './skybox';
 import { DoorRecord } from '../dungeon/doors';
+import { EasingName, EasingFn } from '../animations/easing';
 /**
  * dungeonRenderer.ts
  *
@@ -60,6 +61,10 @@ export type DungeonRendererOptions = {
     fogColor?: string;
     /** Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18. */
     lerpFactor?: number;
+    /** Duration (ms) of the visual glide when an entity's logical x/z changes. Default: 130. Set 0 to disable. */
+    moveAnimMs?: number;
+    /** Easing for the entity move glide. Default: 'easeOutQuad'. */
+    moveAnimEasing?: EasingName | EasingFn;
     /** When provided the dungeon geometry uses the packed atlas shader instead of plain MeshStandardMaterial. */
     packedAtlas?: PackedAtlas;
     /**

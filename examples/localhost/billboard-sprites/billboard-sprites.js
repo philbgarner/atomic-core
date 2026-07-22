@@ -10,6 +10,15 @@
 //
 // Each actor's `spriteMap` field activates billboard rendering automatically;
 // no spriteMap = box geometry fallback.
+//
+// Entity move glide: every spawned enemy gets `danger: 1`, which is enough
+// for the engine's default chase AI (ai/monsterAI.ts) to path toward the
+// player once they're within range and actually take a step each turn. The
+// renderer glides an entity's billboard/mesh to its new cell over
+// `moveAnimMs` instead of snapping there instantly — walk near an enemy and
+// watch it approach smoothly rather than jumping tile-to-tile. This is
+// driven internally by the same `game.animations` 'move' event used by the
+// tutorial example's floating-text effects (see examples/localhost/tutorial).
 
 const {
   createGame,
@@ -139,6 +148,12 @@ async function init() {
     floorTile: "flagstone_floor_stone.png",
     ceilTile: "plaster_ceiling.png",
     wallTile: "brick_wall_stone.png",
+    // Entity move glide: enemies (and the player, on remote peers) ease into
+    // their new cell over 220ms instead of snapping — longer than the 130ms
+    // default so the effect reads clearly in a still screenshot or a slow
+    // walk-cycle demo. Set moveAnimMs: 0 to go back to instant snapping.
+    moveAnimMs: 220,
+    moveAnimEasing: "easeOutQuad",
   });
   game.generate();
 }
@@ -188,6 +203,17 @@ game.events.on("turn", ({ turn }) => {
   hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
   posEl.textContent = `${game.player.x}, ${game.player.z}`;
   if (renderer) renderer.setEntities(entities);
+});
+
+// Fires for every actor's step, including the player's — filtered to enemies
+// here since the player moves on every keypress and would flood the log.
+// Chase AI moves one cell per turn an enemy acts; the renderer subscribes to
+// this same event internally to drive the visual glide, so this handler just
+// surfaces it so the connection between "enemy took a turn" and "billboard
+// eased to the new tile" is visible.
+game.animations.on("move", ({ entity, from, to }) => {
+  if (entity.kind !== "enemy") return;
+  addLog(`${entity.type} steps from (${from.x},${from.z}) to (${to.x},${to.z})`, "turn");
 });
 
 // ---------------------------------------------------------------------------

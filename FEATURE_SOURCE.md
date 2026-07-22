@@ -44,6 +44,7 @@ src/lib/
     factory.ts
     inventory.ts
     effects.ts
+    moveAnim.ts
   ai/
     monsterAI.ts
     astar.ts
@@ -498,10 +499,26 @@ RPG-style inventory dialog with a two-column layout: character profile + item gr
 
 Async callback layer that fires between turn resolution and entity-position sync. Developers register handlers on `game.animations` for specific event kinds (`damage`, `death`, `move`, `attack`, `miss`, `heal`, `xp-gain`). After each `game.turns.commit()` the engine awaits all queued handlers in turn order before syncing entity positions to the render layer, so motion tweens, floating text, and hit-flash effects see entities at their pre-move positions. Works in both single-player (events collected during the turn loop) and multiplayer (events reconstructed by diffing the `ServerStateUpdate` against the previous actor state).
 
+The dungeon renderer itself now consumes the `move` event internally (in addition to any dev-registered handlers) to smooth out entity rendering: instead of an entity's billboard/mesh snapping instantly to its new grid cell, it glides there over a short, fixed-duration tween — see "Entity move glide" below.
+
 **Files:**
 - `animations/types.ts` — `AnimationEventKind`, `AnimationEventMap`, `AnimationQueueEntry`, `AnimationHandler`, `AnimationsHandle` public types
 - `animations/animationRegistry.ts` — `createAnimationRegistry()` factory; internal `_enqueue()` / `_flush()` methods used by `createGame`; `on`, `off`, `clear` on the public handle
 - `api/createGame.ts` — `makeApplyAction` emits animation events via optional `onAnimEvent` callback; `turns.commit()` is now `async`, flushes registry after the turn loop; `onStateUpdate` diffs old vs. new actor state to synthesize animation events in multiplayer; exposes `game.animations`
+
+---
+
+### Entity move glide
+
+Entities visually glide from their old grid cell to their new one over a short, fixed-duration tween instead of snapping instantly — logic stays fully grid-based/instant; only the rendered x/z position is smoothed. Driven by the existing `AnimationEventMap['move']` event (see "Turn-animation callback system" above), which the renderer subscribes to internally via `game.animations.on('move', ...)`; this event reliably fires with correct `from`/`to` positions before the entity's raw `x`/`z` fields are mutated in both the local-turn and network-sync paths, so the tween never races the logical position update. Modeled directly on the door slide-open animation (`DoorAnimState`/`computeDoorProgress` in `dungeon/doors.ts`): a per-entity `{fromX, fromZ, toX, toZ, startTime}` tween state, advanced with a pure `now`-based progress function, with mid-flight interruption handled by capturing the entity's current interpolated position as the new `from` if another move arrives before the previous glide finishes.
+
+**Files:**
+- `entities/moveAnim.ts` — `EntityMoveAnimState` type; pure `computeEntityMovePosition(anim, now, durationMs, easing)` function (no THREE.js dependency), mirroring `computeDoorProgress`
+- `rendering/dungeonRenderer.ts` — `moveAnimMs?` (default `130`, set `0` to disable) and `moveAnimEasing?` options on `DungeonRendererOptions`; `entityMoveAnimMap: Map<string, EntityMoveAnimState>`; `onEntityMove` handler registered via `game.animations.on('move', ...)` populates/updates the map (capturing the current interpolated position on interrupt); RAF `tick()` computes the interpolated `{x, z}` for any entity with an active tween and uses it instead of the raw `e.x`/`e.z` for the billboard update call (via a shallow-copied render-only entity object) and for the box-mesh `position.setX`/`setZ` (previously only set once per turn); culling distance and floor-offset lookups still use the raw target `e.x`/`e.z`; expired tweens are deleted from the map; `destroy()` unsubscribes the listener and clears the map
+- `animations/easing.ts` — `resolveEasing()` reused by `computeEntityMovePosition`
+
+**Example:**
+- `examples/localhost/billboard-sprites/billboard-sprites.js` — sets `moveAnimMs: 220` (exaggerated from the 130ms default) on `createDungeonRenderer` so chase-AI enemies visibly ease between tiles; also logs each enemy step via `game.animations.on('move', ...)` filtered to `entity.kind === "enemy"`
 
 ---
 

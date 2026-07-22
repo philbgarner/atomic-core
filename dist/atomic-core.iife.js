@@ -5526,6 +5526,20 @@ void main() {
 		};
 	}
 	//#endregion
+	//#region src/lib/entities/moveAnim.ts
+	function computeEntityMovePosition(anim, now, durationMs, easing) {
+		if (durationMs <= 0) return {
+			x: anim.toX,
+			z: anim.toZ
+		};
+		const t = Math.min(Math.max((now - anim.startTime) / durationMs, 0), 1);
+		const k = resolveEasing(easing)(t);
+		return {
+			x: anim.fromX + (anim.toX - anim.fromX) * k,
+			z: anim.fromZ + (anim.toZ - anim.fromZ) * k
+		};
+	}
+	//#endregion
 	//#region src/lib/rendering/dungeonRenderer.ts
 	/**
 	* dungeonRenderer.ts
@@ -5586,6 +5600,8 @@ void main() {
 		const fogFar = options.fogFar ?? 24;
 		const fogHex = options.fogColor ?? "#000000";
 		const lerpFactor = options.lerpFactor ?? .18;
+		const moveAnimMs = options.moveAnimMs ?? 130;
+		const moveAnimEasing = options.moveAnimEasing ?? "easeOutQuad";
 		const offsetStep = tileSize * (options.offsetFactor ?? .5);
 		options.snapCameraToFloor;
 		const fogColor = new three.Color(fogHex);
@@ -6565,6 +6581,7 @@ void main() {
 		const billboardMap = /* @__PURE__ */ new Map();
 		const objectBillboardMap = /* @__PURE__ */ new Map();
 		const doorMap = /* @__PURE__ */ new Map();
+		const entityMoveAnimMap = /* @__PURE__ */ new Map();
 		let currentObjects = [];
 		function makeIsSolid() {
 			const outputs = game.dungeon.outputs;
@@ -6686,6 +6703,20 @@ void main() {
 			}
 		};
 		game.events.on("turn", onTurn);
+		const onEntityMove = (event) => {
+			if (moveAnimMs <= 0) return;
+			const now = performance.now();
+			const existing = entityMoveAnimMap.get(event.entity.id);
+			const from = existing ? computeEntityMovePosition(existing, now, moveAnimMs, moveAnimEasing) : event.from;
+			entityMoveAnimMap.set(event.entity.id, {
+				fromX: from.x,
+				fromZ: from.z,
+				toX: event.to.x,
+				toZ: event.to.z,
+				startTime: now
+			});
+		};
+		game.animations.on("move", onEntityMove);
 		let rafId = 0;
 		let lastT = 0;
 		function tick(t) {
@@ -6719,15 +6750,34 @@ void main() {
 					const dz = (e.z + .5) * tileSize - curZ;
 					const floorY = getFloorOffset(e.x, e.z);
 					const inRange = dx * dx + dz * dz <= fogFar2;
+					const anim = entityMoveAnimMap.get(e.id);
+					let rx = e.x, rz = e.z;
+					if (anim) if (t - anim.startTime >= moveAnimMs) entityMoveAnimMap.delete(e.id);
+					else {
+						const pos = computeEntityMovePosition(anim, t, moveAnimMs, moveAnimEasing);
+						rx = pos.x;
+						rz = pos.z;
+					}
 					if (e.spriteMap) {
 						const handle = billboardMap.get(e.id);
 						if (handle) {
 							handle.setVisible(inRange);
-							if (inRange) handle.update(e, curYaw, tileSize, ceilingH, floorY);
+							if (inRange) {
+								const renderEntity = rx === e.x && rz === e.z ? e : {
+									...e,
+									x: rx,
+									z: rz
+								};
+								handle.update(renderEntity, curYaw, tileSize, ceilingH, floorY);
+							}
 						}
 					} else {
 						const mesh = entityMeshMap.get(e.id);
-						if (mesh) mesh.visible = inRange;
+						if (mesh) {
+							mesh.visible = inRange;
+							mesh.position.setX((rx + .5) * tileSize);
+							mesh.position.setZ((rz + .5) * tileSize);
+						}
 					}
 				}
 				for (const obj of currentObjects) {
@@ -7078,6 +7128,8 @@ void main() {
 				game.events.off("turn", onTurn);
 				game.events.off("cell-paint", onCellPaint);
 				game.events.off("cell-solid-changed", onCellSolidChanged);
+				game.animations.off("move", onEntityMove);
+				entityMoveAnimMap.clear();
 				canvas.removeEventListener("click", onCanvasClick);
 				canvas.removeEventListener("pointermove", onCanvasPointerMove);
 				canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
