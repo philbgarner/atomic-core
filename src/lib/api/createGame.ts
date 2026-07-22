@@ -254,6 +254,17 @@ export type DungeonHandle = {
 	decorations: DecorationList;
 	/** Read-only list of all stationary object placements (including billboard sprites). */
 	readonly objects: readonly ObjectPlacement[];
+	/**
+	 * Move a billboard object placement to a new cell (e.g. a force effect or
+	 * pushed furniture). Looks the placement up by `id` — objects placed via
+	 * `place.billboard()` get one automatically; placements added by other
+	 * means need an explicit `id` to be moveable. Emits `'object-move'` on
+	 * `game.events`, which the renderer listens to internally to glide the
+	 * billboard to its new cell instead of snapping (mirrors the entity
+	 * `move` animation event). Returns `false` if no placement with that id
+	 * exists.
+	 */
+	moveObject(id: string, x: number, z: number): boolean;
 	passages: PassageList;
 	passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
 	doors: DoorsHandle;
@@ -481,7 +492,7 @@ export type PlaceAPI = {
 		spriteMap: SpriteMap,
 		opts?: Pick<
 			ObjectPlacement,
-			"offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta"
+			"id" | "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta"
 		>,
 	): void;
 	npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
@@ -1300,6 +1311,16 @@ function makeDungeonHandle(internal: GameInternal): DungeonHandle {
 			return internal.objectPlacements;
 		},
 
+		moveObject(id, x, z) {
+			const obj = internal.objectPlacements.find((o) => o.id === id);
+			if (!obj) return false;
+			const from = { x: obj.x, z: obj.z };
+			obj.x = x;
+			obj.z = z;
+			internal.events.emit("object-move", { object: obj, from, to: { x, z } });
+			return true;
+		},
+
 		decorations: {
 			get list() {
 				return internal.decorations;
@@ -1843,6 +1864,7 @@ async function runGenerate(
 			},
 			billboard(x, z, type, spriteMap, opts) {
 				internal.objectPlacements.push({
+					id: `billboard_${type}_${x}_${z}`,
 					x,
 					z,
 					type,

@@ -56,6 +56,7 @@ import { computeEntityMovePosition } from "../entities/moveAnim";
 import type { EntityMoveAnimState } from "../entities/moveAnim";
 import type { EasingName, EasingFn } from "../animations/easing";
 import type { AnimationEventMap } from "../animations/types";
+import type { GameEventMap } from "../events/eventEmitter";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -2306,7 +2307,15 @@ export function createDungeonRenderer(
   const objectBillboardMap = new Map<string, BillboardHandle>();
   const doorMap = new Map<string, DoorHandle>();
   const entityMoveAnimMap = new Map<string, EntityMoveAnimState>();
+  const objectMoveAnimMap = new Map<string, EntityMoveAnimState>();
   let currentObjects: ObjectPlacement[] = [];
+
+  // Stable render key for an object placement — `id` when present (survives
+  // an x/z change so a moved object keeps its billboard/tween instead of
+  // being torn down and recreated), else the legacy type+position key.
+  function objectKey(obj: ObjectPlacement): string {
+    return obj.id ?? `${obj.type}_${obj.x}_${obj.z}`;
+  }
 
   function makeIsSolid(): (x: number, z: number) => boolean {
     const outputs = game.dungeon.outputs;
@@ -2350,17 +2359,18 @@ export function createDungeonRenderer(
 
   function syncObjects(objects: ObjectPlacement[]) {
     const activeKeys = new Set(
-      objects.filter((o) => o.spriteMap).map((o) => `${o.type}_${o.x}_${o.z}`),
+      objects.filter((o) => o.spriteMap).map(objectKey),
     );
     for (const [id, handle] of objectBillboardMap) {
       if (!activeKeys.has(id)) {
         handle.dispose();
         objectBillboardMap.delete(id);
+        objectMoveAnimMap.delete(id);
       }
     }
     for (const obj of objects) {
       if (!obj.spriteMap) continue;
-      const key = `${obj.type}_${obj.x}_${obj.z}`;
+      const key = objectKey(obj);
       if (!objectBillboardMap.has(key) && packedAtlas) {
         const fakeEntity: EntityBase & { spriteMap: SpriteMap } = {
           id: key,
@@ -2502,6 +2512,28 @@ export function createDungeonRenderer(
   };
   game.animations.on("move", onEntityMove);
 
+  // Same idea as onEntityMove, but for stationary object placements (pushed
+  // furniture, force effects) moved via `game.dungeon.moveObject()`. This is
+  // a plain game.events entry, not a turn-animation event, since object
+  // moves aren't tied to the turn-commit lifecycle.
+  const onObjectMove = (event: GameEventMap["object-move"]) => {
+    if (moveAnimMs <= 0) return;
+    const key = objectKey(event.object);
+    const now = performance.now();
+    const existing = objectMoveAnimMap.get(key);
+    const from = existing
+      ? computeEntityMovePosition(existing, now, moveAnimMs, moveAnimEasing)
+      : event.from;
+    objectMoveAnimMap.set(key, {
+      fromX: from.x,
+      fromZ: from.z,
+      toX: event.to.x,
+      toZ: event.to.z,
+      startTime: now,
+    });
+  };
+  game.events.on("object-move", onObjectMove);
+
   // ── RAF loop ──────────────────────────────────────────────────────────────
   let rafId = 0;
   let lastT = 0;
@@ -2583,19 +2615,35 @@ export function createDungeonRenderer(
         const dx = (obj.x + 0.5) * tileSize - curX;
         const dz = (obj.z + 0.5) * tileSize - curZ;
         const floorY = getFloorOffset(obj.x, obj.z);
-
         const inRange = dx * dx + dz * dz <= fogFar2;
-        const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
+
+        const key = objectKey(obj);
+        const anim = objectMoveAnimMap.get(key);
+        let rx = obj.x,
+          rz = obj.z;
+        if (anim) {
+          if (t - anim.startTime >= moveAnimMs) {
+            objectMoveAnimMap.delete(key);
+          } else {
+            const pos = computeEntityMovePosition(anim, t, moveAnimMs, moveAnimEasing);
+            rx = pos.x;
+            rz = pos.z;
+          }
+        }
+
+        const handle = objectBillboardMap.get(key);
         if (handle) {
           handle.setVisible(inRange);
-          if (inRange)
+          if (inRange) {
+            const renderObj = rx === obj.x && rz === obj.z ? obj : { ...obj, x: rx, z: rz };
             handle.update(
-              obj as unknown as EntityBase,
+              renderObj as unknown as EntityBase,
               curYaw,
               tileSize,
               ceilingH,
               floorY,
             );
+          }
         }
       }
       // Advance door slide animations.
@@ -3050,6 +3098,8 @@ export function createDungeonRenderer(
       game.events.off("cell-solid-changed", onCellSolidChanged);
       game.animations.off("move", onEntityMove);
       entityMoveAnimMap.clear();
+      game.events.off("object-move", onObjectMove);
+      objectMoveAnimMap.clear();
       canvas.removeEventListener("click", onCanvasClick);
       canvas.removeEventListener("pointermove", onCanvasPointerMove);
       canvas.removeEventListener("pointerleave", onCanvasPointerLeave);

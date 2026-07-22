@@ -19,6 +19,13 @@
 // watch it approach smoothly rather than jumping tile-to-tile. This is
 // driven internally by the same `game.animations` 'move' event used by the
 // tutorial example's floating-text effects (see examples/localhost/tutorial).
+//
+// Pushable furniture: a chair and a sideboard are placed near the start room
+// via dungeon.onPlace, each with an explicit `id` (required for
+// game.dungeon.moveObject() to find and glide them — see entities/types.ts).
+// Face one and press F to shove it one tile further away; this exercises the
+// same glide, but driven by the 'object-move' event instead of the
+// turn-animation 'move' event, since pushing furniture isn't a turn action.
 
 const {
   createGame,
@@ -82,6 +89,14 @@ function trollSpriteMap() {
   };
 }
 
+// Static furniture — single layer, no angle variants or bob.
+function furnitureSpriteMap(tile) {
+  return {
+    frameSize: { w: 64, h: 64 },
+    layers: [{ tile, opacity: 1.0 }],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Entity pool
 // ---------------------------------------------------------------------------
@@ -108,6 +123,27 @@ const game = createGame(document.body, {
     roomMinSize: 6,
     roomMaxSize: 12,
     roomCount: 10,
+
+    // Place two pushable furniture pieces near the start room so they're easy
+    // to find. Explicit `id`s (required for moveObject() below to track them
+    // across a push) — `place.billboard()` would otherwise auto-generate one
+    // from type+position, which changes as soon as the object moves.
+    onPlace({ startRoom, place }) {
+      place.billboard(
+        startRoom.cx + 2,
+        startRoom.cz,
+        "chair",
+        furnitureSpriteMap("decor_egg_chair.png"),
+        { id: "chair-1" },
+      );
+      place.billboard(
+        startRoom.cx - 2,
+        startRoom.cz,
+        "sideboard",
+        furnitureSpriteMap("decor_retro_sideboard.png"),
+        { id: "sideboard-1" },
+      );
+    },
   },
   player: {
     hp: 30,
@@ -202,7 +238,10 @@ game.events.on("turn", ({ turn }) => {
   turnEl.textContent = String(turn);
   hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
   posEl.textContent = `${game.player.x}, ${game.player.z}`;
-  if (renderer) renderer.setEntities(entities);
+  if (renderer) {
+    renderer.setEntities(entities);
+    renderer.setObjects(game.dungeon.objects);
+  }
 });
 
 // Fires for every actor's step, including the player's — filtered to enemies
@@ -214,6 +253,14 @@ game.events.on("turn", ({ turn }) => {
 game.animations.on("move", ({ entity, from, to }) => {
   if (entity.kind !== "enemy") return;
   addLog(`${entity.type} steps from (${from.x},${from.z}) to (${to.x},${to.z})`, "turn");
+});
+
+// Fires whenever game.dungeon.moveObject() succeeds (see the "push" keybinding
+// below). This is a plain game.events entry rather than a game.animations one
+// — pushing furniture isn't a turn action, so there's no turn commit to hang
+// it off of — but the renderer glides the billboard the same way either way.
+game.events.on("object-move", ({ object, from, to }) => {
+  addLog(`${object.type} slides from (${from.x},${from.z}) to (${to.x},${to.z})`, "turn");
 });
 
 // ---------------------------------------------------------------------------
@@ -229,6 +276,7 @@ attachKeybindings(game, {
     turnLeft: ["KeyQ"],
     turnRight: ["KeyE"],
     wait: ["Space"],
+    push: ["KeyF"],
   },
   onAction(action, event) {
     event.preventDefault();
@@ -267,10 +315,42 @@ attachKeybindings(game, {
       case "wait":
         a = game.player.wait();
         break;
+      case "push":
+        pushFacingObject();
+        break;
     }
     if (a) game.turns.commit(a);
   },
 });
+
+// Force mechanic: shove whatever furniture is directly in front of the
+// player one tile further in the same direction. Not a turn action — no
+// game.turns.commit() here — so this only demonstrates the object glide
+// itself, decoupled from turn economy.
+function pushFacingObject() {
+  const yaw = game.player.facing;
+  const fx = Math.round(-Math.sin(yaw));
+  const fz = Math.round(-Math.cos(yaw));
+  const tx = game.player.x + fx;
+  const tz = game.player.z + fz;
+
+  const obj = game.dungeon.objects.find((o) => o.id && o.x === tx && o.z === tz);
+  if (!obj) {
+    addLog("Nothing there to push.", "turn");
+    return;
+  }
+
+  const nx = obj.x + fx;
+  const nz = obj.z + fz;
+  const cell = game.dungeon.getCell(nx, nz);
+  const occupied = game.dungeon.objects.some((o) => o !== obj && o.x === nx && o.z === nz);
+  if (!cell || !cell.walkable || occupied) {
+    addLog(`The ${obj.type} won't budge that way.`, "turn");
+    return;
+  }
+
+  game.dungeon.moveObject(obj.id, nx, nz);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

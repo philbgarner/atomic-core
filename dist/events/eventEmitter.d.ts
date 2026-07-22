@@ -1,4 +1,5 @@
 import { DoorRecord } from '../dungeon/doors';
+import { ObjectPlacement } from '../entities/types';
 /** Minimal entity shape used in event payloads. Full entity types live in Phase 4. */
 export interface EventEntity {
     id: string;
@@ -132,6 +133,24 @@ export interface GameEventMap {
         entity: EventEntity;
         /** Downward step delta (positive, in the same units as `CellData.floorHeightOffset`). Always >= `fallDamageHeight`. */
         height: number;
+        from: {
+            x: number;
+            z: number;
+        };
+        to: {
+            x: number;
+            z: number;
+        };
+    };
+    /**
+     * A stationary object placement was moved via `dungeon.moveObject(id, x, z)`
+     * (e.g. a force effect or pushed furniture). The renderer listens to this
+     * event to glide the object's billboard to its new cell instead of
+     * snapping, the same way entity `move` animation events drive entity
+     * gliding — see `rendering/dungeonRenderer.ts`.
+     */
+    'object-move': {
+        object: ObjectPlacement;
         from: {
             x: number;
             z: number;

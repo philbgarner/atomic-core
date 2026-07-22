@@ -3066,6 +3066,25 @@ function makeDungeonHandle(internal) {
 		get objects() {
 			return internal.objectPlacements;
 		},
+		moveObject(id, x, z) {
+			const obj = internal.objectPlacements.find((o) => o.id === id);
+			if (!obj) return false;
+			const from = {
+				x: obj.x,
+				z: obj.z
+			};
+			obj.x = x;
+			obj.z = z;
+			internal.events.emit("object-move", {
+				object: obj,
+				from,
+				to: {
+					x,
+					z
+				}
+			});
+			return true;
+		},
 		decorations: {
 			get list() {
 				return internal.decorations;
@@ -3479,6 +3498,7 @@ async function runGenerate(internal, dungeonHandle, turnsHandle) {
 				},
 				billboard(x, z, type, spriteMap, opts) {
 					internal.objectPlacements.push({
+						id: `billboard_${type}_${x}_${z}`,
 						x,
 						z,
 						type,
@@ -6558,7 +6578,11 @@ function createDungeonRenderer(element, game, options = {}) {
 	const objectBillboardMap = /* @__PURE__ */ new Map();
 	const doorMap = /* @__PURE__ */ new Map();
 	const entityMoveAnimMap = /* @__PURE__ */ new Map();
+	const objectMoveAnimMap = /* @__PURE__ */ new Map();
 	let currentObjects = [];
+	function objectKey(obj) {
+		return obj.id ?? `${obj.type}_${obj.x}_${obj.z}`;
+	}
 	function makeIsSolid() {
 		const outputs = game.dungeon.outputs;
 		const solidData = outputs?.textures.solid.image.data;
@@ -6593,14 +6617,15 @@ function createDungeonRenderer(element, game, options = {}) {
 		}
 	}
 	function syncObjects(objects) {
-		const activeKeys = new Set(objects.filter((o) => o.spriteMap).map((o) => `${o.type}_${o.x}_${o.z}`));
+		const activeKeys = new Set(objects.filter((o) => o.spriteMap).map(objectKey));
 		for (const [id, handle] of objectBillboardMap) if (!activeKeys.has(id)) {
 			handle.dispose();
 			objectBillboardMap.delete(id);
+			objectMoveAnimMap.delete(id);
 		}
 		for (const obj of objects) {
 			if (!obj.spriteMap) continue;
-			const key = `${obj.type}_${obj.x}_${obj.z}`;
+			const key = objectKey(obj);
 			if (!objectBillboardMap.has(key) && packedAtlas) {
 				const fakeEntity = {
 					id: key,
@@ -6693,6 +6718,21 @@ function createDungeonRenderer(element, game, options = {}) {
 		});
 	};
 	game.animations.on("move", onEntityMove);
+	const onObjectMove = (event) => {
+		if (moveAnimMs <= 0) return;
+		const key = objectKey(event.object);
+		const now = performance.now();
+		const existing = objectMoveAnimMap.get(key);
+		const from = existing ? computeEntityMovePosition(existing, now, moveAnimMs, moveAnimEasing) : event.from;
+		objectMoveAnimMap.set(key, {
+			fromX: from.x,
+			fromZ: from.z,
+			toX: event.to.x,
+			toZ: event.to.z,
+			startTime: now
+		});
+	};
+	game.events.on("object-move", onObjectMove);
 	let rafId = 0;
 	let lastT = 0;
 	function tick(t) {
@@ -6762,10 +6802,26 @@ function createDungeonRenderer(element, game, options = {}) {
 				const dz = (obj.z + .5) * tileSize - curZ;
 				const floorY = getFloorOffset(obj.x, obj.z);
 				const inRange = dx * dx + dz * dz <= fogFar2;
-				const handle = objectBillboardMap.get(`${obj.type}_${obj.x}_${obj.z}`);
+				const key = objectKey(obj);
+				const anim = objectMoveAnimMap.get(key);
+				let rx = obj.x, rz = obj.z;
+				if (anim) if (t - anim.startTime >= moveAnimMs) objectMoveAnimMap.delete(key);
+				else {
+					const pos = computeEntityMovePosition(anim, t, moveAnimMs, moveAnimEasing);
+					rx = pos.x;
+					rz = pos.z;
+				}
+				const handle = objectBillboardMap.get(key);
 				if (handle) {
 					handle.setVisible(inRange);
-					if (inRange) handle.update(obj, curYaw, tileSize, ceilingH, floorY);
+					if (inRange) {
+						const renderObj = rx === obj.x && rz === obj.z ? obj : {
+							...obj,
+							x: rx,
+							z: rz
+						};
+						handle.update(renderObj, curYaw, tileSize, ceilingH, floorY);
+					}
 				}
 			}
 			for (const handle of doorMap.values()) handle.update(t);
@@ -7106,6 +7162,8 @@ function createDungeonRenderer(element, game, options = {}) {
 			game.events.off("cell-solid-changed", onCellSolidChanged);
 			game.animations.off("move", onEntityMove);
 			entityMoveAnimMap.clear();
+			game.events.off("object-move", onObjectMove);
+			objectMoveAnimMap.clear();
 			canvas.removeEventListener("click", onCanvasClick);
 			canvas.removeEventListener("pointermove", onCanvasPointerMove);
 			canvas.removeEventListener("pointerleave", onCanvasPointerLeave);

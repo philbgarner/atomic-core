@@ -160,6 +160,17 @@ export type DungeonHandle = {
     decorations: DecorationList;
     /** Read-only list of all stationary object placements (including billboard sprites). */
     readonly objects: readonly ObjectPlacement[];
+    /**
+     * Move a billboard object placement to a new cell (e.g. a force effect or
+     * pushed furniture). Looks the placement up by `id` — objects placed via
+     * `place.billboard()` get one automatically; placements added by other
+     * means need an explicit `id` to be moveable. Emits `'object-move'` on
+     * `game.events`, which the renderer listens to internally to glide the
+     * billboard to its new cell instead of snapping (mirrors the entity
+     * `move` animation event). Returns `false` if no placement with that id
+     * exists.
+     */
+    moveObject(id: string, x: number, z: number): boolean;
     passages: PassageList;
     passageNear(x: number, z: number, radius?: number): HiddenPassage | null;
     doors: DoorsHandle;
@@ -366,7 +377,7 @@ export type PlaceAPI = {
      * The placement is stored in `game.dungeon.objects` and rendered when passed
      * to `renderer.setObjects(game.dungeon.objects)`.
      */
-    billboard(x: number, z: number, type: string, spriteMap: SpriteMap, opts?: Pick<ObjectPlacement, "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta">): void;
+    billboard(x: number, z: number, type: string, spriteMap: SpriteMap, opts?: Pick<ObjectPlacement, "id" | "offsetX" | "offsetZ" | "offsetY" | "yaw" | "scale" | "meta">): void;
     npc(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     enemy(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
     decoration(x: number, z: number, type: string, opts?: Record<string, unknown>): void;
