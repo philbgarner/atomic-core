@@ -1,6 +1,6 @@
 {
   "name": "atomic-core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Composable first-person dungeon crawl library for React Three Fiber",
   "type": "module",
   "main": "dist/atomic-core.umd.cjs",

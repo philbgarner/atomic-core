@@ -8206,7 +8206,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "1.0.1",
+		version: "1.0.2",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
