@@ -714,7 +714,9 @@ attachKeybindings(game, {
       }
     }
 
-    if (a) {
+    // Drop input while the previous move's camera glide / entity tweens are
+    // still in flight, so movement keys can't outrun their own animation.
+    if (a && !renderer.isAnimating()) {
       // Set _lastAction only when a turn will actually be committed so that
       // mission 3 (Wait and Watch) does not see stale values from no-op keys.
       _lastAction = action;

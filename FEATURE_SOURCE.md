@@ -530,6 +530,18 @@ The same tween mechanism also covers `ObjectPlacement`s (stationary billboard ob
 
 ---
 
+### Movement-idle signal (`isAnimating()` / `onIdle()`)
+
+`game.turns.commit()`'s returned promise resolves once queued animation-event handlers finish — it does not wait for the renderer's own visual work (the camera glide/turn lerp toward the player's tile, or entity/object move tweens), since those run independently on a `requestAnimationFrame` loop and `game`/`TurnsHandle` has no reference to the renderer at all. Previously there was no way to know "the previous move has finished drawing, it's safe to accept the next input" — the camera lerp in particular is an unbounded exponential smoothing with no arrival event. `isAnimating()`/`onIdle()` close that gap on the renderer side: the camera lerp is now also considered "arrived" once it's within a small position/yaw epsilon of its target, matching how entity/object tweens already have a hard end time (`moveAnimMs`).
+
+**Files:**
+- `rendering/dungeonRenderer.ts` — `cameraMoving` (camera-lerp-in-progress flag, set each `tick()` frame from an epsilon comparison of `curX/curY/curZ/curYaw` against `tgtX/tgtY/tgtZ/tgtYaw`), `wasAnimating`/`idleCallbacks` closure state; public `isAnimating(): boolean` (`cameraMoving || entityMoveAnimMap.size > 0 || objectMoveAnimMap.size > 0`; door slides not included) and `onIdle(callback): () => void` (fires once per `true → false` transition of the above, at the end of each `tick()`; returns an unsubscribe function) on the `DungeonRenderer` handle; `idleCallbacks` cleared in `destroy()`
+
+**Example:**
+- `examples/standalone/basic/basic.js`, `examples/standalone/tutorial/tutorial.js`, `examples/localhost/tutorial/tutorial.js` — `onAction` handlers gate `game.turns.commit(a)` behind `!renderer.isAnimating()` so a movement key pressed mid-glide is dropped instead of committing a new turn before the previous one has finished animating
+
+---
+
 ### Dungeon map file import/export
 
 Self-contained save/load layer that wraps a `SerializedDungeon` with all settings needed to reproduce the exact dungeon and renderer in a new session. The embedded `version` field matches the atomic-core npm package version at export time (injected via Vite `define`) and is intended for backward-compatibility gating on import. Non-serializable renderer fields (packedAtlas, tileNameResolver, event callbacks) are stripped at export; re-supply them when creating the renderer after load.

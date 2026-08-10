@@ -478,6 +478,19 @@ export type DungeonRenderer = {
    * subsequent `setSkybox()` call.
    */
   setSkybox(opts: SkyboxOptions | null): Promise<void>;
+  /**
+   * True while the camera is still gliding/turning toward the player's
+   * current tile/facing, or any entity/object move tween is in flight.
+   * Does not account for door slide animations. Useful for gating input so a
+   * new `game.turns.commit()` isn't issued mid-glide.
+   */
+  isAnimating(): boolean;
+  /**
+   * Register a callback fired once each time `isAnimating()` transitions from
+   * `true` to `false` (i.e. the moment all movement animation finishes).
+   * Returns an unsubscribe function.
+   */
+  onIdle(callback: () => void): () => void;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -2469,6 +2482,15 @@ export function createDungeonRenderer(
   let curY = tileSize * eyeHeightFactor;
   let initialized = false;
 
+  // ── Animation-idle tracking ──────────────────────────────────────────────
+  // `cameraMoving` turns the otherwise-asymptotic camera lerp into a bounded
+  // "close enough, call it arrived" state so `isAnimating()`/`onIdle()` have
+  // something concrete to report, matching how entity/object tweens already
+  // have a hard end time (`moveAnimMs`).
+  let cameraMoving = false;
+  let wasAnimating = false;
+  const idleCallbacks = new Set<() => void>();
+
   const onTurn = () => {
     buildDungeon();
     tgtX = (game.player.x + 0.5) * tileSize;
@@ -2553,6 +2575,14 @@ export function createDungeonRenderer(
       while (dy > Math.PI) dy -= 2 * Math.PI;
       while (dy < -Math.PI) dy += 2 * Math.PI;
       curYaw += dy * k;
+
+      const POS_EPS = 0.02 * tileSize;
+      const YAW_EPS = 0.01;
+      cameraMoving =
+        Math.abs(tgtX - curX) > POS_EPS ||
+        Math.abs(tgtZ - curZ) > POS_EPS ||
+        Math.abs(tgtY - curY) > POS_EPS ||
+        Math.abs(dy) > YAW_EPS;
 
       // fix camera position to center of tile
       const PULLBACK = 0.5 * tileSize;
@@ -2648,6 +2678,13 @@ export function createDungeonRenderer(
       }
       // Advance door slide animations.
       for (const handle of doorMap.values()) handle.update(t);
+
+      const nowAnimating =
+        cameraMoving || entityMoveAnimMap.size > 0 || objectMoveAnimMap.size > 0;
+      if (wasAnimating && !nowAnimating) {
+        for (const cb of idleCallbacks) cb();
+      }
+      wasAnimating = nowAnimating;
     }
 
     glRenderer.render(scene, camera);
@@ -3090,6 +3127,15 @@ export function createDungeonRenderer(
       }
       return loadSkybox(opts).then((tex) => applySkybox(tex, true));
     },
+    isAnimating() {
+      return (
+        cameraMoving || entityMoveAnimMap.size > 0 || objectMoveAnimMap.size > 0
+      );
+    },
+    onIdle(callback: () => void): () => void {
+      idleCallbacks.add(callback);
+      return () => idleCallbacks.delete(callback);
+    },
     destroy() {
       cancelAnimationFrame(rafId);
       ro.disconnect();
@@ -3098,6 +3144,7 @@ export function createDungeonRenderer(
       game.events.off("cell-solid-changed", onCellSolidChanged);
       game.animations.off("move", onEntityMove);
       entityMoveAnimMap.clear();
+      idleCallbacks.clear();
       game.events.off("object-move", onObjectMove);
       objectMoveAnimMap.clear();
       canvas.removeEventListener("click", onCanvasClick);

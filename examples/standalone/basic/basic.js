@@ -198,7 +198,11 @@ attachKeybindings(game, {
         a = game.player.wait();
         break;
     }
-    if (a) game.turns.commit(a);
+    // Drop input while the previous move's camera glide / entity tweens are
+    // still in flight, so movement keys can't outrun their own animation.
+    // renderer.onIdle(...) is available instead if you'd rather buffer the
+    // latest action and commit it once idle, rather than dropping it.
+    if (a && !renderer.isAnimating()) game.turns.commit(a);
   },
 });
 
