@@ -6689,6 +6689,9 @@ function createDungeonRenderer(element, game, options = {}) {
 	let curX = 0, curZ = 0, curYaw = 0;
 	let curY = tileSize * eyeHeightFactor;
 	let initialized = false;
+	let cameraMoving = false;
+	let wasAnimating = false;
+	const idleCallbacks = /* @__PURE__ */ new Set();
 	const onTurn = () => {
 		buildDungeon();
 		tgtX = (game.player.x + .5) * tileSize;
@@ -6748,6 +6751,8 @@ function createDungeonRenderer(element, game, options = {}) {
 			while (dy > Math.PI) dy -= 2 * Math.PI;
 			while (dy < -Math.PI) dy += 2 * Math.PI;
 			curYaw += dy * k;
+			const POS_EPS = .02 * tileSize;
+			cameraMoving = Math.abs(tgtX - curX) > POS_EPS || Math.abs(tgtZ - curZ) > POS_EPS || Math.abs(tgtY - curY) > POS_EPS || Math.abs(dy) > .01;
 			const PULLBACK = .5 * tileSize;
 			const backX = Math.sin(curYaw) * PULLBACK;
 			const backZ = Math.cos(curYaw) * PULLBACK;
@@ -6825,6 +6830,9 @@ function createDungeonRenderer(element, game, options = {}) {
 				}
 			}
 			for (const handle of doorMap.values()) handle.update(t);
+			const nowAnimating = cameraMoving || entityMoveAnimMap.size > 0 || objectMoveAnimMap.size > 0;
+			if (wasAnimating && !nowAnimating) for (const cb of idleCallbacks) cb();
+			wasAnimating = nowAnimating;
 		}
 		glRenderer.render(scene, camera);
 	}
@@ -7154,6 +7162,13 @@ function createDungeonRenderer(element, game, options = {}) {
 			}
 			return loadSkybox(opts).then((tex) => applySkybox(tex, true));
 		},
+		isAnimating() {
+			return cameraMoving || entityMoveAnimMap.size > 0 || objectMoveAnimMap.size > 0;
+		},
+		onIdle(callback) {
+			idleCallbacks.add(callback);
+			return () => idleCallbacks.delete(callback);
+		},
 		destroy() {
 			cancelAnimationFrame(rafId);
 			ro.disconnect();
@@ -7162,6 +7177,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			game.events.off("cell-solid-changed", onCellSolidChanged);
 			game.animations.off("move", onEntityMove);
 			entityMoveAnimMap.clear();
+			idleCallbacks.clear();
 			game.events.off("object-move", onObjectMove);
 			objectMoveAnimMap.clear();
 			canvas.removeEventListener("click", onCanvasClick);
@@ -8206,7 +8222,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "1.0.2",
+		version: "1.0.3",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,

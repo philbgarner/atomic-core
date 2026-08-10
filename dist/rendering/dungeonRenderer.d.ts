@@ -419,6 +419,19 @@ export type DungeonRenderer = {
      * subsequent `setSkybox()` call.
      */
     setSkybox(opts: SkyboxOptions | null): Promise<void>;
+    /**
+     * True while the camera is still gliding/turning toward the player's
+     * current tile/facing, or any entity/object move tween is in flight.
+     * Does not account for door slide animations. Useful for gating input so a
+     * new `game.turns.commit()` isn't issued mid-glide.
+     */
+    isAnimating(): boolean;
+    /**
+     * Register a callback fired once each time `isAnimating()` transitions from
+     * `true` to `false` (i.e. the moment all movement animation finishes).
+     * Returns an unsubscribe function.
+     */
+    onIdle(callback: () => void): () => void;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };
