@@ -2723,6 +2723,7 @@ export function createDungeonRenderer(
 
           if (cameraMode === "topDown") {
               camera.position.set(curX, curY + offY, curZ)
+              camera.rotation.set(-Math.PI / 2, curYaw, 0, "YXZ");
           } else {
               const cosYaw = Math.cos(curYaw)
               const sinYaw = Math.sin(curYaw)
@@ -2732,9 +2733,8 @@ export function createDungeonRenderer(
               const offZ = -cameraOffset.x * sinYaw + cameraOffset.z * cosYaw
 
               camera.position.set(curX + offX, curY + offY, curZ + offZ);
+              camera.lookAt(curX, curY, curZ)
           }
-
-          camera.lookAt(curX, curY, curZ)
       } else {
         // 'free': OrbitControls owns camera.position/rotation entirely.
         cameraMoving = false;
