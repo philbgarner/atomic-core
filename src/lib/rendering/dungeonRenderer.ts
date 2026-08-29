@@ -2001,11 +2001,11 @@ export function createDungeonRenderer(
             const rem = h - fullPanels * tileSize;
             const isBlockingCeil = (nx: number, nz: number) =>
               isSolid(nx, nz) || (openCeilVal(nx, nz) ?? 128) < ncVal;
-			// we used to use computeSkirtFaceAO here, apparently because the texture was flipped. 
+			// we used to use computeSkirtFaceAO here, apparently because the texture was flipped.
 			// but why was it flipped in the first place?! that was wrong. so now we use computeFaceAO and it works.
 			// there's a possibility not using openCeilVal is bad somehow, but i can't find any evidence to support that
             const ao = aoEnabled? computeFaceAO(isSolid, cx, cz, dir): null;	//computeSkirtFaceAO(isBlockingCeil, cx, cz, dir);
-			
+
 			// for unknown reasons, textures here are flipped. i couldn't find what caused this, so
 			// i've "fixed" it by using -tileSize to flip again. we should track down the real bug tho..
             for (let i = 0; i < fullPanels; i++) {
@@ -2719,11 +2719,22 @@ export function createDungeonRenderer(
         camera.position.set(curX + backX, curY, curZ + backZ);
         camera.rotation.set(-0.1, curYaw, 0, "YXZ"); // look down slightly to see floor!
       } else if (cameraMode === "thirdPerson" || cameraMode === "topDown") {
-        const offX = cameraMode === "topDown" ? 0 : cameraOffset.x;
-        const offZ = cameraMode === "topDown" ? 0 : cameraOffset.z;
-        const offY = cameraMode === "topDown" ? topDownHeight : cameraOffset.y;
-        camera.position.set(curX + offX, curY + offY, curZ + offZ);
-        camera.lookAt(curX, curY, curZ);
+          const offY = cameraMode === "topDown" ? topDownHeight : cameraOffset.y
+
+          if (cameraMode === "topDown") {
+              camera.position.set(curX, curY + offY, curZ)
+          } else {
+              const cosYaw = Math.cos(curYaw)
+              const sinYaw = Math.sin(curYaw)
+
+              // Rotate the local X/Z camera offset by the player's yaw
+              const offX = cameraOffset.x * cosYaw + cameraOffset.z * sinYaw
+              const offZ = -cameraOffset.x * sinYaw + cameraOffset.z * cosYaw
+
+              camera.position.set(curX + offX, curY + offY, curZ + offZ);
+          }
+
+          camera.lookAt(curX, curY, curZ)
       } else {
         // 'free': OrbitControls owns camera.position/rotation entirely.
         cameraMoving = false;
