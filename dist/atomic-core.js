@@ -7911,15 +7911,17 @@ function createDungeonRenderer(element, game, options = {}) {
 				camera.rotation.set(-.1, curYaw, 0, "YXZ");
 			} else if (cameraMode === "thirdPerson" || cameraMode === "topDown") {
 				const offY = cameraMode === "topDown" ? topDownHeight : cameraOffset.y;
-				if (cameraMode === "topDown") camera.position.set(curX, curY + offY, curZ);
-				else {
+				if (cameraMode === "topDown") {
+					camera.position.set(curX, curY + offY, curZ);
+					camera.rotation.set(-Math.PI / 2, curYaw, 0, "YXZ");
+				} else {
 					const cosYaw = Math.cos(curYaw);
 					const sinYaw = Math.sin(curYaw);
 					const offX = cameraOffset.x * cosYaw + cameraOffset.z * sinYaw;
 					const offZ = -cameraOffset.x * sinYaw + cameraOffset.z * cosYaw;
 					camera.position.set(curX + offX, curY + offY, curZ + offZ);
+					camera.lookAt(curX, curY, curZ);
 				}
-				camera.lookAt(curX, curY, curZ);
 			} else cameraMoving = false;
 			camera.getWorldDirection(scratchCamDir);
 			const cfx = -scratchCamDir.x;
@@ -9429,7 +9431,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "1.0.5",
+		version: "1.0.6",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
