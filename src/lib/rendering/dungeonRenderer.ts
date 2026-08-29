@@ -24,6 +24,7 @@
  */
 
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GameHandle } from "../api/createGame";
 import type { EntityBase, ObjectPlacement } from "../entities/types";
 import {
@@ -75,6 +76,28 @@ export type CellInfo = {
   /** entity id, if we clicked on one */
   entityId?: string;
 };
+
+/**
+ * Camera behavior mode.
+ * - `'firstPerson'` (default): camera tracks the player's cell/facing exactly
+ *   as before — a fixed pullback and downward pitch, driven by the `'turn'`
+ *   event.
+ * - `'thirdPerson'`: camera sits at `cameraOffset` relative to the target
+ *   cell (defaults to the player's cell; see `setCameraTarget`/`followPlayer`)
+ *   and always looks at it.
+ * - `'topDown'`: like `'thirdPerson'`, but the horizontal offset is forced to
+ *   zero and the camera sits `topDownHeight` world units directly above the
+ *   target, looking straight down.
+ * - `'free'`: mouse-driven orbit/pan/zoom (via three.js `OrbitControls`) for
+ *   inspecting the level. Not tied to the player at all.
+ */
+export type CameraMode = "firstPerson" | "thirdPerson" | "topDown" | "free";
+
+/** World-space camera offset (world units) relative to a target cell's tile-center, used by `'thirdPerson'` mode. */
+export type CameraOffset = { x: number; y: number; z: number };
+
+/** Grid-cell camera target, using the same coordinate convention as `game.player.x/z`. */
+export type CameraTarget = { x: number; z: number };
 
 export type DungeonRendererOptions = {
   /** Camera field of view in degrees. Default: 75. */
@@ -143,6 +166,24 @@ export type DungeonRendererOptions = {
    * Default: false.
    */
   snapCameraToFloor?: boolean;
+  /** Initial camera mode. Default: `'firstPerson'` (unchanged first-person tracking). */
+  cameraMode?: CameraMode;
+  /**
+   * Initial camera offset for `'thirdPerson'` mode, in world units relative
+   * to the target cell's tile-center (`y` is height). Ignored in other modes.
+   * Default: `{ x: 0, y: tileSize, z: tileSize * 1.5 }`.
+   */
+  cameraOffset?: CameraOffset;
+  /**
+   * Initial camera height (world units above the target's floor) for
+   * `'topDown'` mode. Ignored in other modes. Default: `tileSize * 6`.
+   */
+  topDownHeight?: number;
+  /**
+   * Initial explicit camera target cell for `'thirdPerson'`/`'topDown'`
+   * modes. Omit to auto-follow `game.player.x/z` (see `followPlayer`).
+   */
+  cameraTarget?: CameraTarget;
   /**
    * Per-entity-type (or per-kind) visual overrides for the cube renderer.
    * Keys are matched against `entity.type` first, then `entity.kind`.
@@ -468,6 +509,44 @@ export type DungeonRenderer = {
    */
   setSnapCameraToFloor(enabled: boolean): void;
   /**
+   * Switch camera mode at runtime. Optionally set the offset/height/target
+   * for the new mode in the same call, to avoid a one-frame flash of a
+   * stale value. Switching away from `'free'` disposes its OrbitControls
+   * instance; switching into any non-`'free'` mode snaps `cur*`/`tgt*`
+   * state to the live target so there's no snap-then-slide artifact.
+   */
+  setCameraMode(
+    mode: CameraMode,
+    params?: {
+      offset?: CameraOffset;
+      topDownHeight?: number;
+      target?: CameraTarget;
+    },
+  ): void;
+  /**
+   * Update the `'thirdPerson'` camera offset at runtime. Fields are merged —
+   * omit any to leave it unchanged. Stored regardless of the active mode, so
+   * it can be pre-configured before switching into `'thirdPerson'`.
+   */
+  setCameraOffset(offset: Partial<CameraOffset>): void;
+  /**
+   * Update the `'topDown'` camera height at runtime. Stored regardless of
+   * the active mode, so it can be pre-configured before switching into
+   * `'topDown'`.
+   */
+  setTopDownHeight(height: number): void;
+  /**
+   * Set an explicit camera target cell for `'thirdPerson'`/`'topDown'`
+   * modes, overriding auto-follow of the player. Call `followPlayer()` to
+   * resume auto-following. No effect in `'firstPerson'` or `'free'` modes.
+   */
+  setCameraTarget(x: number, z: number): void;
+  /**
+   * Resume auto-following `game.player.x/z` as the camera target for
+   * `'thirdPerson'`/`'topDown'` modes. Undoes `setCameraTarget`.
+   */
+  followPlayer(): void;
+  /**
    * Attach or replace the skybox cube map at runtime.
    * Pass `null` to remove the skybox and revert to the plain fog colour.
    * Resolves after all six face images have loaded (instant when a pre-loaded
@@ -635,6 +714,27 @@ export function createDungeonRenderer(
   // for a player torch) are included in Three.js's scene-graph light collection.
   const camera = new THREE.PerspectiveCamera(fov, 1, 0.05, fogFar * 2);
   scene.add(camera);
+
+  // ── Free camera mode (mouse orbit/pan/zoom via three.js OrbitControls) ─────
+  let orbitControls: OrbitControls | null = null;
+
+  function enterFreeMode(): void {
+    if (orbitControls) return;
+    orbitControls = new OrbitControls(camera, canvas);
+    orbitControls.enableDamping = true;
+    const t = effectiveTargetCell();
+    orbitControls.target.set(
+      (t.x + 0.5) * tileSize,
+      tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z),
+      (t.z + 0.5) * tileSize,
+    );
+    orbitControls.update();
+  }
+
+  function exitFreeMode(): void {
+    orbitControls?.dispose();
+    orbitControls = null;
+  }
 
   // ── Lighting ──────────────────────────────────────────────────────────────
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
@@ -2482,6 +2582,21 @@ export function createDungeonRenderer(
   let curY = tileSize * eyeHeightFactor;
   let initialized = false;
 
+  // ── Camera mode state ────────────────────────────────────────────────────
+  let cameraMode: CameraMode = options.cameraMode ?? "firstPerson";
+  let cameraOffset: CameraOffset = options.cameraOffset ?? {
+    x: 0,
+    y: tileSize,
+    z: tileSize * 1.5,
+  };
+  let topDownHeight = options.topDownHeight ?? tileSize * 6;
+  // null = auto-follow game.player.x/z (see effectiveTargetCell/followPlayer)
+  let cameraTargetOverride: CameraTarget | null = options.cameraTarget ?? null;
+
+  function effectiveTargetCell(): CameraTarget {
+    return cameraTargetOverride ?? { x: game.player.x, z: game.player.z };
+  }
+
   // ── Animation-idle tracking ──────────────────────────────────────────────
   // `cameraMoving` turns the otherwise-asymptotic camera lerp into a bounded
   // "close enough, call it arrived" state so `isAnimating()`/`onIdle()` have
@@ -2559,6 +2674,7 @@ export function createDungeonRenderer(
   // ── RAF loop ──────────────────────────────────────────────────────────────
   let rafId = 0;
   let lastT = 0;
+  const scratchCamDir = new THREE.Vector3();
 
   function tick(t: number) {
     rafId = requestAnimationFrame(tick);
@@ -2566,6 +2682,17 @@ export function createDungeonRenderer(
     lastT = t;
 
     if (initialized) {
+      // thirdPerson/topDown track the effective target cell every frame
+      // (rather than only on the 'turn' event like onTurn does for
+      // firstPerson), so auto-follow keeps up smoothly between turns and
+      // an explicit setCameraTarget() takes effect immediately.
+      if (cameraMode === "thirdPerson" || cameraMode === "topDown") {
+        const t = effectiveTargetCell();
+        tgtX = (t.x + 0.5) * tileSize;
+        tgtZ = (t.z + 0.5) * tileSize;
+        tgtY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
+      }
+
       const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
       curX += (tgtX - curX) * k;
       curY += (tgtY - curY) * k;
@@ -2584,16 +2711,32 @@ export function createDungeonRenderer(
         Math.abs(tgtY - curY) > POS_EPS ||
         Math.abs(dy) > YAW_EPS;
 
-      // fix camera position to center of tile
-      const PULLBACK = 0.5 * tileSize;
-      const backX = Math.sin(curYaw) * PULLBACK;
-      const backZ = Math.cos(curYaw) * PULLBACK;
-      camera.position.set(curX + backX, curY, curZ + backZ);
-      camera.rotation.set(-0.1, curYaw, 0, "YXZ"); // look down slightly to see floor!
+      if (cameraMode === "firstPerson") {
+        // fix camera position to center of tile
+        const PULLBACK = 0.5 * tileSize;
+        const backX = Math.sin(curYaw) * PULLBACK;
+        const backZ = Math.cos(curYaw) * PULLBACK;
+        camera.position.set(curX + backX, curY, curZ + backZ);
+        camera.rotation.set(-0.1, curYaw, 0, "YXZ"); // look down slightly to see floor!
+      } else if (cameraMode === "thirdPerson" || cameraMode === "topDown") {
+        const offX = cameraMode === "topDown" ? 0 : cameraOffset.x;
+        const offZ = cameraMode === "topDown" ? 0 : cameraOffset.z;
+        const offY = cameraMode === "topDown" ? topDownHeight : cameraOffset.y;
+        camera.position.set(curX + offX, curY + offY, curZ + offZ);
+        camera.lookAt(curX, curY, curZ);
+      } else {
+        // 'free': OrbitControls owns camera.position/rotation entirely.
+        cameraMoving = false;
+      }
 
       // Update camera forward direction for directional surface lighting.
-      const cfx = -Math.sin(curYaw);
-      const cfz = -Math.cos(curYaw);
+      // Derived from the camera's actual world direction (rather than
+      // curYaw) so it stays correct in thirdPerson/topDown/free modes too;
+      // numerically identical to the old curYaw-based formula for
+      // firstPerson, since camera.rotation was just set from curYaw above.
+      camera.getWorldDirection(scratchCamDir);
+      const cfx = -scratchCamDir.x;
+      const cfz = -scratchCamDir.z;
       for (const mat of atlasMaterials) {
         const u = mat.uniforms["uCamDir"];
         if (u) (u.value as THREE.Vector2).set(cfx, cfz);
@@ -2686,6 +2829,10 @@ export function createDungeonRenderer(
       }
       wasAnimating = nowAnimating;
     }
+
+    // Unconditional (not gated on `initialized` or cameraMode) so damping
+    // keeps animating smoothly even on the exact frame a mode switch happens.
+    if (orbitControls) orbitControls.update();
 
     glRenderer.render(scene, camera);
   }
@@ -3112,6 +3259,43 @@ export function createDungeonRenderer(
         }
       }
     },
+    setCameraMode(mode, params) {
+      if (params?.offset) cameraOffset = { ...cameraOffset, ...params.offset };
+      if (params?.topDownHeight !== undefined)
+        topDownHeight = params.topDownHeight;
+      if (params?.target !== undefined) cameraTargetOverride = params.target;
+      if (mode === cameraMode) return;
+
+      if (cameraMode === "free") exitFreeMode();
+      cameraMode = mode;
+
+      if (mode === "free") {
+        enterFreeMode();
+      } else {
+        // Snap cur*/tgt* to the live target so there's no snap-then-slide
+        // artifact when entering/re-entering a tracked mode.
+        const t =
+          mode === "firstPerson"
+            ? { x: game.player.x, z: game.player.z }
+            : effectiveTargetCell();
+        tgtX = curX = (t.x + 0.5) * tileSize;
+        tgtZ = curZ = (t.z + 0.5) * tileSize;
+        tgtYaw = curYaw = game.player.facing;
+        tgtY = curY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
+      }
+    },
+    setCameraOffset(offset) {
+      cameraOffset = { ...cameraOffset, ...offset };
+    },
+    setTopDownHeight(height) {
+      topDownHeight = height;
+    },
+    setCameraTarget(x, z) {
+      cameraTargetOverride = { x, z };
+    },
+    followPlayer() {
+      cameraTargetOverride = null;
+    },
     rebuild() {
       doRebuild();
     },
@@ -3138,6 +3322,8 @@ export function createDungeonRenderer(
     },
     destroy() {
       cancelAnimationFrame(rafId);
+      orbitControls?.dispose();
+      orbitControls = null;
       ro.disconnect();
       game.events.off("turn", onTurn);
       game.events.off("cell-paint", onCellPaint);

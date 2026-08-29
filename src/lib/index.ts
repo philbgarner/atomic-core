@@ -26,7 +26,7 @@ export type { AtlasFrameRect, AtlasFrame, TextureAtlasJson, AtlasSource, PackedS
 // Themes
 export { THEMES, THEME_KEYS, resolveTheme, registerTheme, getTheme } from './dungeon/themes'
 export type { ThemeDef, ThemeSelector }                               from './dungeon/themes'
-export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle, SpriteMap, SkyboxFaces, SkyboxOptions } from './rendering/dungeonRenderer'
+export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, DirectionFaceMap, LayerTarget, LayerFaceResult, LayerSpec, LayerHandle, SpriteMap, SkyboxFaces, SkyboxOptions, CameraMode, CameraOffset, CameraTarget } from './rendering/dungeonRenderer'
 export { loadSkybox } from './rendering/skybox'
 export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites'
 

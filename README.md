@@ -55,6 +55,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Audio hooks (Howler.js compatible)
 - Optional multiplayer transport layer (WebSocket-based, server-authoritative)
 - **6-texture skybox** — `skybox` option on `createDungeonRenderer` or `renderer.setSkybox()` at runtime; accepts 6 image URL strings or a pre-loaded `THREE.CubeTexture`; optional `rotationY` aligns the front face to the dungeon's north axis
+- **Camera modes** — `cameraMode` option (`'firstPerson'` default, `'thirdPerson'`, `'topDown'`, `'free'`) and `renderer.setCameraMode()` at runtime; `thirdPerson`/`topDown` place the camera at a configurable offset from a target cell (auto-follows the player unless overridden via `setCameraTarget()`/`followPlayer()`); `free` hands the camera to mouse-driven orbit/pan/zoom (three.js `OrbitControls`) for inspecting the level
 - **Texture Loader / Sprite Packer** — `loadTextureAtlas()` fetches a TexturePacker-format atlas, shelf-packs sprites into a power-of-two `OffscreenCanvas`, and returns a `PackedAtlas` with UV data accessible by name or id
 - Script tag API - no build step required
 - localhost friendly - if you want to serve it with Node.

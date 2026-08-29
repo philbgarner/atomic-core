@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Camera Modes Example</title>
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>atomic-core</h1>
+            <div id="stats">
+                HP: <span id="hp">—</span><br />
+                Turn: <span id="turn">0</span><br />
+                Pos: <span id="pos">—</span>
+            </div>
+
+            <div id="camera-panel">
+                <label for="cameraMode">Camera mode</label>
+                <select id="cameraMode">
+                    <option value="firstPerson">First person</option>
+                    <option value="thirdPerson">Third person</option>
+                    <option value="topDown">Top down</option>
+                    <option value="free">Free (orbit/pan/zoom)</option>
+                </select>
+
+                <label for="targetX">Target cell (thirdPerson/topDown)</label>
+                <div class="target-row">
+                    <input id="targetX" type="number" value="0" />
+                    <input id="targetZ" type="number" value="0" />
+                    <button id="setTarget">Set</button>
+                </div>
+                <button id="followPlayer">Follow player</button>
+            </div>
+
+            <div id="log"></div>
+            <div id="controls">
+                WASD / Arrow keys — move<br />
+                Q / E — turn left / right<br />
+                Space — wait<br />
+                Drag / wheel — orbit / zoom (free mode)
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <!-- Expose THREE as a global from the local ESM build (UMD was removed in r160+) -->
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./camera-modes.js" defer></script>
+    </body>
+</html>

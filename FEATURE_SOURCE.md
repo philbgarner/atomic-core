@@ -169,6 +169,21 @@ Opt-in behaviour that makes the camera Y position track the `floorHeightOffset` 
 
 ---
 
+### Camera modes (`firstPerson` / `thirdPerson` / `topDown` / `free`)
+
+`cameraMode` on `DungeonRendererOptions` selects the camera behavior; default `'firstPerson'` reproduces the exact prior behavior byte-for-byte (fixed pullback + downward pitch, driven by the player's `'turn'` event). `'thirdPerson'` places the camera at a world-space `cameraOffset` (`{x, y, z}`, `y` = height) relative to a target cell and always `camera.lookAt()`s it; `'topDown'` is the same mechanism with the horizontal offset forced to zero and a `topDownHeight` vertical offset, giving a straight-down bird's-eye view. Both auto-follow `game.player.x/z` every frame by default; `setCameraTarget(x, z)` overrides this to point at an arbitrary cell, and `followPlayer()` resumes auto-follow. `'free'` hands the camera to three.js's `OrbitControls` addon for mouse-driven orbit/pan/wheel-zoom inspection, decoupled from the player entirely.
+
+Mode transitions are handled by `setCameraMode(mode, params?)`, which can bundle an offset/topDownHeight/target update into the same call as the transition to avoid a one-frame stale-value flash. Leaving `'free'` disposes the `OrbitControls` instance; entering any tracked mode re-syncs the lerp state (`cur*`/`tgt*`) to the live target so there's no snap-then-slide artifact. The directional-lighting `uCamDir` uniform is derived from the camera's actual world direction (`camera.getWorldDirection()`) rather than `curYaw`, so wall shading stays correct in every mode (numerically identical to the old formula for `firstPerson`).
+
+**Files:**
+- `rendering/dungeonRenderer.ts` — `CameraMode`, `CameraOffset`, `CameraTarget` public types; `cameraMode?`, `cameraOffset?`, `topDownHeight?`, `cameraTarget?` fields on `DungeonRendererOptions`; `effectiveTargetCell()` resolves the active target (override or live player position); `enterFreeMode()`/`exitFreeMode()` manage the `OrbitControls` lifecycle (instantiated on the renderer's `canvas`, `update()` called unconditionally each `tick()` frame, disposed on mode switch and in `destroy()`); `tick()` branches camera placement on `cameraMode` (verbatim `firstPerson` branch, offset+lookAt for `thirdPerson`/`topDown`, no-op for `free`); public `setCameraMode()`, `setCameraOffset()`, `setTopDownHeight()`, `setCameraTarget()`, `followPlayer()` methods on `DungeonRenderer`
+- `index.ts` — exports `CameraMode`, `CameraOffset`, `CameraTarget`
+
+**Example:**
+- `examples/localhost/camera-modes/` — `<select>` wired to `setCameraMode()` demonstrating all four modes; target-cell inputs + "Set"/"Follow player" buttons demonstrate `setCameraTarget()`/`followPlayer()`
+
+---
+
 ### BSP and cellular dungeon generators
 
 Both generators produce a `RoomedDungeonOutputs` (extends `DungeonOutputs`) with a full room graph: `startRoomId`, `endRoomId`, `rooms: Map<number, RoomInfo>`, `fullRegionIds`, and `firstCorridorRegionId`. The `regionId` texture stores per-cell room IDs that match the `rooms` map keys.
