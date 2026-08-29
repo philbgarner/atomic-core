@@ -46,6 +46,32 @@ export type CellInfo = {
     /** entity id, if we clicked on one */
     entityId?: string;
 };
+/**
+ * Camera behavior mode.
+ * - `'firstPerson'` (default): camera tracks the player's cell/facing exactly
+ *   as before — a fixed pullback and downward pitch, driven by the `'turn'`
+ *   event.
+ * - `'thirdPerson'`: camera sits at `cameraOffset` relative to the target
+ *   cell (defaults to the player's cell; see `setCameraTarget`/`followPlayer`)
+ *   and always looks at it.
+ * - `'topDown'`: like `'thirdPerson'`, but the horizontal offset is forced to
+ *   zero and the camera sits `topDownHeight` world units directly above the
+ *   target, looking straight down.
+ * - `'free'`: mouse-driven orbit/pan/zoom (via three.js `OrbitControls`) for
+ *   inspecting the level. Not tied to the player at all.
+ */
+export type CameraMode = "firstPerson" | "thirdPerson" | "topDown" | "free";
+/** World-space camera offset (world units) relative to a target cell's tile-center, used by `'thirdPerson'` mode. */
+export type CameraOffset = {
+    x: number;
+    y: number;
+    z: number;
+};
+/** Grid-cell camera target, using the same coordinate convention as `game.player.x/z`. */
+export type CameraTarget = {
+    x: number;
+    z: number;
+};
 export type DungeonRendererOptions = {
     /** Camera field of view in degrees. Default: 75. */
     fov?: number;
@@ -113,6 +139,24 @@ export type DungeonRendererOptions = {
      * Default: false.
      */
     snapCameraToFloor?: boolean;
+    /** Initial camera mode. Default: `'firstPerson'` (unchanged first-person tracking). */
+    cameraMode?: CameraMode;
+    /**
+     * Initial camera offset for `'thirdPerson'` mode, in world units relative
+     * to the target cell's tile-center (`y` is height). Ignored in other modes.
+     * Default: `{ x: 0, y: tileSize, z: tileSize * 1.5 }`.
+     */
+    cameraOffset?: CameraOffset;
+    /**
+     * Initial camera height (world units above the target's floor) for
+     * `'topDown'` mode. Ignored in other modes. Default: `tileSize * 6`.
+     */
+    topDownHeight?: number;
+    /**
+     * Initial explicit camera target cell for `'thirdPerson'`/`'topDown'`
+     * modes. Omit to auto-follow `game.player.x/z` (see `followPlayer`).
+     */
+    cameraTarget?: CameraTarget;
     /**
      * Per-entity-type (or per-kind) visual overrides for the cube renderer.
      * Keys are matched against `entity.type` first, then `entity.kind`.
@@ -408,6 +452,41 @@ export type DungeonRenderer = {
      * Takes effect immediately on the next rendered frame.
      */
     setSnapCameraToFloor(enabled: boolean): void;
+    /**
+     * Switch camera mode at runtime. Optionally set the offset/height/target
+     * for the new mode in the same call, to avoid a one-frame flash of a
+     * stale value. Switching away from `'free'` disposes its OrbitControls
+     * instance; switching into any non-`'free'` mode snaps `cur*`/`tgt*`
+     * state to the live target so there's no snap-then-slide artifact.
+     */
+    setCameraMode(mode: CameraMode, params?: {
+        offset?: CameraOffset;
+        topDownHeight?: number;
+        target?: CameraTarget;
+    }): void;
+    /**
+     * Update the `'thirdPerson'` camera offset at runtime. Fields are merged —
+     * omit any to leave it unchanged. Stored regardless of the active mode, so
+     * it can be pre-configured before switching into `'thirdPerson'`.
+     */
+    setCameraOffset(offset: Partial<CameraOffset>): void;
+    /**
+     * Update the `'topDown'` camera height at runtime. Stored regardless of
+     * the active mode, so it can be pre-configured before switching into
+     * `'topDown'`.
+     */
+    setTopDownHeight(height: number): void;
+    /**
+     * Set an explicit camera target cell for `'thirdPerson'`/`'topDown'`
+     * modes, overriding auto-follow of the player. Call `followPlayer()` to
+     * resume auto-following. No effect in `'firstPerson'` or `'free'` modes.
+     */
+    setCameraTarget(x: number, z: number): void;
+    /**
+     * Resume auto-following `game.player.x/z` as the camera target for
+     * `'thirdPerson'`/`'topDown'` modes. Undoes `setCameraTarget`.
+     */
+    followPlayer(): void;
     /**
      * Attach or replace the skybox cube map at runtime.
      * Pass `null` to remove the skybox and revert to the plain fog colour.
