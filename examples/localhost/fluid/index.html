@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>atomic-core — Fluid Example</title>
+        <link rel="stylesheet" href="../basic/styles.css" />
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>fluid</h1>
+            <div id="stats">
+                HP: <span id="hp">—</span><br />
+                Turn: <span id="turn">0</span><br />
+                Pos: <span id="pos">—</span>
+            </div>
+            <div id="log"></div>
+            <div id="controls">
+                WASD / Arrow keys — move<br />
+                Q / E — turn left / right<br />
+                Space — wait<br />
+                1 — pour water<br />
+                2 — pour lava<br />
+                <br />
+                Water is seeded at the rim<br />
+                of a stepped pit — watch it<br />
+                rush in and settle flat.
+            </div>
+        </div>
+
+        <div id="canvas-wrap">
+            <div id="viewport"></div>
+        </div>
+
+        <!-- Expose THREE as a global from the local ESM build -->
+        <script type="module">
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js";
+            window.THREE = THREE;
+        </script>
+        <script src="../../../dist/atomic-core.iife.js" defer></script>
+        <script src="./fluid.js" defer></script>
+    </body>
+</html>

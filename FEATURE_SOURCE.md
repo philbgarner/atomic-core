@@ -24,6 +24,9 @@ src/lib/
     billboardSprites.ts
     textureLoader.ts
     skybox.ts
+    fluidMask.ts
+  fluid/
+    fluid.ts
   dungeon/
     bsp.ts
     cellular.ts
@@ -564,6 +567,30 @@ Self-contained save/load layer that wraps a `SerializedDungeon` with all setting
 **Files:**
 - `dungeon/mapFile.ts` — `DungeonMapFile` wrapper type (`version`, `exportedAt`, `meta?`, `generatorOptions`, `rendererOptions`, `dungeon`, `objectPlacements?`); `DungeonMapMeta` optional author metadata type; `SerializedRendererOptions` = `DungeonRendererOptions` minus callbacks/PackedAtlas; `ExportOptions` caller input type (includes optional `paintMap` forwarded to `serializeDungeon`, optional `objectPlacements` array); `ImportResult` return type (includes optional `paintMap` for re-application via `game.dungeon.paint()`, optional `objectPlacements` for re-application via `place.billboard()` or `renderer.setObjects()`); `exportDungeonMap(dungeon, opts)` builds the wrapper; `dungeonMapToJson()` convenience JSON string; `importDungeonMap(data)` reconstructs `BspDungeonOutputs` + all settings including paintMap and objectPlacements; `dungeonMapFromJson(json)` convenience parse wrapper
 - `index.ts` — exports `exportDungeonMap`, `dungeonMapToJson`, `importDungeonMap`, `dungeonMapFromJson` and all associated types
+
+---
+
+### Fluid simulation
+
+Mass-conserving cellular automaton for fluid (water, lava, or any consumer-defined type) pooling on the dungeon's top-down floor plan, ported from a side-on falling-sand-style liquid sim and generalized to work with a horizontal grid where verticality is a per-cell scalar (`floorHeightOffset`) rather than a literal grid axis.
+
+Each cell tracks `floorElevation` (from `floorHeightOffset`, converted to the same abstract mass-equivalent units as `mass` — one elevation step ≈ one full cell of fluid) and `mass` (0 to ~1.02). Flow between the 4-neighborhood is driven by `surfaceHeight = floorElevation + mass`, split across two independent fixed-tick passes per `stepFluid()` call:
+- **Fast pass** (15 Hz): neighbors whose *floor* (not surface) is at least one elevation step lower get a full-strength transfer, capped at one cell's mass per tick — this is what makes fluid rush into a deep pit instead of trickling. Gating on floor elevation alone (not the combined surfaceHeight) matters: gating on surfaceHeight would also fire between two same-elevation cells whenever one is full and the other empty, incorrectly fast-falling sideways across flat ground.
+- **Damped pass** (300 Hz): gentler imbalances move a quarter of the `surfaceHeight` difference per tick (a hard stability ceiling — see `MAX_SPEED`'s comment) so pools settle to one physically-flat surface, including across stepped/sloped floors, since two cells at different floor depths but equal `surfaceHeight` are correctly in equilibrium.
+
+Deliberately dropped from the source it was ported from: fluid-vs-fluid chemistry reactions, status-effect-on-contact, and the vertical density-stacking swap (that fixed a side-on-specific bug — denser fluid rendered on top of lighter fluid in the same column — which has no analog here, since each cell holds exactly one fluid type). `FluidDef.density` is still exposed for consumer-side use.
+
+**Evaporation**: once per `stepFluid()` call (real `dt`, not the fixed-tick passes above — mirrors how the source ran its chemistry pass), any non-solid cell holding less than `EVAPORATE_THRESHOLD` mass drains at `EVAPORATE_RATE` mass/sec until it clears to 0. This is what makes fluid spread thin across open flat ground fade away over time instead of sitting there forever, while leaving real pools untouched: a pool's low point holds mass near `MAX_MASS` by construction of the fast/damped passes, well above the threshold, so no separate slope/neighbor detection is needed to tell "pooling" from "spread too thin to collect."
+
+Rendering is a separate concern: one flat top quad per non-solid cell, world-positioned to exactly cover that cell's footprint, plus a vertical wall quad on every one of its 4 edges — unconditionally allocated for every open cell, not just at structural elevation drops, since two *different* fluid types at the same floor elevation never level with each other (the CA's compatible-neighbor check only flows same-type-or-empty) and can differ persistently even on flat ground. Each cell's 4 corners are computed once per `sync()` from the lower of that corner's two contributing neighbors and shared between the two walls meeting there, so adjacent walls agree on the corner's height instead of leaving a crack where two independently-computed bottoms disagree. A wall collapses to invisible below `MIN_WALL_HEIGHT` — without that floor, the damped pass's normal resting imbalance between connected same-type cells (see `MIN_FLOW`) renders as a wall on nearly every internal boundary of an unsettled pool. All geometry uses per-vertex height/depth/type attributes updated directly on the `BufferGeometry` (not sampled from a texture in the vertex shader — vertex texture fetch was tried first and produced broken geometry on a software/headless GL backend). World Y uses a *single* scale factor applied to the whole `surfaceHeight` sum (not separate scales for elevation vs. mass) — splitting the scale breaks the equal-`surfaceHeight`-implies-equal-worldY invariant the flat-surface guarantee depends on, making the rendered surface visibly non-flat or clip into the floor across any stepped pit. To make a single fresh pour look shallower, reduce the poured `amount` instead.
+
+**Files:**
+- `fluid/fluid.ts` — `FluidField` struct (`cellType`, `mass`, `floorElevation`, `isSolid` typed arrays + `version`/tick accumulators); `createFluidField()`, `fluidFieldFromDungeon(outputs)` (reads `solid`/`colliderFlags`/`floorHeightOffset` straight from `DungeonOutputs.textures`, treating the `floorHeightOffset` pit sentinel as solid-for-fluid); `stepFluid(field, dt)` fixed-timestep accumulator loop running the fast/damped passes plus the once-per-call `evaporate()` pass above; query `fluidCellAt()`/`fluidDepthAt()`; mutator `placeFluidCircle()`; generic `FluidDef { name, color, density }` config type (consumer-supplied `Record<number, FluidDef>`, no hardcoded type table)
+- `rendering/fluidMask.ts` — `FluidMask` + `createFluidMask()`/`updateFluidMask()`: general-purpose R8 `DataTexture` pair (depth, type) mirroring `temperatureMask.ts`'s pattern, independent of the mesh helper below, for custom visualizations (e.g. a minimap overlay); `createFluidSurface(renderer, field, options)` builds the top-quad-plus-side-wall mesh described above and returns a `FluidSurfaceHandle` with `sync()` (call after `stepFluid` or any `placeFluidCircle` mutation) and `remove()`
+- `index.ts` — exports `createFluidField`, `fluidFieldFromDungeon`, `stepFluid`, `fluidCellAt`, `fluidDepthAt`, `placeFluidCircle`, `MAX_MASS`, `FLUID_VISIBLE_THRESHOLD`, `DEFAULT_STEP_HEIGHT`, `createFluidMask`, `updateFluidMask`, `createFluidSurface` and associated types
+
+**Example:**
+- `examples/localhost/fluid/index.html` / `fluid.js` — carves a stepped bowl-shaped depression into the player's spawn room via `floorHeightOffset` (same technique as the layering example), builds a `FluidField` from the dungeon, seeds a splash just outside the pit's rim, and steps/syncs the fluid once per game turn (via `game.events.on('turn', ...)`, with a fixed simulated-seconds-per-turn constant) rather than on a continuous `requestAnimationFrame` loop — atomic-core is turn-based, so the fluid only visibly evolves when the player actually acts; `1`/`2` keys pour a small splash of water/lava at the player's feet and sync immediately, since pours happen outside the turn cycle
 
 ---
 

@@ -2711,6 +2711,21 @@ export function createDungeonRenderer(
         Math.abs(tgtY - curY) > POS_EPS ||
         Math.abs(dy) > YAW_EPS;
 
+      // Expire move tweens by elapsed time unconditionally, not just for ids
+      // visited by the per-entity/per-object loops below (which only cover
+      // whatever was last passed to setEntities()/setObjects()). The player
+      // fires the same 'move' animation event as any other actor (see
+      // onEntityMove above) but is never itself passed to setEntities() —
+      // without this, its tween entry is never visited, entityMoveAnimMap
+      // never empties, and isAnimating()/onIdle() report motion forever
+      // after just one player move.
+      for (const [id, anim] of entityMoveAnimMap) {
+        if (t - anim.startTime >= moveAnimMs) entityMoveAnimMap.delete(id);
+      }
+      for (const [key, anim] of objectMoveAnimMap) {
+        if (t - anim.startTime >= moveAnimMs) objectMoveAnimMap.delete(key);
+      }
+
       if (cameraMode === "firstPerson") {
         // fix camera position to center of tile
         const PULLBACK = 0.5 * tileSize;

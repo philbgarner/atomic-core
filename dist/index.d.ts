@@ -40,4 +40,8 @@ export { createDoorMesh } from './rendering/doorRenderer';
 export type { DoorMeshDeps, DoorHandle } from './rendering/doorRenderer';
 export { linear, easeInQuad, easeOutQuad, easeInOutQuad, easeInCubic, easeOutCubic, easeInOutCubic, EASINGS, resolveEasing } from './animations/easing';
 export type { EasingFn, EasingName } from './animations/easing';
+export { createFluidField, fluidFieldFromDungeon, stepFluid, fluidCellAt, fluidDepthAt, placeFluidCircle, MAX_MASS, FLUID_VISIBLE_THRESHOLD, DEFAULT_STEP_HEIGHT } from './fluid/fluid';
+export type { FluidField, FluidDef, CreateFluidFieldOptions } from './fluid/fluid';
+export { createFluidMask, updateFluidMask, createFluidSurface } from './rendering/fluidMask';
+export type { FluidMask, FluidSurfaceOptions, FluidSurfaceHandle } from './rendering/fluidMask';
 //# sourceMappingURL=index.d.ts.map

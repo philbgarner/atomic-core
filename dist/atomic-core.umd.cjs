@@ -7928,6 +7928,8 @@ void main() {
 				curYaw += dy * k;
 				const POS_EPS = .02 * tileSize;
 				cameraMoving = Math.abs(tgtX - curX) > POS_EPS || Math.abs(tgtZ - curZ) > POS_EPS || Math.abs(tgtY - curY) > POS_EPS || Math.abs(dy) > .01;
+				for (const [id, anim] of entityMoveAnimMap) if (t - anim.startTime >= moveAnimMs) entityMoveAnimMap.delete(id);
+				for (const [key, anim] of objectMoveAnimMap) if (t - anim.startTime >= moveAnimMs) objectMoveAnimMap.delete(key);
 				if (cameraMode === "firstPerson") {
 					const PULLBACK = .5 * tileSize;
 					const backX = Math.sin(curYaw) * PULLBACK;
@@ -9312,7 +9314,7 @@ void main() {
 	* Reconstruct an R8 DataTexture from a raw byte array.
 	* NearestFilter, ClampToEdge, no mipmaps, no color-space conversion, flipY=false.
 	*/
-	function makeDataTexture(data, W, H, name) {
+	function makeDataTexture$1(data, W, H, name) {
 		const tex = new three.DataTexture(data, W, H, three.RedFormat, three.UnsignedByteType);
 		tex.name = name;
 		tex.needsUpdate = true;
@@ -9415,24 +9417,24 @@ void main() {
 			fullRegionIds,
 			firstCorridorRegionId,
 			textures: {
-				solid: makeDataTexture(solidData, W, H, "bsp_dungeon_solid"),
-				regionId: makeDataTexture(regionIdData, W, H, "bsp_dungeon_region_id"),
-				distanceToWall: makeDataTexture(base64ToUint8(data.distanceToWall), W, H, "bsp_dungeon_distance_to_wall"),
-				hazards: makeDataTexture(base64ToUint8(data.hazards), W, H, "bsp_dungeon_hazards"),
-				temperature: makeDataTexture(temperature, W, H, "bsp_dungeon_temperature"),
-				floorType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_floor_type"),
+				solid: makeDataTexture$1(solidData, W, H, "bsp_dungeon_solid"),
+				regionId: makeDataTexture$1(regionIdData, W, H, "bsp_dungeon_region_id"),
+				distanceToWall: makeDataTexture$1(base64ToUint8(data.distanceToWall), W, H, "bsp_dungeon_distance_to_wall"),
+				hazards: makeDataTexture$1(base64ToUint8(data.hazards), W, H, "bsp_dungeon_hazards"),
+				temperature: makeDataTexture$1(temperature, W, H, "bsp_dungeon_temperature"),
+				floorType: makeDataTexture$1(new Uint8Array(W * H), W, H, "bsp_dungeon_floor_type"),
 				overlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_overlays"),
-				wallType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_wall_type"),
+				wallType: makeDataTexture$1(new Uint8Array(W * H), W, H, "bsp_dungeon_wall_type"),
 				wallOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_wall_overlays"),
-				ceilingType: makeDataTexture(new Uint8Array(W * H), W, H, "bsp_dungeon_ceiling_type"),
+				ceilingType: makeDataTexture$1(new Uint8Array(W * H), W, H, "bsp_dungeon_ceiling_type"),
 				ceilingOverlays: makeDataTextureRGBA(new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceiling_overlays"),
-				colliderFlags: makeDataTexture(base64ToUint8(data.colliderFlags), W, H, "bsp_dungeon_collider_flags"),
+				colliderFlags: makeDataTexture$1(base64ToUint8(data.colliderFlags), W, H, "bsp_dungeon_collider_flags"),
 				floorSkirtType: makeDataTextureRGBA(data.floorSkirtType ? base64ToUint8(data.floorSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_floor_skirt_type"),
 				ceilSkirtType: makeDataTextureRGBA(data.ceilSkirtType ? base64ToUint8(data.ceilSkirtType) : new Uint8Array(4 * W * H), W, H, "bsp_dungeon_ceil_skirt_type"),
-				...data.floorHeightOffset !== void 0 ? { floorHeightOffset: makeDataTexture(base64ToUint8(data.floorHeightOffset), W, H, "bsp_dungeon_floor_height_offset") } : {},
-				...data.ceilingHeightOffset !== void 0 ? { ceilingHeightOffset: makeDataTexture(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") } : {},
-				...data.skyPanelCount !== void 0 ? { skyPanelCount: makeDataTexture(base64ToUint8(data.skyPanelCount), W, H, "bsp_dungeon_sky_panel_count") } : {},
-				...data.ceilingPanelCount !== void 0 ? { ceilingPanelCount: makeDataTexture(base64ToUint8(data.ceilingPanelCount), W, H, "bsp_dungeon_ceiling_panel_count") } : {}
+				...data.floorHeightOffset !== void 0 ? { floorHeightOffset: makeDataTexture$1(base64ToUint8(data.floorHeightOffset), W, H, "bsp_dungeon_floor_height_offset") } : {},
+				...data.ceilingHeightOffset !== void 0 ? { ceilingHeightOffset: makeDataTexture$1(base64ToUint8(data.ceilingHeightOffset), W, H, "bsp_dungeon_ceiling_height_offset") } : {},
+				...data.skyPanelCount !== void 0 ? { skyPanelCount: makeDataTexture$1(base64ToUint8(data.skyPanelCount), W, H, "bsp_dungeon_sky_panel_count") } : {},
+				...data.ceilingPanelCount !== void 0 ? { ceilingPanelCount: makeDataTexture$1(base64ToUint8(data.ceilingPanelCount), W, H, "bsp_dungeon_ceiling_panel_count") } : {}
 			}
 		};
 	}
@@ -9500,10 +9502,623 @@ void main() {
 		return importDungeonMap(JSON.parse(json));
 	}
 	//#endregion
+	//#region src/lib/fluid/fluid.ts
+	/** One full cell's worth of fluid. Everything else scales off this. */
+	var MAX_MASS = 1;
+	/** A cell can briefly hold a little more than MAX_MASS when pressed from a higher neighbor. */
+	var MAX_COMPRESS = .02;
+	/** Below this, a cell counts as dry and its type resets to 0. */
+	var MIN_MASS = 1e-4;
+	/** Transfers smaller than this are dropped rather than applied, so near-equal cells stop nudging forever. */
+	var MIN_FLOW = .01;
+	/**
+	* Upper bound on how much mass can cross a cell boundary in one damped-pass
+	* tick. The damped pass moves a quarter of the imbalance per tick, and that
+	* factor is a hard stability ceiling: for a single pair exchanging mass each
+	* tick, the remaining difference scales by (1 - 2*fraction) per tick, so any
+	* fraction above 1/2 flips the difference's sign and grows it every tick
+	* instead of shrinking it. Raising this cap (or the 1/4 factor in
+	* stepLevelFlow) reintroduces that oscillation. To make leveling faster,
+	* raise LEVEL_TICK_HZ instead — running the same damped math more often per
+	* real second has no such ceiling.
+	*/
+	var MAX_SPEED = .25;
+	/** Fast pass's own transfer cap — a full cell can move in one fast tick. */
+	var FAST_TRANSFER = 1;
+	/**
+	* How much mass-equivalent elevation counts as a "step" for
+	* `floorElevation`, i.e. how much fluid a one-step-deep cell holds before
+	* its surface reaches the same height as a neighboring cell one step up.
+	* `fluidFieldFromDungeon` scales `floorHeightOffset` steps by this.
+	*/
+	var DEFAULT_STEP_HEIGHT = 1;
+	/**
+	* Minimum surfaceHeight imbalance between two neighbors before the fast
+	* pass (rather than the damped pass) handles the flow between them.
+	*/
+	var STEEP_DROP_THRESHOLD = 1;
+	var FAST_TICK_DT = 1 / 15;
+	var LEVEL_TICK_DT = 1 / 300;
+	/** How much mass a cell needs before a renderer should draw it as fluid at all. */
+	var FLUID_VISIBLE_THRESHOLD = .01;
+	/**
+	* Only cells strictly below this mass evaporate — this is what distinguishes
+	* "spread too thin to collect" from an actual pool: a pool's low point holds
+	* mass approaching MAX_MASS by construction of the fast/damped passes above
+	* (they keep pushing mass toward the lowest reachable point until it's full
+	* there), so real pools sit well above this threshold and are naturally
+	* exempt. Only thin residue left spread across flat ground, or the trailing
+	* edge of a shrinking puddle, ever drops this low. No separate slope/pooling
+	* detection needed.
+	*/
+	var EVAPORATE_THRESHOLD = .15;
+	/** How fast sub-threshold mass drains away, in mass/sec. */
+	var EVAPORATE_RATE = .03;
+	/**
+	* Given the total mass shared between a cell and a lower neighbor, returns
+	* how much of that total the lower cell should hold at rest. Up to
+	* MAX_MASS the lower cell just holds everything; beyond that it's allowed
+	* to compress slightly, which is what lets a filled cell push its excess
+	* onward to the next-lowest neighbor instead of just piling up forever.
+	*/
+	function stableRestingMass(totalMass) {
+		if (totalMass <= 1) return 1;
+		if (totalMass < 2 + MAX_COMPRESS) return (1 + totalMass * MAX_COMPRESS) / (1 + MAX_COMPRESS);
+		return (totalMass + MAX_COMPRESS) / 2;
+	}
+	function createFluidField(width, height, opts = {}) {
+		const size = width * height;
+		return {
+			width,
+			height,
+			cellType: new Uint8Array(size),
+			mass: new Float32Array(size),
+			floorElevation: opts.floorElevation ?? new Float32Array(size),
+			isSolid: opts.isSolid ?? new Uint8Array(size),
+			version: 0,
+			accumulator: 0,
+			fastAccumulator: 0
+		};
+	}
+	/**
+	* Builds a FluidField from a generated dungeon's raw per-cell textures —
+	* `solid`/`colliderFlags` for blocking, `floorHeightOffset` (when present)
+	* for elevation. A cell with no floor tile (raw offset byte 0, the "pit"
+	* sentinel — see bsp.ts/cellular.ts) has nowhere to hold fluid and is
+	* treated as solid for fluid purposes.
+	*
+	* `floorElevation` is populated in the same abstract mass-equivalent units
+	* as `mass` (DEFAULT_STEP_HEIGHT per floor-height step) — deliberately
+	* decoupled from any renderer's `tileSize`/`offsetFactor`, so the tuned CA
+	* constants above stay valid regardless of world-space scale. Convert to
+	* world Y only at render time — see `rendering/fluidMask.ts`.
+	*/
+	function fluidFieldFromDungeon(outputs) {
+		const { width, height } = outputs;
+		const size = width * height;
+		const solidData = outputs.textures.solid.image.data;
+		const flagsData = outputs.textures.colliderFlags.image.data;
+		const offsetData = outputs.textures.floorHeightOffset?.image.data;
+		const isSolid = new Uint8Array(size);
+		const floorElevation = new Float32Array(size);
+		for (let i = 0; i < size; i++) {
+			let blocked = solidData[i] !== 0 || isBlockedCell(flagsData[i]);
+			let elevation = 0;
+			if (offsetData) {
+				const raw = offsetData[i];
+				if (raw === 0) blocked = true;
+				else elevation = (raw - 128) * 1;
+			}
+			isSolid[i] = blocked ? 1 : 0;
+			floorElevation[i] = elevation;
+		}
+		return createFluidField(width, height, {
+			isSolid,
+			floorElevation
+		});
+	}
+	/** Grid-relative (dx, dz) offsets for the 4-neighborhood, in a fixed priority order. */
+	var NEIGHBOR_DX$1 = [
+		0,
+		0,
+		-1,
+		1
+	];
+	var NEIGHBOR_DZ$1 = [
+		-1,
+		1,
+		0,
+		0
+	];
+	function stepFast(f) {
+		const { width, height, cellType, mass, floorElevation, isSolid } = f;
+		const size = width * height;
+		const newMass = mass.slice();
+		let changed = false;
+		for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) {
+			const i = z * width + x;
+			if (isSolid[i]) continue;
+			const startMass = mass[i];
+			if (startMass <= MIN_MASS) continue;
+			const myType = cellType[i];
+			let remaining = startMass;
+			for (let n = 0; n < 4; n++) {
+				if (remaining <= MIN_MASS) break;
+				const nx = x + NEIGHBOR_DX$1[n];
+				const nz = z + NEIGHBOR_DZ$1[n];
+				if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
+				const j = nz * width + nx;
+				if (isSolid[j]) continue;
+				const jMass = mass[j];
+				if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
+				if (floorElevation[i] - floorElevation[j] < STEEP_DROP_THRESHOLD) continue;
+				const stable = stableRestingMass(remaining + jMass);
+				const flow = Math.min(Math.max(0, stable - jMass), remaining, FAST_TRANSFER);
+				if (flow > MIN_FLOW) {
+					newMass[i] -= flow;
+					newMass[j] += flow;
+					if (jMass <= MIN_MASS) cellType[j] = myType;
+					remaining -= flow;
+					changed = true;
+				}
+			}
+		}
+		finalize(f, newMass, size);
+		return changed;
+	}
+	function stepLevel(f) {
+		const { width, height, cellType, mass, floorElevation, isSolid } = f;
+		const size = width * height;
+		const newMass = mass.slice();
+		let changed = false;
+		for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) {
+			const i = z * width + x;
+			if (isSolid[i]) continue;
+			const startMass = mass[i];
+			if (startMass <= MIN_MASS) continue;
+			const myType = cellType[i];
+			let remaining = startMass;
+			for (let n = 0; n < 4; n++) {
+				if (remaining <= MIN_MASS) break;
+				const nx = x + NEIGHBOR_DX$1[n];
+				const nz = z + NEIGHBOR_DZ$1[n];
+				if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
+				const j = nz * width + nx;
+				if (isSolid[j]) continue;
+				const jMass = mass[j];
+				if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
+				if (floorElevation[i] - floorElevation[j] >= STEEP_DROP_THRESHOLD) continue;
+				const delta = floorElevation[i] + remaining - (floorElevation[j] + jMass);
+				const flow = Math.min(Math.max(0, delta / 4), remaining, MAX_SPEED);
+				if (flow > MIN_FLOW) {
+					newMass[i] -= flow;
+					newMass[j] += flow;
+					if (jMass <= MIN_MASS) cellType[j] = myType;
+					remaining -= flow;
+					changed = true;
+				}
+			}
+		}
+		finalize(f, newMass, size);
+		return changed;
+	}
+	function finalize(f, newMass, size) {
+		for (let i = 0; i < size; i++) if (newMass[i] < MIN_MASS) {
+			newMass[i] = 0;
+			f.cellType[i] = 0;
+		}
+		f.mass.set(newMass);
+	}
+	/**
+	* Drains mass from thin, unpooled cells at a slow real-time rate — run once
+	* per `stepFluid` call using the real `dt`, like the source's `reactFluid`,
+	* not inside the fixed-tick fast/damped loops (evaporation doesn't need
+	* their precision, and doing it there would scale the rate with tick
+	* frequency instead of wall-clock time).
+	*/
+	function evaporate(f, dt) {
+		const { mass, cellType, isSolid, width, height } = f;
+		const size = width * height;
+		let changed = false;
+		for (let i = 0; i < size; i++) {
+			if (isSolid[i]) continue;
+			const m = mass[i];
+			if (m <= 0 || m >= EVAPORATE_THRESHOLD) continue;
+			const next = m - EVAPORATE_RATE * dt;
+			if (next < MIN_MASS) {
+				mass[i] = 0;
+				cellType[i] = 0;
+			} else mass[i] = next;
+			changed = true;
+		}
+		return changed;
+	}
+	function stepFluid(field, dt) {
+		field.fastAccumulator += dt;
+		field.accumulator += dt;
+		let changed = false;
+		while (field.fastAccumulator >= FAST_TICK_DT) {
+			changed = stepFast(field) || changed;
+			field.fastAccumulator -= FAST_TICK_DT;
+		}
+		while (field.accumulator >= LEVEL_TICK_DT) {
+			changed = stepLevel(field) || changed;
+			field.accumulator -= LEVEL_TICK_DT;
+		}
+		changed = evaporate(field, dt) || changed;
+		if (changed) field.version++;
+	}
+	function fluidCellAt(f, x, z) {
+		const xi = Math.floor(x);
+		const zi = Math.floor(z);
+		if (xi < 0 || xi >= f.width || zi < 0 || zi >= f.height) return 0;
+		const i = zi * f.width + xi;
+		return f.mass[i] > MIN_MASS ? f.cellType[i] : 0;
+	}
+	function fluidDepthAt(f, x, z) {
+		const xi = Math.floor(x);
+		const zi = Math.floor(z);
+		if (xi < 0 || xi >= f.width || zi < 0 || zi >= f.height) return 0;
+		return f.mass[zi * f.width + xi];
+	}
+	/**
+	* Fills non-solid cells within radius r to `amount` mass of `cellType`,
+	* overwriting whatever fluid (if any) was already there.
+	*/
+	function placeFluidCircle(f, cx, cz, r, cellType, amount = 1) {
+		const x0 = Math.max(0, Math.floor(cx - r));
+		const x1 = Math.min(f.width - 1, Math.ceil(cx + r));
+		const z0 = Math.max(0, Math.floor(cz - r));
+		const z1 = Math.min(f.height - 1, Math.ceil(cz + r));
+		const r2 = r * r;
+		let changed = false;
+		for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+			const dx = x + .5 - cx;
+			const dz = z + .5 - cz;
+			if (dx * dx + dz * dz > r2) continue;
+			const i = z * f.width + x;
+			if (f.isSolid[i]) continue;
+			f.cellType[i] = cellType;
+			f.mass[i] = amount;
+			changed = true;
+		}
+		if (changed) f.version++;
+	}
+	//#endregion
+	//#region src/lib/rendering/fluidMask.ts
+	function makeDataTexture(data, W, H, name) {
+		const tex = new three.DataTexture(data, W, H, three.RedFormat, three.UnsignedByteType);
+		tex.name = name;
+		tex.needsUpdate = true;
+		tex.magFilter = three.NearestFilter;
+		tex.minFilter = three.NearestFilter;
+		tex.generateMipmaps = false;
+		tex.wrapS = three.ClampToEdgeWrapping;
+		tex.wrapT = three.ClampToEdgeWrapping;
+		tex.colorSpace = three.NoColorSpace;
+		tex.flipY = false;
+		return tex;
+	}
+	function createFluidMask(field) {
+		const { width, height } = field;
+		const size = width * height;
+		const mask = {
+			field,
+			depthData: new Uint8Array(size),
+			depthTexture: makeDataTexture(new Uint8Array(size), width, height, "fluid_depth"),
+			typeData: new Uint8Array(size),
+			typeTexture: makeDataTexture(new Uint8Array(size), width, height, "fluid_type"),
+			syncedVersion: -1
+		};
+		syncFluidMask(mask);
+		return mask;
+	}
+	/** Re-syncs the mask's textures from `mask.field`. No-op if the field hasn't changed. */
+	function updateFluidMask(mask) {
+		if (mask.field.version === mask.syncedVersion) return;
+		syncFluidMask(mask);
+	}
+	function syncFluidMask(mask) {
+		const { field, depthData, typeData } = mask;
+		const size = field.width * field.height;
+		for (let i = 0; i < size; i++) {
+			const mass = field.mass[i];
+			depthData[i] = Math.max(0, Math.min(255, Math.round(mass / 1 * 255)));
+			typeData[i] = mass > .01 ? field.cellType[i] : 0;
+		}
+		mask.depthTexture.needsUpdate = true;
+		mask.typeTexture.needsUpdate = true;
+		mask.syncedVersion = field.version;
+	}
+	var MAX_PALETTE_SIZE = 16;
+	var SURFACE_VERT = `
+attribute float aDepth;
+attribute float aType;
+
+varying float vDepth;
+varying float vType;
+varying float vFogDist;
+
+void main() {
+  vDepth = aDepth;
+  vType = aType;
+  vec4 eyePos = modelViewMatrix * vec4(position, 1.0);
+  vFogDist = length(eyePos.xyz);
+  gl_Position = projectionMatrix * eyePos;
+}
+`;
+	var SURFACE_FRAG = `
+uniform vec3 uPalette[${MAX_PALETTE_SIZE}];
+uniform float uOpacity;
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
+
+varying float vDepth;
+varying float vType;
+varying float vFogDist;
+
+void main() {
+  if (vDepth < 0.02) discard;
+  vec3 color = uPalette[int(vType + 0.5)];
+
+  float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
+  float alpha = clamp(vDepth * 1.5, 0.0, 1.0) * uOpacity;
+  gl_FragColor = vec4(mix(color, uFogColor, fogFactor), alpha);
+}
+`;
+	/** Grid-relative (dx, dz) offsets for the 4-neighborhood, matching fluid.ts's own order. */
+	var NEIGHBOR_DX = [
+		0,
+		0,
+		-1,
+		1
+	];
+	var NEIGHBOR_DZ = [
+		-1,
+		1,
+		0,
+		0
+	];
+	/**
+	* Adds a fluid-surface mesh to `renderer.scene`: one flat top quad per
+	* non-solid cell, world-positioned to exactly cover that cell's footprint
+	* (`[x*tileSize, (x+1)*tileSize] x [z*tileSize, (z+1)*tileSize]`, matching
+	* the dungeon's own `(cx+0.5)*tileSize` cell-center convention), plus a
+	* vertical wall quad on every edge, rendered only where the surface actually
+	* drops off across it (see the file header).
+	*/
+	function createFluidSurface(renderer, field, options) {
+		const { width, height } = field;
+		const { tileSize, fluidDefs } = options;
+		const worldUnitsPerStep = options.worldUnitsPerStep ?? tileSize * .5;
+		const MIN_WALL_HEIGHT = worldUnitsPerStep * .08;
+		const cellIndices = [];
+		for (let i = 0; i < width * height; i++) if (!field.isSolid[i]) cellIndices.push(i);
+		const quadCount = cellIndices.length;
+		const cellNeighbors = new Array(quadCount);
+		for (let q = 0; q < quadCount; q++) {
+			const i = cellIndices[q];
+			const x = i % width;
+			const z = (i - x) / width;
+			const n4 = [];
+			for (let n = 0; n < 4; n++) {
+				const nx = x + NEIGHBOR_DX[n];
+				const nz = z + NEIGHBOR_DZ[n];
+				const outOfBounds = nx < 0 || nx >= width || nz < 0 || nz >= height;
+				const j = outOfBounds ? -1 : nz * width + nx;
+				n4.push(outOfBounds || field.isSolid[j] === 1 ? -1 : j);
+			}
+			cellNeighbors[q] = {
+				cellIndex: i,
+				n: n4[0],
+				s: n4[1],
+				w: n4[2],
+				e: n4[3]
+			};
+		}
+		const totalQuads = quadCount + quadCount * 4;
+		const positions = new Float32Array(totalQuads * 4 * 3);
+		const depths = new Float32Array(totalQuads * 4);
+		const types = new Float32Array(totalQuads * 4);
+		const indices = new Uint32Array(totalQuads * 6);
+		function writeQuadIndices(q) {
+			const vBase = q * 4;
+			const iBase = q * 6;
+			indices[iBase + 0] = vBase;
+			indices[iBase + 1] = vBase + 1;
+			indices[iBase + 2] = vBase + 2;
+			indices[iBase + 3] = vBase;
+			indices[iBase + 4] = vBase + 2;
+			indices[iBase + 5] = vBase + 3;
+		}
+		for (let q = 0; q < quadCount; q++) {
+			const i = cellIndices[q];
+			const x = i % width;
+			const z = (i - x) / width;
+			const x0 = x * tileSize;
+			const x1 = x0 + tileSize;
+			const z0 = z * tileSize;
+			const z1 = z0 + tileSize;
+			const pBase = q * 4 * 3;
+			positions[pBase + 0] = x0;
+			positions[pBase + 1] = 0;
+			positions[pBase + 2] = z0;
+			positions[pBase + 3] = x1;
+			positions[pBase + 4] = 0;
+			positions[pBase + 5] = z0;
+			positions[pBase + 6] = x1;
+			positions[pBase + 7] = 0;
+			positions[pBase + 8] = z1;
+			positions[pBase + 9] = x0;
+			positions[pBase + 10] = 0;
+			positions[pBase + 11] = z1;
+			writeQuadIndices(q);
+		}
+		for (let q = 0; q < quadCount; q++) {
+			const i = cellNeighbors[q].cellIndex;
+			const x = i % width;
+			const z = (i - x) / width;
+			const x0 = x * tileSize;
+			const x1 = x0 + tileSize;
+			const z0 = z * tileSize;
+			const z1 = z0 + tileSize;
+			const edges = [
+				[
+					x0,
+					z0,
+					x1,
+					z0
+				],
+				[
+					x0,
+					z1,
+					x1,
+					z1
+				],
+				[
+					x0,
+					z0,
+					x0,
+					z1
+				],
+				[
+					x1,
+					z0,
+					x1,
+					z1
+				]
+			];
+			for (let n = 0; n < 4; n++) {
+				const [ex0, ez0, ex1, ez1] = edges[n];
+				const sq = quadCount + q * 4 + n;
+				const pBase = sq * 4 * 3;
+				positions[pBase + 0] = ex0;
+				positions[pBase + 1] = 0;
+				positions[pBase + 2] = ez0;
+				positions[pBase + 3] = ex1;
+				positions[pBase + 4] = 0;
+				positions[pBase + 5] = ez1;
+				positions[pBase + 6] = ex1;
+				positions[pBase + 7] = 0;
+				positions[pBase + 8] = ez1;
+				positions[pBase + 9] = ex0;
+				positions[pBase + 10] = 0;
+				positions[pBase + 11] = ez0;
+				writeQuadIndices(sq);
+			}
+		}
+		const geometry = new three.BufferGeometry();
+		geometry.setAttribute("position", new three.BufferAttribute(positions, 3));
+		geometry.setAttribute("aDepth", new three.BufferAttribute(depths, 1));
+		geometry.setAttribute("aType", new three.BufferAttribute(types, 1));
+		geometry.setIndex(new three.BufferAttribute(indices, 1));
+		const palette = new Float32Array(MAX_PALETTE_SIZE * 3);
+		for (const [idStr, def] of Object.entries(fluidDefs)) {
+			const id = Number(idStr);
+			if (id <= 0 || id >= MAX_PALETTE_SIZE) continue;
+			palette[id * 3] = def.color[0];
+			palette[id * 3 + 1] = def.color[1];
+			palette[id * 3 + 2] = def.color[2];
+		}
+		const fogColor = new three.Color(options.fogColor ?? 0);
+		const material = new three.ShaderMaterial({
+			vertexShader: SURFACE_VERT,
+			fragmentShader: SURFACE_FRAG,
+			uniforms: {
+				uPalette: { value: palette },
+				uOpacity: { value: options.opacity ?? .85 },
+				uFogColor: { value: fogColor },
+				uFogNear: { value: options.fogNear ?? tileSize * 6 },
+				uFogFar: { value: options.fogFar ?? tileSize * 16 }
+			},
+			transparent: true,
+			depthWrite: false,
+			side: three.DoubleSide
+		});
+		const mesh = new three.Mesh(geometry, material);
+		renderer.scene.add(mesh);
+		const posAttr = geometry.getAttribute("position");
+		const depthAttr = geometry.getAttribute("aDepth");
+		const typeAttr = geometry.getAttribute("aType");
+		function surfaceY(i) {
+			return (field.floorElevation[i] + field.mass[i]) * worldUnitsPerStep;
+		}
+		function sync() {
+			for (let q = 0; q < quadCount; q++) {
+				const i = cellIndices[q];
+				const mass = field.mass[i];
+				const y = surfaceY(i);
+				const depth = Math.max(0, Math.min(1, mass / 1));
+				const type = mass > .01 ? field.cellType[i] : 0;
+				const vBase = q * 4;
+				for (let c = 0; c < 4; c++) {
+					posAttr.setY(vBase + c, y);
+					depthAttr.setX(vBase + c, depth);
+					typeAttr.setX(vBase + c, type);
+				}
+			}
+			for (let q = 0; q < quadCount; q++) {
+				const cn = cellNeighbors[q];
+				const i = cn.cellIndex;
+				const mass = field.mass[i];
+				const top = surfaceY(i);
+				const floorY = field.floorElevation[i] * worldUnitsPerStep;
+				const rawBottom = (nb) => nb < 0 ? floorY : surfaceY(nb);
+				const bN = rawBottom(cn.n);
+				const bS = rawBottom(cn.s);
+				const bW = rawBottom(cn.w);
+				const bE = rawBottom(cn.e);
+				const clampCorner = (v) => top - v < MIN_WALL_HEIGHT ? top : v;
+				const nw = clampCorner(Math.min(bN, bW));
+				const ne = clampCorner(Math.min(bN, bE));
+				const sw = clampCorner(Math.min(bS, bW));
+				const se = clampCorner(Math.min(bS, bE));
+				const depth = Math.max(0, Math.min(1, mass / 1));
+				const type = mass > .01 ? field.cellType[i] : 0;
+				const wallBottoms = [
+					[nw, ne],
+					[sw, se],
+					[nw, sw],
+					[ne, se]
+				];
+				for (let n = 0; n < 4; n++) {
+					const [leftBottom, rightBottom] = wallBottoms[n];
+					const vBase = (quadCount + q * 4 + n) * 4;
+					posAttr.setY(vBase + 0, top);
+					posAttr.setY(vBase + 1, top);
+					posAttr.setY(vBase + 2, rightBottom);
+					posAttr.setY(vBase + 3, leftBottom);
+					for (let c = 0; c < 4; c++) {
+						depthAttr.setX(vBase + c, depth);
+						typeAttr.setX(vBase + c, type);
+					}
+				}
+			}
+			posAttr.needsUpdate = true;
+			depthAttr.needsUpdate = true;
+			typeAttr.needsUpdate = true;
+		}
+		sync();
+		return {
+			mesh,
+			material,
+			sync,
+			remove() {
+				renderer.scene.remove(mesh);
+				geometry.dispose();
+				material.dispose();
+			}
+		};
+	}
+	//#endregion
+	exports.DEFAULT_STEP_HEIGHT = DEFAULT_STEP_HEIGHT;
 	exports.EASINGS = EASINGS;
+	exports.FLUID_VISIBLE_THRESHOLD = FLUID_VISIBLE_THRESHOLD;
 	exports.IS_BLOCKED = IS_BLOCKED;
 	exports.IS_LIGHT_PASSABLE = IS_LIGHT_PASSABLE;
 	exports.IS_WALKABLE = IS_WALKABLE;
+	exports.MAX_MASS = MAX_MASS;
 	exports.THEMES = THEMES;
 	exports.THEME_KEYS = THEME_KEYS;
 	exports.attachDecorator = attachDecorator;
@@ -9519,6 +10134,9 @@ void main() {
 	exports.createEntity = createEntity;
 	exports.createFactionRegistry = createFactionRegistry;
 	exports.createFactionRegistryFromTable = createFactionRegistryFromTable;
+	exports.createFluidField = createFluidField;
+	exports.createFluidMask = createFluidMask;
+	exports.createFluidSurface = createFluidSurface;
 	exports.createGame = createGame;
 	exports.createItem = createItem;
 	exports.createWebSocketTransport = createWebSocketTransport;
@@ -9532,6 +10150,9 @@ void main() {
 	exports.easeOutQuad = easeOutQuad;
 	exports.exportDungeonMap = exportDungeonMap;
 	exports.findDoorCandidates = findDoorCandidates;
+	exports.fluidCellAt = fluidCellAt;
+	exports.fluidDepthAt = fluidDepthAt;
+	exports.fluidFieldFromDungeon = fluidFieldFromDungeon;
 	exports.generateCellularDungeon = generateCellularDungeon;
 	exports.getTheme = getTheme;
 	exports.importDungeonMap = importDungeonMap;
@@ -9545,6 +10166,7 @@ void main() {
 	exports.loadTiledMap = loadTiledMap;
 	exports.makeRng = makeRng;
 	exports.packedAtlasResolver = packedAtlasResolver;
+	exports.placeFluidCircle = placeFluidCircle;
 	exports.registerTheme = registerTheme;
 	exports.resolveEasing = resolveEasing;
 	exports.resolveSprite = resolveSprite;
@@ -9557,7 +10179,9 @@ void main() {
 	exports.setSkyPanelCount = setSkyPanelCount;
 	exports.showInventory = showInventory;
 	exports.spriteToUvRect = spriteToUvRect;
+	exports.stepFluid = stepFluid;
 	exports.toFaceRotation = toFaceRotation;
+	exports.updateFluidMask = updateFluidMask;
 	exports.wallOffDoorGroup = wallOffDoorGroup;
 });
 
