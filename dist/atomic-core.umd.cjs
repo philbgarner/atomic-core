@@ -9579,17 +9579,29 @@ void main() {
 	}
 	function createFluidField(width, height, opts = {}) {
 		const size = width * height;
+		const isSolid = opts.isSolid ?? new Uint8Array(size);
 		return {
 			width,
 			height,
 			cellType: new Uint8Array(size),
 			mass: new Float32Array(size),
 			floorElevation: opts.floorElevation ?? new Float32Array(size),
-			isSolid: opts.isSolid ?? new Uint8Array(size),
+			isSolid,
 			version: 0,
 			accumulator: 0,
-			fastAccumulator: 0
+			fastAccumulator: 0,
+			openCells: computeOpenCells(isSolid),
+			scratch: new Float32Array(size)
 		};
+	}
+	/** Row-major indices of every non-solid cell — see `FluidField.openCells`. */
+	function computeOpenCells(isSolid) {
+		let count = 0;
+		for (let i = 0; i < isSolid.length; i++) if (!isSolid[i]) count++;
+		const openCells = new Int32Array(count);
+		let k = 0;
+		for (let i = 0; i < isSolid.length; i++) if (!isSolid[i]) openCells[k++] = i;
+		return openCells;
 	}
 	/**
 	* Builds a FluidField from a generated dungeon's raw per-cell textures —
@@ -9642,15 +9654,15 @@ void main() {
 		0
 	];
 	function stepFast(f) {
-		const { width, height, cellType, mass, floorElevation, isSolid } = f;
-		const size = width * height;
-		const newMass = mass.slice();
+		const { width, height, cellType, mass, floorElevation, isSolid, openCells, scratch } = f;
+		scratch.set(mass);
 		let changed = false;
-		for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) {
-			const i = z * width + x;
-			if (isSolid[i]) continue;
+		for (let k = 0; k < openCells.length; k++) {
+			const i = openCells[k];
 			const startMass = mass[i];
 			if (startMass <= MIN_MASS) continue;
+			const x = i % width;
+			const z = (i - x) / width;
 			const myType = cellType[i];
 			let remaining = startMass;
 			for (let n = 0; n < 4; n++) {
@@ -9667,27 +9679,27 @@ void main() {
 				const target = fastPassTarget(remaining + jMass, drop);
 				const flow = Math.min(Math.max(0, target - jMass), remaining, FAST_TRANSFER);
 				if (flow > MIN_FLOW) {
-					newMass[i] -= flow;
-					newMass[j] += flow;
+					scratch[i] -= flow;
+					scratch[j] += flow;
 					if (jMass <= MIN_MASS) cellType[j] = myType;
 					remaining -= flow;
 					changed = true;
 				}
 			}
 		}
-		finalize(f, newMass, size);
+		finalize(f, scratch);
 		return changed;
 	}
 	function stepLevel(f) {
-		const { width, height, cellType, mass, floorElevation, isSolid } = f;
-		const size = width * height;
-		const newMass = mass.slice();
+		const { width, height, cellType, mass, floorElevation, isSolid, openCells, scratch } = f;
+		scratch.set(mass);
 		let changed = false;
-		for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) {
-			const i = z * width + x;
-			if (isSolid[i]) continue;
+		for (let k = 0; k < openCells.length; k++) {
+			const i = openCells[k];
 			const startMass = mass[i];
 			if (startMass <= MIN_MASS) continue;
+			const x = i % width;
+			const z = (i - x) / width;
 			const myType = cellType[i];
 			let remaining = startMass;
 			for (let n = 0; n < 4; n++) {
@@ -9703,23 +9715,33 @@ void main() {
 				const delta = floorElevation[i] + remaining - (floorElevation[j] + jMass);
 				const flow = Math.min(Math.max(0, delta / 4), remaining, MAX_SPEED);
 				if (flow > MIN_FLOW) {
-					newMass[i] -= flow;
-					newMass[j] += flow;
+					scratch[i] -= flow;
+					scratch[j] += flow;
 					if (jMass <= MIN_MASS) cellType[j] = myType;
 					remaining -= flow;
 					changed = true;
 				}
 			}
 		}
-		finalize(f, newMass, size);
+		finalize(f, scratch);
 		return changed;
 	}
-	function finalize(f, newMass, size) {
-		for (let i = 0; i < size; i++) if (newMass[i] < MIN_MASS) {
-			newMass[i] = 0;
-			f.cellType[i] = 0;
+	/**
+	* Clamps sub-MIN_MASS results to a clean dry 0 and commits `newMass` into
+	* `f.mass`, writing each open cell directly rather than clamping into
+	* `newMass` and then bulk-copying it over `f.mass` — same result, one fewer
+	* full-array pass per tick (this runs up to 300x/sec via stepLevel alone).
+	*/
+	function finalize(f, newMass) {
+		const { openCells, cellType, mass } = f;
+		for (let k = 0; k < openCells.length; k++) {
+			const i = openCells[k];
+			const v = newMass[i];
+			if (v < MIN_MASS) {
+				mass[i] = 0;
+				cellType[i] = 0;
+			} else mass[i] = v;
 		}
-		f.mass.set(newMass);
 	}
 	/**
 	* Drains mass from thin, unpooled cells at a slow real-time rate — run once
@@ -9729,11 +9751,10 @@ void main() {
 	* frequency instead of wall-clock time).
 	*/
 	function evaporate(f, dt) {
-		const { mass, cellType, isSolid, width, height } = f;
-		const size = width * height;
+		const { mass, cellType, openCells } = f;
 		let changed = false;
-		for (let i = 0; i < size; i++) {
-			if (isSolid[i]) continue;
+		for (let k = 0; k < openCells.length; k++) {
+			const i = openCells[k];
 			const m = mass[i];
 			if (m <= 0 || m >= EVAPORATE_THRESHOLD) continue;
 			const next = m - EVAPORATE_RATE * dt;

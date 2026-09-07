@@ -71,6 +71,22 @@ export interface FluidField {
   accumulator: number;
   /** Seconds of unspent time toward the next fast steep-drop tick. */
   fastAccumulator: number;
+  /**
+   * Engine-owned bookkeeping, not part of the public simulation API — do not
+   * read or mutate. Row-major indices of non-solid cells, computed once at
+   * construction so the fast/damped passes (run up to 300x/sec) can skip
+   * solid cells without re-checking `isSolid` for every cell on every tick.
+   * Stays valid only as long as `isSolid` itself is never mutated after
+   * creation (true of every constructor below; there is no public API for
+   * changing which cells are solid on a live field).
+   */
+  openCells: Int32Array;
+  /**
+   * Engine-owned bookkeeping, not part of the public simulation API — do not
+   * read or mutate. Reused double-buffer for the fast/damped passes, so they
+   * don't allocate a fresh `Float32Array` on every one of up to 300 ticks/sec.
+   */
+  scratch: Float32Array;
 }
 
 export interface FluidDef {
@@ -183,17 +199,30 @@ export interface CreateFluidFieldOptions {
 
 export function createFluidField(width: number, height: number, opts: CreateFluidFieldOptions = {}): FluidField {
   const size = width * height;
+  const isSolid = opts.isSolid ?? new Uint8Array(size);
   return {
     width,
     height,
     cellType: new Uint8Array(size),
     mass: new Float32Array(size),
     floorElevation: opts.floorElevation ?? new Float32Array(size),
-    isSolid: opts.isSolid ?? new Uint8Array(size),
+    isSolid,
     version: 0,
     accumulator: 0,
     fastAccumulator: 0,
+    openCells: computeOpenCells(isSolid),
+    scratch: new Float32Array(size),
   };
+}
+
+/** Row-major indices of every non-solid cell — see `FluidField.openCells`. */
+function computeOpenCells(isSolid: Uint8Array): Int32Array {
+  let count = 0;
+  for (let i = 0; i < isSolid.length; i++) if (!isSolid[i]) count++;
+  const openCells = new Int32Array(count);
+  let k = 0;
+  for (let i = 0; i < isSolid.length; i++) if (!isSolid[i]) openCells[k++] = i;
+  return openCells;
 }
 
 /**
@@ -244,112 +273,118 @@ const NEIGHBOR_DZ = [-1, 1, 0, 0];
 // ─── Fast pass (steep drop) ──────────────────────────────────────────────
 
 function stepFast(f: FluidField): boolean {
-  const { width, height, cellType, mass, floorElevation, isSolid } = f;
-  const size = width * height;
-  const newMass = mass.slice();
+  const { width, height, cellType, mass, floorElevation, isSolid, openCells, scratch } = f;
+  scratch.set(mass);
   let changed = false;
 
-  for (let z = 0; z < height; z++) {
-    for (let x = 0; x < width; x++) {
-      const i = z * width + x;
-      if (isSolid[i]) continue;
-      const startMass = mass[i]!;
-      if (startMass <= MIN_MASS) continue;
-      const myType = cellType[i]!;
-      let remaining = startMass;
+  for (let k = 0; k < openCells.length; k++) {
+    const i = openCells[k]!;
+    const startMass = mass[i]!;
+    if (startMass <= MIN_MASS) continue;
+    const x = i % width;
+    const z = (i - x) / width;
+    const myType = cellType[i]!;
+    let remaining = startMass;
 
-      for (let n = 0; n < 4; n++) {
-        if (remaining <= MIN_MASS) break;
-        const nx = x + NEIGHBOR_DX[n]!;
-        const nz = z + NEIGHBOR_DZ[n]!;
-        if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
-        const j = nz * width + nx;
-        if (isSolid[j]) continue;
-        const jMass = mass[j]!;
-        if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
+    for (let n = 0; n < 4; n++) {
+      if (remaining <= MIN_MASS) break;
+      const nx = x + NEIGHBOR_DX[n]!;
+      const nz = z + NEIGHBOR_DZ[n]!;
+      if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
+      const j = nz * width + nx;
+      if (isSolid[j]) continue;
+      const jMass = mass[j]!;
+      if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
 
-        // Gate on the *structural* elevation difference alone, not the
-        // combined surfaceHeight (elevation + mass) — otherwise a full cell
-        // next to an empty same-elevation neighbor also reads as "steep"
-        // (remaining alone can reach the threshold), incorrectly fast-falling
-        // sideways across flat ground instead of leaving lateral spreading to
-        // the damped pass below.
-        const drop = floorElevation[i]! - floorElevation[j]!;
-        if (drop < STEEP_DROP_THRESHOLD) continue;
+      // Gate on the *structural* elevation difference alone, not the
+      // combined surfaceHeight (elevation + mass) — otherwise a full cell
+      // next to an empty same-elevation neighbor also reads as "steep"
+      // (remaining alone can reach the threshold), incorrectly fast-falling
+      // sideways across flat ground instead of leaving lateral spreading to
+      // the damped pass below.
+      const drop = floorElevation[i]! - floorElevation[j]!;
+      if (drop < STEEP_DROP_THRESHOLD) continue;
 
-        const target = fastPassTarget(remaining + jMass, drop);
-        const flow = Math.min(Math.max(0, target - jMass), remaining, FAST_TRANSFER);
-        if (flow > MIN_FLOW) {
-          newMass[i]! -= flow;
-          newMass[j]! += flow;
-          if (jMass <= MIN_MASS) cellType[j] = myType;
-          remaining -= flow;
-          changed = true;
-        }
+      const target = fastPassTarget(remaining + jMass, drop);
+      const flow = Math.min(Math.max(0, target - jMass), remaining, FAST_TRANSFER);
+      if (flow > MIN_FLOW) {
+        scratch[i]! -= flow;
+        scratch[j]! += flow;
+        if (jMass <= MIN_MASS) cellType[j] = myType;
+        remaining -= flow;
+        changed = true;
       }
     }
   }
 
-  finalize(f, newMass, size);
+  finalize(f, scratch);
   return changed;
 }
 
 // ─── Damped pass (leveling) ──────────────────────────────────────────────
 
 function stepLevel(f: FluidField): boolean {
-  const { width, height, cellType, mass, floorElevation, isSolid } = f;
-  const size = width * height;
-  const newMass = mass.slice();
+  const { width, height, cellType, mass, floorElevation, isSolid, openCells, scratch } = f;
+  scratch.set(mass);
   let changed = false;
 
-  for (let z = 0; z < height; z++) {
-    for (let x = 0; x < width; x++) {
-      const i = z * width + x;
-      if (isSolid[i]) continue;
-      const startMass = mass[i]!;
-      if (startMass <= MIN_MASS) continue;
-      const myType = cellType[i]!;
-      let remaining = startMass;
+  for (let k = 0; k < openCells.length; k++) {
+    const i = openCells[k]!;
+    const startMass = mass[i]!;
+    if (startMass <= MIN_MASS) continue;
+    const x = i % width;
+    const z = (i - x) / width;
+    const myType = cellType[i]!;
+    let remaining = startMass;
 
-      for (let n = 0; n < 4; n++) {
-        if (remaining <= MIN_MASS) break;
-        const nx = x + NEIGHBOR_DX[n]!;
-        const nz = z + NEIGHBOR_DZ[n]!;
-        if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
-        const j = nz * width + nx;
-        if (isSolid[j]) continue;
-        const jMass = mass[j]!;
-        if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
+    for (let n = 0; n < 4; n++) {
+      if (remaining <= MIN_MASS) break;
+      const nx = x + NEIGHBOR_DX[n]!;
+      const nz = z + NEIGHBOR_DZ[n]!;
+      if (nx < 0 || nx >= width || nz < 0 || nz >= height) continue;
+      const j = nz * width + nx;
+      if (isSolid[j]) continue;
+      const jMass = mass[j]!;
+      if (!(cellType[j] === myType || jMass <= MIN_MASS)) continue;
 
-        // Steep structural drops are the fast pass's job — see stepFast's
-        // comment on why this must gate on elevation alone, not surfaceHeight.
-        if (floorElevation[i]! - floorElevation[j]! >= STEEP_DROP_THRESHOLD) continue;
+      // Steep structural drops are the fast pass's job — see stepFast's
+      // comment on why this must gate on elevation alone, not surfaceHeight.
+      if (floorElevation[i]! - floorElevation[j]! >= STEEP_DROP_THRESHOLD) continue;
 
-        const delta = floorElevation[i]! + remaining - (floorElevation[j]! + jMass);
-        const flow = Math.min(Math.max(0, delta / 4), remaining, MAX_SPEED);
-        if (flow > MIN_FLOW) {
-          newMass[i]! -= flow;
-          newMass[j]! += flow;
-          if (jMass <= MIN_MASS) cellType[j] = myType;
-          remaining -= flow;
-          changed = true;
-        }
+      const delta = floorElevation[i]! + remaining - (floorElevation[j]! + jMass);
+      const flow = Math.min(Math.max(0, delta / 4), remaining, MAX_SPEED);
+      if (flow > MIN_FLOW) {
+        scratch[i]! -= flow;
+        scratch[j]! += flow;
+        if (jMass <= MIN_MASS) cellType[j] = myType;
+        remaining -= flow;
+        changed = true;
       }
     }
   }
 
-  finalize(f, newMass, size);
+  finalize(f, scratch);
   return changed;
 }
 
-function finalize(f: FluidField, newMass: Float32Array, size: number): void {
-  for (let i = 0; i < size; i++) {
-    if (newMass[i]! < MIN_MASS) {
-      newMass[i] = 0;
-      f.cellType[i] = 0;
+/**
+ * Clamps sub-MIN_MASS results to a clean dry 0 and commits `newMass` into
+ * `f.mass`, writing each open cell directly rather than clamping into
+ * `newMass` and then bulk-copying it over `f.mass` — same result, one fewer
+ * full-array pass per tick (this runs up to 300x/sec via stepLevel alone).
+ */
+function finalize(f: FluidField, newMass: Float32Array): void {
+  const { openCells, cellType, mass } = f;
+  for (let k = 0; k < openCells.length; k++) {
+    const i = openCells[k]!;
+    const v = newMass[i]!;
+    if (v < MIN_MASS) {
+      mass[i] = 0;
+      cellType[i] = 0;
+    } else {
+      mass[i] = v;
     }
   }
-  f.mass.set(newMass);
 }
 
 // ─── Evaporation ─────────────────────────────────────────────────────────
@@ -362,12 +397,11 @@ function finalize(f: FluidField, newMass: Float32Array, size: number): void {
  * frequency instead of wall-clock time).
  */
 function evaporate(f: FluidField, dt: number): boolean {
-  const { mass, cellType, isSolid, width, height } = f;
-  const size = width * height;
+  const { mass, cellType, openCells } = f;
   let changed = false;
 
-  for (let i = 0; i < size; i++) {
-    if (isSolid[i]) continue;
+  for (let k = 0; k < openCells.length; k++) {
+    const i = openCells[k]!;
     const m = mass[i]!;
     if (m <= 0 || m >= EVAPORATE_THRESHOLD) continue;
 

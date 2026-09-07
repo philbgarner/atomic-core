@@ -23,6 +23,22 @@ export interface FluidField {
     accumulator: number;
     /** Seconds of unspent time toward the next fast steep-drop tick. */
     fastAccumulator: number;
+    /**
+     * Engine-owned bookkeeping, not part of the public simulation API — do not
+     * read or mutate. Row-major indices of non-solid cells, computed once at
+     * construction so the fast/damped passes (run up to 300x/sec) can skip
+     * solid cells without re-checking `isSolid` for every cell on every tick.
+     * Stays valid only as long as `isSolid` itself is never mutated after
+     * creation (true of every constructor below; there is no public API for
+     * changing which cells are solid on a live field).
+     */
+    openCells: Int32Array;
+    /**
+     * Engine-owned bookkeeping, not part of the public simulation API — do not
+     * read or mutate. Reused double-buffer for the fast/damped passes, so they
+     * don't allocate a fresh `Float32Array` on every one of up to 300 ticks/sec.
+     */
+    scratch: Float32Array;
 }
 export interface FluidDef {
     /** Display name, e.g. for a HUD/tooltip. */
