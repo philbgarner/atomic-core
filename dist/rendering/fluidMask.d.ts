@@ -48,6 +48,13 @@ export interface FluidSurfaceHandle {
     material: THREE.ShaderMaterial;
     /** Recomputes vertex height/depth/type from the field's current state. Call once per frame after `stepFluid`. */
     sync(): void;
+    /**
+     * Updates a fluid type's refractionIndex/opacity/glowColor/glowIntensity
+     * uniforms live, with no geometry rebuild — e.g. for a property-panel slider.
+     * Omitted fields keep their current value. Ids outside [1, 15] are ignored,
+     * matching the palette's own range limit.
+     */
+    setFluidProperty(typeId: number, patch: Partial<Pick<FluidDef, "refractionIndex" | "opacity" | "glowColor" | "glowIntensity">>): void;
     /** Removes the mesh from the scene and disposes its geometry/material. */
     remove(): void;
 }

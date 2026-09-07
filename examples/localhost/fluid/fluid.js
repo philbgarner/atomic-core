@@ -31,6 +31,14 @@ const logEl = document.getElementById("log");
 const hpEl = document.getElementById("hp");
 const turnEl = document.getElementById("turn");
 const posEl = document.getElementById("pos");
+const fluidTypeSelectEl = document.getElementById("fluid-type-select");
+const refractionSliderEl = document.getElementById("refraction-slider");
+const refractionValueEl = document.getElementById("refraction-value");
+const opacitySliderEl = document.getElementById("opacity-slider");
+const opacityValueEl = document.getElementById("opacity-value");
+const glowIntensitySliderEl = document.getElementById("glow-intensity-slider");
+const glowIntensityValueEl = document.getElementById("glow-intensity-value");
+const glowColorPickerEl = document.getElementById("glow-color-picker");
 
 // ---------------------------------------------------------------------------
 // Create game
@@ -75,6 +83,16 @@ let renderer;
 let fluidField = null;
 let fluidSurface = null;
 let prepared = false;
+
+// Mirrors the refractionIndex/opacity/glowColor/glowIntensity uniforms the
+// property panel below edits, keyed by fluidDefs id. Lava starts glowing to
+// read as dangerous immediately; water gets a mild default shimmer. Kept
+// here (rather than read back from fluidSurface, which has no getter) so
+// the panel can show a fluid's current values when the <select> switches.
+const fluidProps = {
+  1: { refractionIndex: 0.6, opacity: 0.85, glowColor: [0, 0, 0], glowIntensity: 0 },
+  2: { refractionIndex: 0.3, opacity: 0.95, glowColor: [1, 0.35, 0.05], glowIntensity: 0.8 },
+};
 
 game.events.on("turn", () => {
   if (prepared) return;
@@ -125,8 +143,8 @@ game.events.on("turn", () => {
   fluidSurface = createFluidSurface(renderer, fluidField, {
     tileSize: TILE_SIZE,
     fluidDefs: {
-      1: { name: "Water", color: [0.2, 0.45, 0.9], density: 2 },
-      2: { name: "Lava", color: [0.95, 0.35, 0.08], density: 3 },
+      1: { name: "Water", color: [0.2, 0.45, 0.9], density: 2, ...fluidProps[1] },
+      2: { name: "Lava", color: [0.95, 0.35, 0.08], density: 3, ...fluidProps[2] },
     },
   });
 
@@ -290,3 +308,72 @@ function updateStats() {
   hpEl.textContent = `${game.player.hp} / ${game.player.maxHp}`;
   posEl.textContent = `${game.player.x}, ${game.player.z}`;
 }
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b];
+}
+
+function rgbToHex([r, g, b]) {
+  const c = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Fluid property panel — refraction index / opacity / glow colour+intensity,
+// live-editable per fluid type via fluidSurface.setFluidProperty(). See the
+// fluidProps state above for defaults; the <select> just switches which
+// entry the sliders below read from and write to.
+// ---------------------------------------------------------------------------
+
+function selectedFluidType() {
+  return Number(fluidTypeSelectEl.value);
+}
+
+function refreshFluidPanel() {
+  const props = fluidProps[selectedFluidType()];
+  refractionSliderEl.value = props.refractionIndex;
+  refractionValueEl.textContent = props.refractionIndex.toFixed(2);
+  opacitySliderEl.value = props.opacity;
+  opacityValueEl.textContent = props.opacity.toFixed(2);
+  glowIntensitySliderEl.value = props.glowIntensity;
+  glowIntensityValueEl.textContent = props.glowIntensity.toFixed(2);
+  glowColorPickerEl.value = rgbToHex(props.glowColor);
+}
+
+fluidTypeSelectEl.addEventListener("input", refreshFluidPanel);
+
+refractionSliderEl.addEventListener("input", () => {
+  const v = parseFloat(refractionSliderEl.value);
+  refractionValueEl.textContent = v.toFixed(2);
+  const props = fluidProps[selectedFluidType()];
+  props.refractionIndex = v;
+  fluidSurface?.setFluidProperty(selectedFluidType(), { refractionIndex: v });
+});
+
+opacitySliderEl.addEventListener("input", () => {
+  const v = parseFloat(opacitySliderEl.value);
+  opacityValueEl.textContent = v.toFixed(2);
+  const props = fluidProps[selectedFluidType()];
+  props.opacity = v;
+  fluidSurface?.setFluidProperty(selectedFluidType(), { opacity: v });
+});
+
+glowIntensitySliderEl.addEventListener("input", () => {
+  const v = parseFloat(glowIntensitySliderEl.value);
+  glowIntensityValueEl.textContent = v.toFixed(2);
+  const props = fluidProps[selectedFluidType()];
+  props.glowIntensity = v;
+  fluidSurface?.setFluidProperty(selectedFluidType(), { glowIntensity: v });
+});
+
+glowColorPickerEl.addEventListener("input", () => {
+  const rgb = hexToRgb(glowColorPickerEl.value);
+  const props = fluidProps[selectedFluidType()];
+  props.glowColor = rgb;
+  fluidSurface?.setFluidProperty(selectedFluidType(), { glowColor: rgb });
+});
+
+refreshFluidPanel();

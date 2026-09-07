@@ -16,10 +16,14 @@
 // approach tried here and produced garbage geometry on a software/headless
 // GL backend; per-vertex attributes need no VTF support at all and are the
 // standard, portable way to drive small per-cell displacement in three.js.
-// One quad per cell (not a shared-vertex grid) also gives the surface a
-// blocky, stair-stepped look between differently-elevated neighbors, which
-// reads well for this CA's inherently discrete cells. Added straight to
-// `renderer.scene` rather than built on `addLayer`/`LayerSpec` — that API
+// One quad per cell (not a shared-vertex grid) keeps per-cell attributes
+// (depth/type) simple, but would stair-step at differently-elevated
+// same-type neighbors if each quad used one flat height — sync() avoids
+// that by averaging each corner with whichever neighbors share that grid
+// point and hold the same fluid type (see cornerHeight()), so connected
+// cells' shared corners land on the same Y without needing a real shared-
+// vertex mesh. Added straight to `renderer.scene` rather than built on
+// `addLayer`/`LayerSpec` — that API
 // instances per tile-face geometry, which doesn't fit a continuously
 // updated fluid surface any better than it fits camera-facing billboards
 // (see billboardSprites.ts, which hand-rolls its own ShaderMaterial for the
@@ -130,10 +134,12 @@ attribute float aType;
 varying float vDepth;
 varying float vType;
 varying float vFogDist;
+varying vec3 vWorldPos;
 
 void main() {
   vDepth = aDepth;
   vType = aType;
+  vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   vec4 eyePos = modelViewMatrix * vec4(position, 1.0);
   vFogDist = length(eyePos.xyz);
   gl_Position = projectionMatrix * eyePos;
@@ -142,21 +148,40 @@ void main() {
 
 const SURFACE_FRAG = /* glsl */ `
 uniform vec3 uPalette[${MAX_PALETTE_SIZE}];
-uniform float uOpacity;
+uniform float uOpacityPalette[${MAX_PALETTE_SIZE}];
+uniform float uRefraction[${MAX_PALETTE_SIZE}];
+uniform vec3 uGlowColor[${MAX_PALETTE_SIZE}];
+uniform float uGlowIntensity[${MAX_PALETTE_SIZE}];
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+// vDepth is real world-space water depth (see fluidMask.ts's sync()), not a
+// 0-1 fraction — these two convert it into a visibility cutoff and an alpha
+// saturation distance in those same world units.
+uniform float uMinVisibleDepth;
+uniform float uOpacityDepth;
 
 varying float vDepth;
 varying float vType;
 varying float vFogDist;
+varying vec3 vWorldPos;
 
 void main() {
-  if (vDepth < 0.02) discard;
-  vec3 color = uPalette[int(vType + 0.5)];
+  if (vDepth < uMinVisibleDepth) discard;
+  int type = int(vType + 0.5);
+  vec3 color = uPalette[type];
+
+  // Cheap stand-in for "looking through wavy water": no scene capture/
+  // render-to-texture pass exists in this renderer, so this fakes the look
+  // with a fixed spatial brightness ripple (position-driven, not animated)
+  // rather than truly distorting whatever's behind the surface.
+  float ripple = sin(vWorldPos.x * 2.1 + vWorldPos.z * 1.7)
+               + sin(vWorldPos.x * 0.9 - vWorldPos.z * 2.3);
+  color *= 1.0 + ripple * 0.075 * uRefraction[type];
+  color += uGlowColor[type] * uGlowIntensity[type];
 
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
-  float alpha = clamp(vDepth * 1.5, 0.0, 1.0) * uOpacity;
+  float alpha = clamp(vDepth / uOpacityDepth, 0.0, 1.0) * uOpacityPalette[type];
   gl_FragColor = vec4(mix(color, uFogColor, fogFactor), alpha);
 }
 `;
@@ -193,6 +218,18 @@ export interface FluidSurfaceHandle {
   material: THREE.ShaderMaterial;
   /** Recomputes vertex height/depth/type from the field's current state. Call once per frame after `stepFluid`. */
   sync(): void;
+  /**
+   * Updates a fluid type's refractionIndex/opacity/glowColor/glowIntensity
+   * uniforms live, with no geometry rebuild — e.g. for a property-panel slider.
+   * Omitted fields keep their current value. Ids outside [1, 15] are ignored,
+   * matching the palette's own range limit.
+   */
+  setFluidProperty(
+    typeId: number,
+    patch: Partial<
+      Pick<FluidDef, "refractionIndex" | "opacity" | "glowColor" | "glowIntensity">
+    >,
+  ): void;
   /** Removes the mesh from the scene and disposes its geometry/material. */
   remove(): void;
 }
@@ -202,10 +239,14 @@ const NEIGHBOR_DX = [0, 0, -1, 1];
 const NEIGHBOR_DZ = [-1, 1, 0, 0];
 
 /**
- * A cell's 4 neighbor indices (N, S, W, E order, matching NEIGHBOR_DX/DZ),
- * -1 for solid/off-grid. Every open cell gets exactly 4 wall-quad slots
- * (one per direction, always allocated — see file header); their vertex
- * Y values are computed from these at sync() time, corner-aware (see there).
+ * A cell's 4 edge-neighbor indices (N, S, W, E order, matching
+ * NEIGHBOR_DX/DZ) plus its 4 diagonal neighbor indices, -1 for solid/off-grid.
+ * Every open cell gets exactly 4 wall-quad slots (one per direction, always
+ * allocated — see file header); their vertex Y values are computed from
+ * these at sync() time, corner-aware (see there). The diagonals exist only
+ * to let sync() average a top-quad corner across every cell that meets at
+ * that grid point, so two connected same-type cells' shared corner lines up
+ * exactly instead of stair-stepping.
  */
 interface CellNeighbors {
   cellIndex: number;
@@ -213,6 +254,10 @@ interface CellNeighbors {
   s: number;
   w: number;
   e: number;
+  nw: number;
+  ne: number;
+  sw: number;
+  se: number;
 }
 
 /**
@@ -259,19 +304,31 @@ export function createFluidSurface(
   // whenever there's nothing to show, so allocating it unconditionally costs
   // nothing when unused.
   const cellNeighbors: CellNeighbors[] = new Array(quadCount);
+  const neighborAt = (x: number, z: number): number => {
+    const outOfBounds = x < 0 || x >= width || z < 0 || z >= height;
+    if (outOfBounds) return -1;
+    const j = z * width + x;
+    return field.isSolid[j] === 1 ? -1 : j;
+  };
   for (let q = 0; q < quadCount; q++) {
     const i = cellIndices[q]!;
     const x = i % width;
     const z = (i - x) / width;
     const n4: number[] = [];
     for (let n = 0; n < 4; n++) {
-      const nx = x + NEIGHBOR_DX[n]!;
-      const nz = z + NEIGHBOR_DZ[n]!;
-      const outOfBounds = nx < 0 || nx >= width || nz < 0 || nz >= height;
-      const j = outOfBounds ? -1 : nz * width + nx;
-      n4.push(outOfBounds || field.isSolid[j] === 1 ? -1 : j);
+      n4.push(neighborAt(x + NEIGHBOR_DX[n]!, z + NEIGHBOR_DZ[n]!));
     }
-    cellNeighbors[q] = { cellIndex: i, n: n4[0]!, s: n4[1]!, w: n4[2]!, e: n4[3]! };
+    cellNeighbors[q] = {
+      cellIndex: i,
+      n: n4[0]!,
+      s: n4[1]!,
+      w: n4[2]!,
+      e: n4[3]!,
+      nw: neighborAt(x - 1, z - 1),
+      ne: neighborAt(x + 1, z - 1),
+      sw: neighborAt(x - 1, z + 1),
+      se: neighborAt(x + 1, z + 1),
+    };
   }
   const sideCount = quadCount * 4;
   const totalQuads = quadCount + sideCount;
@@ -367,13 +424,25 @@ export function createFluidSurface(
   geometry.setAttribute("aType", new THREE.BufferAttribute(types, 1));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
+  const defaultOpacity = options.opacity ?? 0.85;
   const palette = new Float32Array(MAX_PALETTE_SIZE * 3);
+  const opacityPalette = new Float32Array(MAX_PALETTE_SIZE).fill(defaultOpacity);
+  const refractionPalette = new Float32Array(MAX_PALETTE_SIZE);
+  const glowColorPalette = new Float32Array(MAX_PALETTE_SIZE * 3);
+  const glowIntensityPalette = new Float32Array(MAX_PALETTE_SIZE);
   for (const [idStr, def] of Object.entries(fluidDefs)) {
     const id = Number(idStr);
     if (id <= 0 || id >= MAX_PALETTE_SIZE) continue;
     palette[id * 3] = def.color[0];
     palette[id * 3 + 1] = def.color[1];
     palette[id * 3 + 2] = def.color[2];
+    opacityPalette[id] = def.opacity ?? defaultOpacity;
+    refractionPalette[id] = def.refractionIndex ?? 0;
+    const glow = def.glowColor ?? [0, 0, 0];
+    glowColorPalette[id * 3] = glow[0];
+    glowColorPalette[id * 3 + 1] = glow[1];
+    glowColorPalette[id * 3 + 2] = glow[2];
+    glowIntensityPalette[id] = def.glowIntensity ?? 0;
   }
 
   const fogColor = new THREE.Color(options.fogColor ?? 0x000000);
@@ -383,10 +452,22 @@ export function createFluidSurface(
     fragmentShader: SURFACE_FRAG,
     uniforms: {
       uPalette: { value: palette },
-      uOpacity: { value: options.opacity ?? 0.85 },
+      uOpacityPalette: { value: opacityPalette },
+      uRefraction: { value: refractionPalette },
+      uGlowColor: { value: glowColorPalette },
+      uGlowIntensity: { value: glowIntensityPalette },
       uFogColor: { value: fogColor },
       uFogNear: { value: options.fogNear ?? tileSize * 6 },
       uFogFar: { value: options.fogFar ?? tileSize * 16 },
+      // World-space depth thresholds (see SURFACE_FRAG) — scaled off
+      // worldUnitsPerStep rather than hardcoded so they stay meaningful
+      // regardless of a field's chosen world scale. A shallow sliver right
+      // at FLUID_VISIBLE_THRESHOLD's own mass cutoff is invisible either
+      // way; a modest fraction of one elevation step of real depth already
+      // reads as fully opaque, matching how deep a typical pour or settled
+      // shoreline actually gets.
+      uMinVisibleDepth: { value: FLUID_VISIBLE_THRESHOLD * worldUnitsPerStep },
+      uOpacityDepth: { value: worldUnitsPerStep * 0.3 },
     },
     transparent: true,
     depthWrite: false,
@@ -404,74 +485,124 @@ export function createFluidSurface(
     return (field.floorElevation[i]! + field.mass[i]!) * worldUnitsPerStep;
   }
 
-  function sync(): void {
-    for (let q = 0; q < quadCount; q++) {
-      const i = cellIndices[q]!;
-      const mass = field.mass[i]!;
-      const y = surfaceY(i);
-      const depth = Math.max(0, Math.min(1, mass / MAX_MASS));
-      const type = mass > FLUID_VISIBLE_THRESHOLD ? field.cellType[i]! : 0;
-
-      const vBase = q * 4;
-      for (let c = 0; c < 4; c++) {
-        posAttr.setY(vBase + c, y);
-        depthAttr.setX(vBase + c, depth);
-        typeAttr.setX(vBase + c, type);
+  // A grid corner is shared by up to 4 cells (this cell plus its two
+  // adjacent edge-neighbors and their shared diagonal). Averaging this
+  // cell's own height with whichever of those are "compatible" — present
+  // and holding the same fluid type (0 counts as "dry", so two dry cells
+  // are compatible too) — is what lets two connected same-type cells' shared
+  // corner land on one Y instead of stair-stepping, while a real dry/solid/
+  // different-fluid boundary (no compatible neighbor) still falls back to
+  // this cell's own flat height, same as before.
+  function cornerHeight(selfIdx: number, edgeA: number, edgeB: number, diag: number): number {
+    const myType = field.cellType[selfIdx]!;
+    let sum = surfaceY(selfIdx);
+    let count = 1;
+    for (const idx of [edgeA, edgeB, diag]) {
+      if (idx >= 0 && field.cellType[idx] === myType) {
+        sum += surfaceY(idx);
+        count++;
       }
     }
+    return sum / count;
+  }
 
+  function sync(): void {
     for (let q = 0; q < quadCount; q++) {
       const cn = cellNeighbors[q]!;
       const i = cn.cellIndex;
       const mass = field.mass[i]!;
-      const top = surfaceY(i);
-      // Solid/off-grid neighbor: wall goes down to this cell's own bare
-      // floor. Open neighbor: down to its current surface, so a dry pit
-      // wall shows its bare floor and a partly-filled one shows the real
-      // step between the two water levels.
+      // World-space depth, not a mass/MAX_MASS percentage: a basin's shallow
+      // shoreline cells legitimately hold less mass than its deep center
+      // even once fully settled (mass *is* the real depth above that cell's
+      // own floor — see fluid.ts), so normalizing against the fixed MAX_MASS
+      // cap made shoreline opacity track the underlying floor's shape rather
+      // than the (already flat) water surface, reading as an unleveled tilt.
+      // Raw world depth varies the same way near any shoreline regardless of
+      // the basin around it, so a level surface reads uniformly opaque.
+      const depth = Math.max(0, mass) * worldUnitsPerStep;
+      const type = mass > FLUID_VISIBLE_THRESHOLD ? field.cellType[i]! : 0;
+
+      // Reused below as both the top quad's own corners and the top edge of
+      // the walls that share those same corners, so the walls follow the
+      // same slope as the (now smoothed) top surface.
+      const nw = cornerHeight(i, cn.n, cn.w, cn.nw);
+      const ne = cornerHeight(i, cn.n, cn.e, cn.ne);
+      const sw = cornerHeight(i, cn.s, cn.w, cn.sw);
+      const se = cornerHeight(i, cn.s, cn.e, cn.se);
+
+      const vBase = q * 4;
+      posAttr.setY(vBase + 0, nw);
+      posAttr.setY(vBase + 1, ne);
+      posAttr.setY(vBase + 2, se);
+      posAttr.setY(vBase + 3, sw);
+      for (let c = 0; c < 4; c++) {
+        depthAttr.setX(vBase + c, depth);
+        typeAttr.setX(vBase + c, type);
+      }
+
+      // A same-type open neighbor is already bridged seamlessly by the
+      // smoothed top surface above (both cells average that shared corner
+      // to the same value) — a wall there would just be a stray vertical
+      // seam visible through the transparent surface, e.g. the internal
+      // rings of a stepped pool. Only a genuine boundary — solid/off-grid,
+      // or a different fluid type that never levels with this one — still
+      // needs one: down to this cell's own bare floor for solid/off-grid,
+      // or down to the neighbor's current surface for a different type, so
+      // a dry pit wall shows its bare floor and a foreign-fluid wall shows
+      // the real step between the two surfaces. `null` marks "no wall
+      // needed from this edge" for the corner logic below.
       const floorY = field.floorElevation[i]! * worldUnitsPerStep;
-      const rawBottom = (nb: number): number => (nb < 0 ? floorY : surfaceY(nb));
-      const bN = rawBottom(cn.n);
-      const bS = rawBottom(cn.s);
-      const bW = rawBottom(cn.w);
-      const bE = rawBottom(cn.e);
+      const myType = field.cellType[i]!;
+      const edgeBottom = (nb: number): number | null => {
+        if (nb < 0) return floorY;
+        if (field.cellType[nb] === myType) return null;
+        return surfaceY(nb);
+      };
+      const rN = edgeBottom(cn.n);
+      const rS = edgeBottom(cn.s);
+      const rW = edgeBottom(cn.w);
+      const rE = edgeBottom(cn.e);
 
       // Each of a cell's 4 corners is shared by the two walls that meet
       // there (e.g. NW is shared by the north and west walls) — computing
-      // it once here, from both of that corner's contributing neighbors,
-      // and reusing the same value for both walls' vertex at that point is
-      // what keeps them meeting exactly instead of leaving a crack where
-      // two independently-computed bottoms disagree. Take the lower of the
-      // two contributing neighbors so the corner extends down far enough to
-      // close the gap against both.
-      const clampCorner = (v: number): number => (top - v < MIN_WALL_HEIGHT ? top : v);
-      const nw = clampCorner(Math.min(bN, bW));
-      const ne = clampCorner(Math.min(bN, bE));
-      const sw = clampCorner(Math.min(bS, bW));
-      const se = clampCorner(Math.min(bS, bE));
+      // it once here, from whichever of that corner's two contributing
+      // edges actually need a wall, and reusing the same value for both
+      // walls' vertex at that point is what keeps them meeting exactly
+      // instead of leaving a crack where two independently-computed bottoms
+      // disagree. Take the lower of the two (when both need one) so the
+      // corner extends down far enough to close the gap against both; when
+      // neither edge needs a wall, the corner just stays at its own top
+      // (zero height, fully collapsed). Clamped against this corner's own
+      // (possibly sloped) top the same way as before.
+      const cornerBottom = (top: number, a: number | null, b: number | null): number => {
+        if (a === null && b === null) return top;
+        const v = a === null ? b! : b === null ? a : Math.min(a, b);
+        return top - v < MIN_WALL_HEIGHT ? top : v;
+      };
+      const bNW = cornerBottom(nw, rN, rW);
+      const bNE = cornerBottom(ne, rN, rE);
+      const bSW = cornerBottom(sw, rS, rW);
+      const bSE = cornerBottom(se, rS, rE);
 
-      const depth = Math.max(0, Math.min(1, mass / MAX_MASS));
-      const type = mass > FLUID_VISIBLE_THRESHOLD ? field.cellType[i]! : 0;
-
-      // [leftBottom, rightBottom] per direction, matching the edge/vertex
-      // layout above (vertex0/3 at the edge's first point, vertex1/2 at its second).
-      const wallBottoms: [number, number][] = [
-        [nw, ne], // north
-        [sw, se], // south
-        [nw, sw], // west
-        [ne, se], // east
+      // [topLeft, topRight, bottomRight, bottomLeft] per direction, matching
+      // the edge/vertex layout above and sharing corners with the top quad.
+      const wallCorners: [number, number, number, number][] = [
+        [nw, ne, bNE, bNW], // north
+        [sw, se, bSE, bSW], // south
+        [nw, sw, bSW, bNW], // west
+        [ne, se, bSE, bNE], // east
       ];
 
       for (let n = 0; n < 4; n++) {
-        const [leftBottom, rightBottom] = wallBottoms[n]!;
-        const vBase = (quadCount + q * 4 + n) * 4;
-        posAttr.setY(vBase + 0, top);
-        posAttr.setY(vBase + 1, top);
-        posAttr.setY(vBase + 2, rightBottom);
-        posAttr.setY(vBase + 3, leftBottom);
+        const [topLeft, topRight, bottomRight, bottomLeft] = wallCorners[n]!;
+        const wBase = (quadCount + q * 4 + n) * 4;
+        posAttr.setY(wBase + 0, topLeft);
+        posAttr.setY(wBase + 1, topRight);
+        posAttr.setY(wBase + 2, bottomRight);
+        posAttr.setY(wBase + 3, bottomLeft);
         for (let c = 0; c < 4; c++) {
-          depthAttr.setX(vBase + c, depth);
-          typeAttr.setX(vBase + c, type);
+          depthAttr.setX(wBase + c, depth);
+          typeAttr.setX(wBase + c, type);
         }
       }
     }
@@ -486,6 +617,17 @@ export function createFluidSurface(
     mesh,
     material,
     sync,
+    setFluidProperty(typeId, patch) {
+      if (typeId <= 0 || typeId >= MAX_PALETTE_SIZE) return;
+      if (patch.opacity !== undefined) opacityPalette[typeId] = patch.opacity;
+      if (patch.refractionIndex !== undefined) refractionPalette[typeId] = patch.refractionIndex;
+      if (patch.glowIntensity !== undefined) glowIntensityPalette[typeId] = patch.glowIntensity;
+      if (patch.glowColor !== undefined) {
+        glowColorPalette[typeId * 3] = patch.glowColor[0];
+        glowColorPalette[typeId * 3 + 1] = patch.glowColor[1];
+        glowColorPalette[typeId * 3 + 2] = patch.glowColor[2];
+      }
+    },
     remove() {
       renderer.scene.remove(mesh);
       geometry.dispose();

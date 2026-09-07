@@ -52,7 +52,14 @@ export interface FluidField {
   height: number;
   /** Fluid type id per cell, row-major. 0 = empty/no fluid. */
   cellType: Uint8Array;
-  /** Continuous fluid quantity per cell: 0 = dry, up to ~1 + a small compression allowance. */
+  /**
+   * Continuous fluid quantity per cell: 0 = dry, otherwise the real depth of
+   * fluid above this cell's own floor, in the same mass-equivalent units as
+   * `floorElevation`. Unbounded above `MAX_MASS` — a deep pit's lowest cell
+   * legitimately holds much more than one "full cell's worth" once its
+   * connected pool has enough total volume to reach the rim (see
+   * `stepFast`'s drop-aware target).
+   */
   mass: Float32Array;
   /** World-scale elevation of each cell's floor, in mass-equivalent units (see DEFAULT_STEP_HEIGHT). */
   floorElevation: Float32Array;
@@ -72,14 +79,20 @@ export interface FluidDef {
   color: [number, number, number];
   /** Relative density; not consumed by the simulation itself, exposed for consumer use. */
   density: number;
+  /** Strength of the fake surface-ripple shading (see rendering/fluidMask.ts). 0 = off. Default 0. */
+  refractionIndex?: number;
+  /** Per-type alpha multiplier, 0-1. Default matches FluidSurfaceOptions.opacity (0.85). */
+  opacity?: number;
+  /** Additive glow tint, e.g. for radiation/magic. Default [0, 0, 0] (no glow). */
+  glowColor?: [number, number, number];
+  /** Additive glow strength. Default 0. */
+  glowIntensity?: number;
 }
 
 // ─── Tuning constants ───────────────────────────────────────────────────
 
 /** One full cell's worth of fluid. Everything else scales off this. */
 export const MAX_MASS = 1.0;
-/** A cell can briefly hold a little more than MAX_MASS when pressed from a higher neighbor. */
-const MAX_COMPRESS = 0.02;
 /** Below this, a cell counts as dry and its type resets to 0. */
 const MIN_MASS = 0.0001;
 /** Transfers smaller than this are dropped rather than applied, so near-equal cells stop nudging forever. */
@@ -136,18 +149,29 @@ const EVAPORATE_THRESHOLD = 0.15;
 const EVAPORATE_RATE = 0.03;
 
 /**
- * Given the total mass shared between a cell and a lower neighbor, returns
- * how much of that total the lower cell should hold at rest. Up to
- * MAX_MASS the lower cell just holds everything; beyond that it's allowed
- * to compress slightly, which is what lets a filled cell push its excess
- * onward to the next-lowest neighbor instead of just piling up forever.
+ * Target mass for the lower (`j`) cell of a steep-drop pair, given their
+ * combined mass and the structural floor `drop` between them (always
+ * >= STEEP_DROP_THRESHOLD — `stepFast` only calls this once that's already
+ * confirmed). At equilibrium both cells share one surfaceHeight
+ * (`floorElevation + mass`), and since `j`'s floor sits `drop` lower, it
+ * needs exactly `drop` more mass than `i` to get there — hence splitting
+ * the total as `(total + drop) / 2`. If the combined mass can't even cover
+ * that gap, `i` drains completely and `j` just holds it all (physically: a
+ * small amount of water pools at the bottom of a pit without yet reaching
+ * back up to the rim it drained from).
+ *
+ * This has to scale with the actual `drop`, unlike the side-on original
+ * this was ported from, where "lower neighbor" always meant exactly one
+ * grid cell down and a fixed near-MAX_MASS resting cap made sense. Here a
+ * pit can be arbitrarily deep, and pairs that gate into the fast pass once
+ * (drop >= STEEP_DROP_THRESHOLD) stay there permanently — capping the
+ * target at a constant near MAX_MASS regardless of `drop` would leave a
+ * multi-step pit's deepest cell stuck there forever, never actually
+ * reaching a shallower connected neighbor's true water level.
  */
-function stableRestingMass(totalMass: number): number {
-  if (totalMass <= MAX_MASS) return MAX_MASS;
-  if (totalMass < 2 * MAX_MASS + MAX_COMPRESS) {
-    return (MAX_MASS * MAX_MASS + totalMass * MAX_COMPRESS) / (MAX_MASS + MAX_COMPRESS);
-  }
-  return (totalMass + MAX_COMPRESS) / 2;
+function fastPassTarget(totalMass: number, drop: number): number {
+  if (totalMass <= drop) return totalMass;
+  return (totalMass + drop) / 2;
 }
 
 // ─── Construction ────────────────────────────────────────────────────────
@@ -250,10 +274,11 @@ function stepFast(f: FluidField): boolean {
         // (remaining alone can reach the threshold), incorrectly fast-falling
         // sideways across flat ground instead of leaving lateral spreading to
         // the damped pass below.
-        if (floorElevation[i]! - floorElevation[j]! < STEEP_DROP_THRESHOLD) continue;
+        const drop = floorElevation[i]! - floorElevation[j]!;
+        if (drop < STEEP_DROP_THRESHOLD) continue;
 
-        const stable = stableRestingMass(remaining + jMass);
-        const flow = Math.min(Math.max(0, stable - jMass), remaining, FAST_TRANSFER);
+        const target = fastPassTarget(remaining + jMass, drop);
+        const flow = Math.min(Math.max(0, target - jMass), remaining, FAST_TRANSFER);
         if (flow > MIN_FLOW) {
           newMass[i]! -= flow;
           newMass[j]! += flow;

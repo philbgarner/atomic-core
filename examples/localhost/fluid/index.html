@@ -5,6 +5,18 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>atomic-core — Fluid Example</title>
         <link rel="stylesheet" href="../basic/styles.css" />
+        <!-- Reuses the .lighting-row/.tip slider styling defined alongside
+             the ambient-occlusion example rather than duplicating it here. -->
+        <link rel="stylesheet" href="../ambient-occlusion/styles.css" />
+        <style>
+            #fluid-controls {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                border-top: 1px solid var(--border);
+                padding-top: 12px;
+            }
+        </style>
     </head>
     <body>
         <div id="sidebar">
@@ -15,6 +27,34 @@
                 Pos: <span id="pos">—</span>
             </div>
             <div id="log"></div>
+            <div id="fluid-controls">
+                <div class="lighting-row">
+                    <label for="fluid-type-select">Fluid <span class="tip" title="Which fluid type the sliders below edit.">?</span></label>
+                    <select id="fluid-type-select" style="flex: 1">
+                        <option value="1">Water</option>
+                        <option value="2">Lava</option>
+                    </select>
+                </div>
+                <div class="lighting-row">
+                    <label for="refraction-slider">Refraction <span class="tip" title="Strength of a fake surface-ripple shading effect that stands in for true refraction (this renderer has no scene-capture render pass to sample). 0 = flat.">?</span></label>
+                    <input id="refraction-slider" type="range" min="0" max="3" step="0.05" value="0" />
+                    <span id="refraction-value">0.00</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="opacity-slider">Opacity <span class="tip" title="Alpha multiplier for this fluid's surface and walls. 0 = invisible, 1 = fully opaque. Default: 0.85">?</span></label>
+                    <input id="opacity-slider" type="range" min="0" max="1" step="0.01" value="0.85" />
+                    <span id="opacity-value">0.85</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="glow-intensity-slider">Glow <span class="tip" title="Strength of an additive glow tint on top of this fluid's colour — useful for telegraphing danger (lava) or a magic effect. 0 = off.">?</span></label>
+                    <input id="glow-intensity-slider" type="range" min="0" max="2" step="0.05" value="0" />
+                    <span id="glow-intensity-value">0.00</span>
+                </div>
+                <div class="lighting-row">
+                    <label for="glow-color-picker">Glow colour <span class="tip" title="Colour of the additive glow tint above.">?</span></label>
+                    <input id="glow-color-picker" type="color" value="#ff6a1a" />
+                </div>
+            </div>
             <div id="controls">
                 WASD / Arrow keys — move<br />
                 Q / E — turn left / right<br />

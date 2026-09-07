@@ -4,7 +4,14 @@ export interface FluidField {
     height: number;
     /** Fluid type id per cell, row-major. 0 = empty/no fluid. */
     cellType: Uint8Array;
-    /** Continuous fluid quantity per cell: 0 = dry, up to ~1 + a small compression allowance. */
+    /**
+     * Continuous fluid quantity per cell: 0 = dry, otherwise the real depth of
+     * fluid above this cell's own floor, in the same mass-equivalent units as
+     * `floorElevation`. Unbounded above `MAX_MASS` — a deep pit's lowest cell
+     * legitimately holds much more than one "full cell's worth" once its
+     * connected pool has enough total volume to reach the rim (see
+     * `stepFast`'s drop-aware target).
+     */
     mass: Float32Array;
     /** World-scale elevation of each cell's floor, in mass-equivalent units (see DEFAULT_STEP_HEIGHT). */
     floorElevation: Float32Array;
@@ -23,6 +30,14 @@ export interface FluidDef {
     color: [number, number, number];
     /** Relative density; not consumed by the simulation itself, exposed for consumer use. */
     density: number;
+    /** Strength of the fake surface-ripple shading (see rendering/fluidMask.ts). 0 = off. Default 0. */
+    refractionIndex?: number;
+    /** Per-type alpha multiplier, 0-1. Default matches FluidSurfaceOptions.opacity (0.85). */
+    opacity?: number;
+    /** Additive glow tint, e.g. for radiation/magic. Default [0, 0, 0] (no glow). */
+    glowColor?: [number, number, number];
+    /** Additive glow strength. Default 0. */
+    glowIntensity?: number;
 }
 /** One full cell's worth of fluid. Everything else scales off this. */
 export declare const MAX_MASS = 1;
