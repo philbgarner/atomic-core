@@ -30,6 +30,11 @@ export type { DungeonRendererOptions, DungeonRenderer, CellInfo, FaceTileSpec, D
 export { loadSkybox } from './rendering/skybox'
 export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites'
 
+// Palette-band (distance-banded texture lookup) lighting
+export { resolvePaletteBands, bandsFromFog, buildVariantTable, variantFor, computeLightLevels, findOffPaletteColors, DEFAULT_VARIANT_PATTERN, DEFAULT_PALETTE_LEVELS } from './rendering/paletteBands'
+export type { LightingMode, LightDistanceMetric, LightSource, PaletteBandsOptions, ResolvedPaletteBands, PaletteCheckResult } from './rendering/paletteBands'
+export type { BillboardPalette } from './rendering/billboardSprites'
+
 // Transport
 export { createWebSocketTransport }                  from './transport/websocket'
 export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload, DungeonSetPayload } from './transport/types'

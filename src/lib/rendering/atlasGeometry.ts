@@ -142,8 +142,10 @@ export function makeFaceMatrix(
 }
 
 /**
- * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
- * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
+ * Build a PlaneGeometry with the per-instance atlas attributes (aUvRect,
+ * aSurface, aAoCorners, aCellFace, aRowIndex, aTileId) and an InstancedMesh
+ * using either a ShaderMaterial (atlas) or a plain material. `aTileId` is
+ * taken from each rect's optional `id`.
  */
 export function buildInstancedMesh(
   matrices: THREE.Matrix4[],
@@ -219,6 +221,18 @@ export function buildInstancedMesh(
     geo.setAttribute(
       "aRowIndex",
       new THREE.InstancedBufferAttribute(rowArr, 1),
+    );
+
+    // aTileId (float, 1 slot): atlas tile ID of the base texture (from
+    // UvRect.id). Used by 'paletteBands' lighting to look up light-level
+    // variants; -1 = unknown (no variant swap).
+    const tileIdArr = new Float32Array(n);
+    uvRects.forEach((r, i) => {
+      tileIdArr[i] = r.id ?? -1;
+    });
+    geo.setAttribute(
+      "aTileId",
+      new THREE.InstancedBufferAttribute(tileIdArr, 1),
     );
   }
 

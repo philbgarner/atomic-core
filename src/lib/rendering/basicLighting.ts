@@ -19,11 +19,17 @@ import * as THREE from "three";
  *        - Ceiling: fixed 0.95
  *      This is always on; there is no runtime toggle.
  *
+ * When the material defines PALETTE_BANDS ('paletteBands' lighting mode), all
+ * of the above — plus scene lights, sky tint and smooth fog — are skipped.
+ * Every sampled tile is instead swapped for its light-level variant (see
+ * paletteBands.ts), overlays composite with a binary alpha test, and dark
+ * cells are drawn flat in uFogColor, so only palette colours reach the screen.
+ *
  * WebGL attribute slot budget: 16 total.
  *   Built-ins used by Three.js InstancedMesh:
  *     position (1) + uv (1) + instanceMatrix/mat4 (4) = 6
- *   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) = 5
- *   Total used: 11 / 16 — 5 slots remain for future attributes.
+ *   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) + aTileId(1) = 6
+ *   Total used: 12 / 16 — 4 slots remain for future attributes.
  *   Each vec2/vec3/vec4 attribute occupies exactly 1 WebGL slot regardless of component count.
  */
 
@@ -39,6 +45,9 @@ import * as THREE from "three";
  *   6. (Height offset removed — now baked into instance matrices upstream.)
  *   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
  *   8. Output fog distance as eye-space length.
+ *   9. Pass the row index through for per-row base overrides.
+ *  10. Pass the base tile ID and the light-grid UV (the open cell the face is
+ *      lit from) through for 'paletteBands' lighting.
  */
 export const BASIC_ATLAS_VERT = /* glsl */ `
 // ── Per-instance atlas UV rect ────────────────────────────────────────────────
@@ -78,10 +87,18 @@ attribute vec4 aCellFace;
 // Used by the fragment shader to select the base override for that row.
 attribute float aRowIndex;
 
+// Per-instance atlas tile ID of the base texture (1 slot). -1 = unknown.
+// Only read when PALETTE_BANDS is defined, to swap in light-level variants.
+attribute float aTileId;
+
 // ── Uniforms ──────────────────────────────────────────────────────────────────
 // Width and height of the dungeon grid in cells. Used to normalise aCellFace.xy
 // into [0,1] UV space for the overlay lookup texture.
 uniform vec2 uDungeonSize;
+
+// Dungeon grid size for the palette-band light-level lookup. Kept separate from
+// uDungeonSize because door materials never receive a real uDungeonSize.
+uniform vec2 uLightGridSize;
 
 // Camera forward direction projected onto the XZ plane, updated every RAF tick.
 // Computed in dungeonRenderer.ts as (-sin(curYaw), -cos(curYaw)).
@@ -113,6 +130,8 @@ varying float vAo;          // Interpolated AO value for this fragment [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 varying float vRowIndex;    // Row index forwarded to fragment for per-row base override
+varying float vTileId;      // Base atlas tile ID (palette-band variant lookup)
+varying vec2  vLightUv;     // UV into the palette-band light-level texture
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -173,6 +192,13 @@ void main() {
   // ── 9. Row index pass-through ──────────────────────────────────────────────
   vRowIndex = aRowIndex;
 
+  // ── 10. Palette-band light cell ────────────────────────────────────────────
+  // Walls store the solid cell behind them; stepping along the outward normal
+  // gives the open cell the face is seen (and lit) from. Floors/ceilings have
+  // a zero normal and use their own cell.
+  vTileId  = aTileId;
+  vLightUv = (aCellFace.xy + aCellFace.zw + 0.5) / uLightGridSize;
+
   gl_Position = projectionMatrix * eyePos;
 }
 `;
@@ -191,6 +217,11 @@ void main() {
  *   5.5 Sky light tint     — multiplicative RGB tint (uSkyLightColor); white = no-op.
  *                            Non-white only on sky-panel faces (outsideLight option).
  *   6. Fog                 — linear blend to uFogColor over [uFogNear, uFogFar].
+ *
+ * With PALETTE_BANDS defined, steps 1–3 sample light-level variants of each
+ * tile (looked up per cell from uLightLevel/uVariantLookup), overlays use a
+ * binary alpha test, and steps 4–6 are replaced by a flat output: the variant
+ * colour, or uFogColor for cells past the last band.
  */
 export const BASIC_ATLAS_FRAG = /* glsl */ `
 #include <common>
@@ -249,6 +280,16 @@ uniform sampler2D uSkirtLookup;
 //   (no-op) for surfaces that don't use per-row base overrides.
 uniform sampler2D uBaseOverride;
 
+// ── Palette-band lighting (only read when PALETTE_BANDS is defined) ──────────
+// uLightLevel:    W×H Uint8 RGBA DataTexture — R = light level of each cell
+//                 (0 = brightest variant, uLevelCount = dark → uFogColor).
+// uVariantLookup: tileCount × levels Float RGBA DataTexture — R = variant
+//                 tile ID + 1 for (tile ID, level); 0 = no variant, draw as-is.
+// uLevelCount:    number of lit levels (height of uVariantLookup).
+uniform sampler2D uLightLevel;
+uniform sampler2D uVariantLookup;
+uniform float     uLevelCount;
+
 // ── Varyings (from vertex shader) ─────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
 varying vec2  vTileOrigin;  // Top-left of the atlas tile rect (for clamping)
@@ -260,6 +301,36 @@ varying float vAo;          // Interpolated AO corner value [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 varying float vRowIndex;    // Row index for per-row base override lookup
+varying float vTileId;      // Base atlas tile ID (-1 = unknown)
+varying vec2  vLightUv;     // UV into uLightLevel for this face's lit cell
+
+#ifdef PALETTE_BANDS
+// Light level of the current fragment's cell; set once at the top of main().
+float gLevel = 0.0;
+
+// Swap a tile ID for its variant at gLevel. Unknown IDs (< 0) and tiles with
+// no brush are returned unchanged.
+float paletteVariant(float id) {
+  if (id < -0.5) return id;
+  float lvl = min(gLevel, uLevelCount - 1.0);
+  vec2  luv = vec2((id + 0.5) / uTileUvCount, (lvl + 0.5) / uLevelCount);
+  float v   = floor(texture2D(uVariantLookup, luv).r + 0.5);
+  return v > 0.5 ? v - 1.0 : id;
+}
+#define TILE_ID(id) paletteVariant(id)
+#else
+#define TILE_ID(id) (id)
+#endif
+
+// Composite an overlay sample over the base colour. Palette mode uses a binary
+// alpha test so partially transparent edges can't blend into off-palette colours.
+vec3 compositeOverlay(vec3 base, vec4 oc) {
+#ifdef PALETTE_BANDS
+  return oc.a > 0.5 ? oc.rgb : base;
+#else
+  return mix(base, oc.rgb, oc.a);
+#endif
+}
 
 // Look up tile ID's UV rect from the 1D tileUvLookup, then sample the atlas
 // at vLocalUv within that rect. Used by the overlay composite passes.
@@ -277,10 +348,15 @@ vec4 sampleOverlayTile(float id) {
 }
 
 void main() {
+#ifdef PALETTE_BANDS
+  gLevel = floor(texture2D(uLightLevel, vLightUv).r * 255.0 + 0.5);
+#endif
+
   // ── 1. Base tile sample (with optional per-row override) ───────────────────
   // Check uBaseOverride for a per-row base tile ID at this cell.
   // RGBA channels correspond to row indices 0–3. Non-zero replaces the default
   // base tile (aUvRect). uBaseOverride defaults to a 1×1 zero texture (no-op).
+  // In palette mode every tile ID is first swapped for its light-level variant.
   vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
   int  rowIdx    = int(vRowIndex + 0.5);
   float baseTileId = 0.0;
@@ -290,8 +366,12 @@ void main() {
   else                  baseTileId = floor(baseSlots.a + 0.5);
 
   vec4 color;
+  float variantBase = TILE_ID(vTileId);
   if (baseTileId > 0.5) {
-    color = sampleOverlayTile(baseTileId);
+    color = sampleOverlayTile(TILE_ID(baseTileId));
+    if (color.a < 0.01) discard;
+  } else if (variantBase != vTileId) {
+    color = sampleOverlayTile(variantBase);
     if (color.a < 0.01) discard;
   } else {
     vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
@@ -307,16 +387,16 @@ void main() {
   vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
 
   float id0 = floor(slots.r + 0.5);
-  if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id0 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id0)));
 
   float id1 = floor(slots.g + 0.5);
-  if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id1 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id1)));
 
   float id2 = floor(slots.b + 0.5);
-  if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id2 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id2)));
 
   float id3 = floor(slots.a + 0.5);
-  if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id3 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id3)));
 
   // ── 3. Skirt overlays (4 slots, same RGBA encoding) ───────────────────────
   // A separate lookup texture targets skirt/edge panels independently from
@@ -324,14 +404,21 @@ void main() {
   // onto the base surface.
   vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
   float sk0 = floor(skirtSlots.r + 0.5);
-  if (sk0 > 0.5) { vec4 oc = sampleOverlayTile(sk0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk0 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk0)));
   float sk1 = floor(skirtSlots.g + 0.5);
-  if (sk1 > 0.5) { vec4 oc = sampleOverlayTile(sk1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk1 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk1)));
   float sk2 = floor(skirtSlots.b + 0.5);
-  if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk2 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk2)));
   float sk3 = floor(skirtSlots.a + 0.5);
-  if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk3 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk3)));
 
+#ifdef PALETTE_BANDS
+  // ── Palette bands: no shading at all ──────────────────────────────────────
+  // The variant texture already carries the brightness for this cell. Cells
+  // past the last band are drawn flat in uFogColor (a palette colour).
+  if (color.a < 0.5) discard;
+  gl_FragColor = vec4(gLevel >= uLevelCount - 0.5 ? uFogColor : color.rgb, 1.0);
+#else
   // ── 4. Ambient occlusion ──────────────────────────────────────────────────
   // vAo=1 (open corner) → multiplier = 1.0 (no change).
   // vAo=0 (fully boxed corner) → multiplier = (1 - uAoIntensity).
@@ -390,6 +477,7 @@ void main() {
   // ── 7. Fog ────────────────────────────────────────────────────────────────
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
+#endif
 }
 `;
 
@@ -511,6 +599,20 @@ export function makeBasicAtlasUniforms(params: {
    * materials). When `false` (default), tinting is always applied (sky panels).
    */
   skyFromLookup?: boolean;
+  /**
+   * W×H light-level texture for 'paletteBands' lighting (R = level per cell).
+   * Defaults to a 1×1 zero texture (everything at level 0).
+   */
+  lightLevel?: THREE.Texture;
+  /** Dungeon grid size used to sample `lightLevel`. Default: (1, 1). */
+  lightGridSize?: THREE.Vector2;
+  /**
+   * tileCount × levels variant lookup texture for 'paletteBands' lighting
+   * (R = variant tile ID + 1; 0 = no variant). Defaults to a 1×1 zero texture.
+   */
+  variantLookup?: THREE.Texture;
+  /** Number of lit palette-band levels. Default: 1. */
+  levelCount?: number;
 }): Record<string, { value: unknown }> {
   const defaultTex = makeSinglePixelTex();
   return {
@@ -533,6 +635,10 @@ export function makeBasicAtlasUniforms(params: {
     uSkyLightColor:     { value: params.skyLightColor ?? new THREE.Color(0, 0, 0) },
     uCeilHeightLookup:  { value: params.ceilHeightLookup ?? makeFullPixelTex() },
     uSkyFromLookup:     { value: params.skyFromLookup ? 1.0 : 0.0 },
+    uLightLevel:        { value: params.lightLevel ?? defaultTex },
+    uLightGridSize:     { value: params.lightGridSize ?? new THREE.Vector2(1, 1) },
+    uVariantLookup:     { value: params.variantLookup ?? defaultTex },
+    uLevelCount:        { value: params.levelCount ?? 1 },
   };
 }
 

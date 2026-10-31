@@ -93,7 +93,14 @@ export function toFaceRotation(rotation: 0 | 90 | 180 | 270): FaceRotation {
 }
 
 /** A normalised UV rectangle in GL convention (y=0 at the bottom of the texture). */
-export type UvRect = { x: number; y: number; w: number; h: number };
+export type UvRect = {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	/** Atlas tile ID this rect came from. Written to the `aTileId` attribute so `'paletteBands'` lighting can swap in light-level variants. */
+	id?: number;
+};
 
 /**
  * Convert a PackedSprite's canvas UV coordinates to a GL-convention UV rect.

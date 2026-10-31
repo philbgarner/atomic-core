@@ -68,6 +68,32 @@ export interface SpriteMap {
 	 * takes precedence over the base layer for the targeted layer index.
 	 */
 	angles?: Partial<Record<AngleKey, AngleOverride[]>>;
+	/**
+	 * `'paletteBands'` lighting only: always draw this sprite with its
+	 * brightest (level 0) variant regardless of the cell's light level —
+	 * e.g. a flame or other light source. Ignored in `'shaded'` mode.
+	 */
+	emissive?: boolean;
+	/**
+	 * `'paletteBands'` lighting only: makes the entity/object a light source.
+	 * Band thresholds in cells (ascending, inclusive), same meaning as
+	 * `PaletteBandsOptions.bands` — e.g. `[0, 1, 2]` lights its own cell at
+	 * level 0, adjacent cells at level 1 and so on. Ignored in `'shaded'` mode.
+	 */
+	lightBands?: number[];
+}
+
+/**
+ * Palette-band hooks supplied by the dungeon renderer so billboards can swap
+ * their tiles for light-level variants. See paletteBands.ts.
+ */
+export interface BillboardPalette {
+	/** Light level at a cell (0 = brightest), or `null` when `'paletteBands'` is off. */
+	levelAt(x: number, z: number): number | null;
+	/** Number of lit levels; a level equal to this is dark. */
+	levelCount(): number;
+	/** Swap a tile ID for its variant at `level`. */
+	variant(id: number, level: number): number;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +127,10 @@ uniform float uOpacity;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+// 'paletteBands' lighting: 1 = skip all shading, binary alpha, opaque output.
+uniform float uPaletteMode;
+// 'paletteBands' lighting: 1 = sprite stands in a dark cell → flat uFogColor silhouette.
+uniform float uDark;
 
 varying vec2 vUv;
 varying float vFogDist;
@@ -110,6 +140,13 @@ void main() {
   vec2 atlasUv = vec2(uUvX + vUv.x * uUvW, uUvY + vUv.y * uUvH);
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
+
+  if (uPaletteMode > 0.5) {
+    // Tile was already swapped for its light-level variant on the CPU.
+    if (color.a < 0.5 || uOpacity < 0.5) discard;
+    gl_FragColor = vec4(uDark > 0.5 ? uFogColor : color.rgb, 1.0);
+    return;
+  }
 
   vec3 lightAccum = ambientLightColor;
   #if NUM_POINT_LIGHTS > 0
@@ -156,6 +193,8 @@ interface LayerMeshEntry {
 		uUvW: { value: number };
 		uUvH: { value: number };
 		uOpacity: { value: number };
+		uPaletteMode: { value: number };
+		uDark: { value: number };
 	};
 	baseLayer: SpriteLayer;
 	layerIndex: number;
@@ -188,6 +227,11 @@ export interface BillboardFog {
 /**
  * Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
  * The atlas texture should already be created and cached by the caller.
+ *
+ * Pass `palette` to support `'paletteBands'` lighting: each frame the sprite's
+ * tiles are swapped for the variant matching the light level of the entity's
+ * cell (level 0 when `spriteMap.emissive`), shading is skipped, and sprites in
+ * dark cells draw as flat fog-colour silhouettes.
  */
 let sharedAtlasTex: THREE.Texture;
 export function createBillboard(
@@ -198,6 +242,7 @@ export function createBillboard(
 	resolver?: (name: string) => number,
 	expectedFrameSize: number = 64, // Expected tile size is 64 pixels by default.
 	fog: BillboardFog = {},
+	palette?: BillboardPalette,
 ): BillboardHandle {
 	const { spriteMap } = entity;
 	const group = new THREE.Group();
@@ -337,6 +382,8 @@ export function createBillboard(
 				uFogColor: { value: fog.color ?? new THREE.Color(0, 0, 0) },
 				uFogNear: { value: fog.near ?? 5 },
 				uFogFar: { value: fog.far ?? 24 },
+				uPaletteMode: { value: 0 },
+				uDark: { value: 0 },
 			};
 			const uniforms = THREE.UniformsUtils.merge([
 				THREE.UniformsLib.lights,
@@ -409,11 +456,21 @@ export function createBillboard(
 			const angleKey = selectAngleKey(facing, cameraYaw);
 			const overrides = spriteMap.angles?.[angleKey];
 
+			// Palette bands: light level of the cell the sprite is (visually) in.
+			const rawLevel = palette?.levelAt(Math.round(ent.x), Math.round(ent.z)) ?? null;
+			const level = rawLevel === null ? null : spriteMap.emissive ? 0 : rawLevel;
+			const levelCount = palette?.levelCount() ?? 1;
+
 			for (const entry of layerEntries) {
 				const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
 				const rawTile = override?.tile ?? entry.baseLayer.tile;
-				const rect = getRect(rawTile);
+				const rect =
+					level === null
+						? getRect(rawTile)
+						: getRect(palette!.variant(resolveTile(rawTile, resolver), Math.min(level, levelCount - 1)));
 				const layerMat = entry.mesh.material as THREE.ShaderMaterial;
+				layerMat.uniforms.uPaletteMode!.value = level === null ? 0 : 1;
+				layerMat.uniforms.uDark!.value = level !== null && level >= levelCount ? 1 : 0;
 				layerMat.uniforms.uUvX!.value = rect.x;
 				layerMat.uniforms.uUvY!.value = rect.y;
 				layerMat.uniforms.uUvW!.value = rect.w;

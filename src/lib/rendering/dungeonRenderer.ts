@@ -38,7 +38,30 @@ export type { FaceTileSpec, DirectionFaceMap } from "./tileAtlas";
 import type { PackedAtlas, UvRect } from "./textureLoader";
 import { spriteToUvRect } from "./textureLoader";
 import { createBillboard } from "./billboardSprites";
-import type { BillboardHandle, SpriteMap } from "./billboardSprites";
+import type { BillboardHandle, BillboardPalette, SpriteMap } from "./billboardSprites";
+import {
+  resolvePaletteBands,
+  buildVariantTable,
+  variantFor,
+  computeLightLevels,
+  makeLightLevelTexture,
+  uploadLightLevels,
+  makeVariantTexture,
+  findOffPaletteColors,
+} from "./paletteBands";
+import type {
+  LightingMode,
+  LightSource,
+  PaletteBandsOptions,
+  PaletteCheckResult,
+} from "./paletteBands";
+export type {
+  LightingMode,
+  LightSource,
+  LightDistanceMetric,
+  PaletteBandsOptions,
+  PaletteCheckResult,
+} from "./paletteBands";
 export type { SpriteMap } from "./billboardSprites";
 import { loadSkybox } from "./skybox";
 import type { SkyboxOptions } from "./skybox";
@@ -270,6 +293,22 @@ export type DungeonRendererOptions = {
    * Can also be attached or swapped at runtime via `renderer.setSkybox()`.
    */
   skybox?: SkyboxOptions;
+  /**
+   * Lighting mode. Default: `'shaded'` (AO, surface lighting, scene lights,
+   * smooth fog).
+   *
+   * `'paletteBands'` is a palette-safe "distance-banded texture lookup" mode
+   * for art drawn in a fixed palette: every colour-altering effect (AO,
+   * surface/sky/scene lighting, smooth fog, overlay alpha blending) is
+   * switched off, and each tile is instead swapped for a pre-drawn
+   * light-level variant chosen from the light level of its grid cell. Cells
+   * past the last band are drawn flat in `fogColor`. Configure with
+   * `paletteBands`; switch at runtime with `setLightingMode()`. Requires
+   * `packedAtlas`.
+   */
+  lightingMode?: LightingMode;
+  /** Settings for `lightingMode: 'paletteBands'`. See {@link PaletteBandsOptions}. */
+  paletteBands?: PaletteBandsOptions;
 };
 
 // ---------------------------------------------------------------------------
@@ -570,6 +609,34 @@ export type DungeonRenderer = {
    * Returns an unsubscribe function.
    */
   onIdle(callback: () => void): () => void;
+  /**
+   * Switch lighting mode at runtime (`'shaded'` ↔ `'paletteBands'`).
+   * Recompiles the atlas shaders on the next frame; no geometry rebuild.
+   */
+  setLightingMode(mode: LightingMode): void;
+  /**
+   * Update `'paletteBands'` settings at runtime. Fields are merged with the
+   * current settings. Changing `variantPattern`, `brushes`, `bands` or
+   * `levels` rebuilds the brush lookup; light levels are recomputed
+   * immediately.
+   */
+  setPaletteBands(opts: PaletteBandsOptions): void;
+  /**
+   * Replace the extra `'paletteBands'` light sources (in addition to the
+   * player and any entity/object whose `spriteMap.lightBands` is set).
+   */
+  setLightSources(sources: LightSource[]): void;
+  /**
+   * Current `'paletteBands'` light level of a cell: `0` = brightest variant,
+   * the number of bands = dark. Returns `null` in `'shaded'` mode.
+   */
+  getLightLevel(x: number, z: number): number | null;
+  /**
+   * Dev tool: render a frame and count pixels whose colour isn't in
+   * `palette` (CSS colour strings or `0xRRGGBB` numbers). Useful for
+   * checking that `'paletteBands'` output obeys the art palette.
+   */
+  validatePalette(palette: (string | number)[]): PaletteCheckResult;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -655,7 +722,7 @@ export function createDungeonRenderer(
 
   function getUvRect(id: number): UvRect {
     const sprite = packedAtlas?.getById(id);
-    return sprite ? spriteToUvRect(sprite) : { x: 0, y: 0, w: 0, h: 0 };
+    return sprite ? { ...spriteToUvRect(sprite), id } : { x: 0, y: 0, w: 0, h: 0 };
   }
   const floorId = resolveTile(options.floorTile ?? 0, resolver);
   const ceilId = resolveTile(options.ceilTile ?? 0, resolver);
@@ -783,6 +850,105 @@ export function createDungeonRenderer(
     tileUvLookupTex.minFilter = THREE.NearestFilter;
     tileUvLookupTex.needsUpdate = true;
   }
+
+  // ── Palette-band lighting state ──────────────────────────────────────────
+  // See paletteBands.ts. The light-level texture is shared by reference with
+  // every atlas material (assigned after uniform merge, which would clone it).
+  let lightingMode: LightingMode = options.lightingMode ?? "shaded";
+  let paletteOpts: PaletteBandsOptions = { ...options.paletteBands };
+  let paletteCfg = resolvePaletteBands(paletteOpts, fogNear, fogFar, tileSize);
+  let variantTable: Float32Array = new Float32Array(0);
+  let variantTex: THREE.DataTexture | null = null;
+  let lightGrid = makeLightLevelTexture(1, 1);
+  let lightW = 1;
+  let lightH = 1;
+  let extraLightSources: LightSource[] = [];
+
+  function rebuildVariantTable(): void {
+    if (!packedAtlas) return;
+    variantTex?.dispose();
+    const levels = paletteCfg.bands.length;
+    variantTable = buildVariantTable(packedAtlas, tileUvCount, levels, paletteCfg, resolver);
+    variantTex = makeVariantTexture(variantTable, tileUvCount, levels);
+  }
+  rebuildVariantTable();
+
+  /** Toggle the PALETTE_BANDS define and push palette uniforms into one atlas material. */
+  function applyPaletteToMaterial(mat: THREE.ShaderMaterial): void {
+    const want = lightingMode === "paletteBands";
+    const has = mat.defines?.["PALETTE_BANDS"] !== undefined;
+    if (want !== has) {
+      const defines = { ...mat.defines };
+      if (want) defines["PALETTE_BANDS"] = "";
+      else delete defines["PALETTE_BANDS"];
+      mat.defines = defines;
+      mat.needsUpdate = true;
+    }
+    const u = mat.uniforms;
+    if (u["uLightLevel"]) u["uLightLevel"].value = lightGrid.tex;
+    if (u["uLightGridSize"])
+      (u["uLightGridSize"].value as THREE.Vector2).set(lightW, lightH);
+    if (u["uVariantLookup"] && variantTex) u["uVariantLookup"].value = variantTex;
+    if (u["uLevelCount"]) u["uLevelCount"].value = paletteCfg.bands.length;
+  }
+
+  function syncPaletteMaterials(): void {
+    for (const mat of atlasMaterials) applyPaletteToMaterial(mat);
+  }
+
+  /** Every light source for the current frame: player, sprite lights, extras. */
+  function collectLightSources(): LightSource[] {
+    const sources: LightSource[] = [];
+    if (paletteCfg.playerLight)
+      sources.push({ x: game.player.x, z: game.player.z });
+    for (const e of currentEntities)
+      if (e.alive && e.spriteMap?.lightBands)
+        sources.push({ x: e.x, z: e.z, bands: e.spriteMap.lightBands });
+    for (const o of currentObjects)
+      if (o.spriteMap?.lightBands)
+        sources.push({ x: o.x, z: o.z, bands: o.spriteMap.lightBands });
+    sources.push(...extraLightSources);
+    return sources;
+  }
+
+  /** Recompute the per-cell light grid (palette mode only) and upload it. */
+  function recomputeLightLevels(): void {
+    const outputs = game.dungeon.outputs;
+    if (!outputs) return;
+    const { width, height } = outputs;
+    if (width !== lightW || height !== lightH) {
+      lightGrid.tex.dispose();
+      lightGrid = makeLightLevelTexture(width, height);
+      lightW = width;
+      lightH = height;
+      syncPaletteMaterials();
+    }
+    if (lightingMode !== "paletteBands") return;
+    computeLightLevels(
+      lightGrid.levels,
+      width,
+      height,
+      collectLightSources(),
+      paletteCfg.bands,
+      paletteCfg.metric,
+      paletteCfg.occlusion ? makeIsSolid() : undefined,
+    );
+    uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex);
+  }
+
+  /** Light level at a cell in palette mode (`levelCount` = dark), else null. */
+  function paletteLevelAt(x: number, z: number): number | null {
+    if (lightingMode !== "paletteBands") return null;
+    if (x < 0 || z < 0 || x >= lightW || z >= lightH)
+      return paletteCfg.bands.length;
+    return lightGrid.levels[z * lightW + x] ?? paletteCfg.bands.length;
+  }
+
+  const billboardPalette: BillboardPalette = {
+    levelAt: paletteLevelAt,
+    levelCount: () => paletteCfg.bands.length,
+    variant: (id, level) => variantFor(variantTable, tileUvCount, id, level),
+  };
 
   // Per-surface W×H Float32 RGBA overlay textures. Rebuilt after each generate().
   // Each channel = one overlay slot tile ID (0 = none). No upper limit on sprite count.
@@ -1033,6 +1199,7 @@ export function createDungeonRenderer(
       side: THREE.FrontSide,
     });
     atlasMaterials.push(mat);
+    applyPaletteToMaterial(mat);
     return mat;
   }
 
@@ -2509,6 +2676,7 @@ export function createDungeonRenderer(
             resolver,
             64,
             { color: fogColor, near: fogNear, far: fogFar },
+            billboardPalette,
           ),
         );
       }
@@ -2545,6 +2713,7 @@ export function createDungeonRenderer(
             resolver,
             64,
             { color: fogColor, near: fogNear, far: fogFar },
+            billboardPalette,
           );
           billboardMap.set(e.id, handle);
         }
@@ -2608,6 +2777,7 @@ export function createDungeonRenderer(
 
   const onTurn = () => {
     buildDungeon();
+    recomputeLightLevels();
     tgtX = (game.player.x + 0.5) * tileSize;
     tgtZ = (game.player.z + 0.5) * tileSize;
     tgtYaw = game.player.facing;
@@ -2675,6 +2845,13 @@ export function createDungeonRenderer(
   let rafId = 0;
   let lastT = 0;
   const scratchCamDir = new THREE.Vector3();
+
+  // In palette mode a sprite in a lit cell (e.g. near a distant light source)
+  // stays visible even beyond fogFar.
+  function paletteLit(x: number, z: number): boolean {
+    const lvl = paletteLevelAt(x, z);
+    return lvl !== null && lvl < paletteCfg.bands.length;
+  }
 
   function tick(t: number) {
     rafId = requestAnimationFrame(tick);
@@ -2775,7 +2952,7 @@ export function createDungeonRenderer(
         const dx = (e.x + 0.5) * tileSize - curX;
         const dz = (e.z + 0.5) * tileSize - curZ;
         const floorY = getFloorOffset(e.x, e.z);
-        const inRange = dx * dx + dz * dz <= fogFar2;
+        const inRange = dx * dx + dz * dz <= fogFar2 || paletteLit(e.x, e.z);
 
         const anim = entityMoveAnimMap.get(e.id);
         let rx = e.x,
@@ -2814,7 +2991,7 @@ export function createDungeonRenderer(
         const dx = (obj.x + 0.5) * tileSize - curX;
         const dz = (obj.z + 0.5) * tileSize - curZ;
         const floorY = getFloorOffset(obj.x, obj.z);
-        const inRange = dx * dx + dz * dz <= fogFar2;
+        const inRange = dx * dx + dz * dz <= fogFar2 || paletteLit(obj.x, obj.z);
 
         const key = objectKey(obj);
         const anim = objectMoveAnimMap.get(key);
@@ -3105,6 +3282,7 @@ export function createDungeonRenderer(
     }
     dungeonBuilt = false;
     buildDungeon();
+    recomputeLightLevels();
   }
 
   // ── Public handle ─────────────────────────────────────────────────────────
@@ -3123,6 +3301,7 @@ export function createDungeonRenderer(
     setEntities(entities) {
       currentEntities = entities;
       syncEntities(entities);
+      recomputeLightLevels();
     },
     editEntity(entity, layerIndex: number, tile: string) {
       if (billboardMap.has(entity.id))
@@ -3135,6 +3314,7 @@ export function createDungeonRenderer(
     setObjects(objects) {
       currentObjects = objects;
       syncObjects(objects);
+      recomputeLightLevels();
     },
     setDoors(doors) {
       syncDoors(doors);
@@ -3346,6 +3526,42 @@ export function createDungeonRenderer(
       idleCallbacks.add(callback);
       return () => idleCallbacks.delete(callback);
     },
+    setLightingMode(mode) {
+      if (mode === lightingMode) return;
+      lightingMode = mode;
+      syncPaletteMaterials();
+      recomputeLightLevels();
+    },
+    setPaletteBands(opts) {
+      paletteOpts = { ...paletteOpts, ...opts };
+      paletteCfg = resolvePaletteBands(paletteOpts, fogNear, fogFar, tileSize);
+      if (
+        opts.variantPattern !== undefined ||
+        opts.brushes !== undefined ||
+        opts.bands !== undefined ||
+        opts.levels !== undefined
+      ) {
+        rebuildVariantTable();
+      }
+      syncPaletteMaterials();
+      recomputeLightLevels();
+    },
+    setLightSources(sources) {
+      extraLightSources = [...sources];
+      recomputeLightLevels();
+    },
+    getLightLevel(x, z) {
+      return paletteLevelAt(x, z);
+    },
+    validatePalette(palette) {
+      glRenderer.render(scene, camera);
+      const gl = glRenderer.getContext();
+      const w = gl.drawingBufferWidth;
+      const h = gl.drawingBufferHeight;
+      const buf = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      return findOffPaletteColors(buf, palette);
+    },
     destroy() {
       cancelAnimationFrame(rafId);
       orbitControls?.dispose();
@@ -3369,6 +3585,8 @@ export function createDungeonRenderer(
       for (const handle of doorMap.values()) handle.dispose();
       sharedAtlasTex?.dispose();
       tileUvLookupTex?.dispose();
+      variantTex?.dispose();
+      lightGrid.tex.dispose();
       if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
       if (overlayWall !== defSurf) overlayWall.tex.dispose();
       if (overlayCeil !== defSurf) overlayCeil.tex.dispose();

@@ -105,7 +105,7 @@ function tileUvRect(
 ): UvRect {
   const id = resolveTile(tile, resolver);
   const sprite = packedAtlas?.getById(id);
-  return sprite ? spriteToUvRect(sprite) : { x: 0, y: 0, w: 0, h: 0 };
+  return sprite ? { ...spriteToUvRect(sprite), id } : { x: 0, y: 0, w: 0, h: 0 };
 }
 
 /**
@@ -240,6 +240,9 @@ export function createDoorMesh(door: DoorRecord, deps: DoorMeshDeps): DoorHandle
     const attr = paneMesh.geometry.getAttribute("aUvRect") as THREE.InstancedBufferAttribute;
     attr.setXYZW(0, rect.x, rect.y, rect.w, rect.h);
     attr.needsUpdate = true;
+    const idAttr = paneMesh.geometry.getAttribute("aTileId") as THREE.InstancedBufferAttribute;
+    idAttr.setX(0, rect.id ?? -1);
+    idAttr.needsUpdate = true;
   }
 
   return {
