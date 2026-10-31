@@ -55,6 +55,31 @@ export interface SpriteMap {
      * takes precedence over the base layer for the targeted layer index.
      */
     angles?: Partial<Record<AngleKey, AngleOverride[]>>;
+    /**
+     * `'paletteBands'` lighting only: always draw this sprite with its
+     * brightest (level 0) variant regardless of the cell's light level —
+     * e.g. a flame or other light source. Ignored in `'shaded'` mode.
+     */
+    emissive?: boolean;
+    /**
+     * `'paletteBands'` lighting only: makes the entity/object a light source.
+     * Band thresholds in cells (ascending, inclusive), same meaning as
+     * `PaletteBandsOptions.bands` — e.g. `[0, 1, 2]` lights its own cell at
+     * level 0, adjacent cells at level 1 and so on. Ignored in `'shaded'` mode.
+     */
+    lightBands?: number[];
+}
+/**
+ * Palette-band hooks supplied by the dungeon renderer so billboards can swap
+ * their tiles for light-level variants. See paletteBands.ts.
+ */
+export interface BillboardPalette {
+    /** Light level at a cell (0 = brightest), or `null` when `'paletteBands'` is off. */
+    levelAt(x: number, z: number): number | null;
+    /** Number of lit levels; a level equal to this is dark. */
+    levelCount(): number;
+    /** Swap a tile ID for its variant at `level`. */
+    variant(id: number, level: number): number;
 }
 export interface BillboardHandle {
     /** Update position, orientation, and angle-variant uniforms each frame. */
@@ -74,5 +99,5 @@ export interface BillboardFog {
 export declare function createBillboard(tileSize: number, entity: EntityBase & {
     spriteMap: SpriteMap;
 }, packedAtlas: PackedAtlas, scene: THREE.Scene, resolver?: (name: string) => number, expectedFrameSize?: number, // Expected tile size is 64 pixels by default.
-fog?: BillboardFog): BillboardHandle;
+fog?: BillboardFog, palette?: BillboardPalette): BillboardHandle;
 //# sourceMappingURL=billboardSprites.d.ts.map

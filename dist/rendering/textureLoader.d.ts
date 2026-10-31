@@ -83,6 +83,8 @@ export type UvRect = {
     y: number;
     w: number;
     h: number;
+    /** Atlas tile ID this rect came from. Written to the `aTileId` attribute so `'paletteBands'` lighting can swap in light-level variants. */
+    id?: number;
 };
 /**
  * Convert a PackedSprite's canvas UV coordinates to a GL-convention UV rect.

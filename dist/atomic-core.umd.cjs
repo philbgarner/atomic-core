@@ -5235,11 +5235,17 @@
 	*        - Ceiling: fixed 0.95
 	*      This is always on; there is no runtime toggle.
 	*
+	* When the material defines PALETTE_BANDS ('paletteBands' lighting mode), all
+	* of the above — plus scene lights, sky tint and smooth fog — are skipped.
+	* Every sampled tile is instead swapped for its light-level variant (see
+	* paletteBands.ts), overlays composite with a binary alpha test, and dark
+	* cells are drawn flat in uFogColor, so only palette colours reach the screen.
+	*
 	* WebGL attribute slot budget: 16 total.
 	*   Built-ins used by Three.js InstancedMesh:
 	*     position (1) + uv (1) + instanceMatrix/mat4 (4) = 6
-	*   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) = 5
-	*   Total used: 11 / 16 — 5 slots remain for future attributes.
+	*   Custom attributes: aUvRect(1) + aSurface(1) + aAoCorners(1) + aCellFace(1) + aRowIndex(1) + aTileId(1) = 6
+	*   Total used: 12 / 16 — 4 slots remain for future attributes.
 	*   Each vec2/vec3/vec4 attribute occupies exactly 1 WebGL slot regardless of component count.
 	*/
 	/**
@@ -5254,6 +5260,9 @@
 	*   6. (Height offset removed — now baked into instance matrices upstream.)
 	*   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
 	*   8. Output fog distance as eye-space length.
+	*   9. Pass the row index through for per-row base overrides.
+	*  10. Pass the base tile ID and the light-grid UV (the open cell the face is
+	*      lit from) through for 'paletteBands' lighting.
 	*/
 	var BASIC_ATLAS_VERT = `
 // ── Per-instance atlas UV rect ────────────────────────────────────────────────
@@ -5293,10 +5302,18 @@ attribute vec4 aCellFace;
 // Used by the fragment shader to select the base override for that row.
 attribute float aRowIndex;
 
+// Per-instance atlas tile ID of the base texture (1 slot). -1 = unknown.
+// Only read when PALETTE_BANDS is defined, to swap in light-level variants.
+attribute float aTileId;
+
 // ── Uniforms ──────────────────────────────────────────────────────────────────
 // Width and height of the dungeon grid in cells. Used to normalise aCellFace.xy
 // into [0,1] UV space for the overlay lookup texture.
 uniform vec2 uDungeonSize;
+
+// Dungeon grid size for the palette-band light-level lookup. Kept separate from
+// uDungeonSize because door materials never receive a real uDungeonSize.
+uniform vec2 uLightGridSize;
 
 // Camera forward direction projected onto the XZ plane, updated every RAF tick.
 // Computed in dungeonRenderer.ts as (-sin(curYaw), -cos(curYaw)).
@@ -5328,6 +5345,8 @@ varying float vAo;          // Interpolated AO value for this fragment [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 varying float vRowIndex;    // Row index forwarded to fragment for per-row base override
+varying float vTileId;      // Base atlas tile ID (palette-band variant lookup)
+varying vec2  vLightUv;     // UV into the palette-band light-level texture
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -5388,6 +5407,13 @@ void main() {
   // ── 9. Row index pass-through ──────────────────────────────────────────────
   vRowIndex = aRowIndex;
 
+  // ── 10. Palette-band light cell ────────────────────────────────────────────
+  // Walls store the solid cell behind them; stepping along the outward normal
+  // gives the open cell the face is seen (and lit) from. Floors/ceilings have
+  // a zero normal and use their own cell.
+  vTileId  = aTileId;
+  vLightUv = (aCellFace.xy + aCellFace.zw + 0.5) / uLightGridSize;
+
   gl_Position = projectionMatrix * eyePos;
 }
 `;
@@ -5405,6 +5431,11 @@ void main() {
 	*   5.5 Sky light tint     — multiplicative RGB tint (uSkyLightColor); white = no-op.
 	*                            Non-white only on sky-panel faces (outsideLight option).
 	*   6. Fog                 — linear blend to uFogColor over [uFogNear, uFogFar].
+	*
+	* With PALETTE_BANDS defined, steps 1–3 sample light-level variants of each
+	* tile (looked up per cell from uLightLevel/uVariantLookup), overlays use a
+	* binary alpha test, and steps 4–6 are replaced by a flat output: the variant
+	* colour, or uFogColor for cells past the last band.
 	*/
 	var BASIC_ATLAS_FRAG = `
 #include <common>
@@ -5463,6 +5494,16 @@ uniform sampler2D uSkirtLookup;
 //   (no-op) for surfaces that don't use per-row base overrides.
 uniform sampler2D uBaseOverride;
 
+// ── Palette-band lighting (only read when PALETTE_BANDS is defined) ──────────
+// uLightLevel:    W×H Uint8 RGBA DataTexture — R = light level of each cell
+//                 (0 = brightest variant, uLevelCount = dark → uFogColor).
+// uVariantLookup: tileCount × levels Float RGBA DataTexture — R = variant
+//                 tile ID + 1 for (tile ID, level); 0 = no variant, draw as-is.
+// uLevelCount:    number of lit levels (height of uVariantLookup).
+uniform sampler2D uLightLevel;
+uniform sampler2D uVariantLookup;
+uniform float     uLevelCount;
+
 // ── Varyings (from vertex shader) ─────────────────────────────────────────────
 varying vec2  vAtlasUv;     // Final atlas UV after rect mapping + rotation
 varying vec2  vTileOrigin;  // Top-left of the atlas tile rect (for clamping)
@@ -5474,6 +5515,36 @@ varying float vAo;          // Interpolated AO corner value [0,1]
 varying float vFacingLight; // Directional surface brightness multiplier
 varying vec3  vViewPos;     // Eye-space position for scene point light attenuation
 varying float vRowIndex;    // Row index for per-row base override lookup
+varying float vTileId;      // Base atlas tile ID (-1 = unknown)
+varying vec2  vLightUv;     // UV into uLightLevel for this face's lit cell
+
+#ifdef PALETTE_BANDS
+// Light level of the current fragment's cell; set once at the top of main().
+float gLevel = 0.0;
+
+// Swap a tile ID for its variant at gLevel. Unknown IDs (< 0) and tiles with
+// no brush are returned unchanged.
+float paletteVariant(float id) {
+  if (id < -0.5) return id;
+  float lvl = min(gLevel, uLevelCount - 1.0);
+  vec2  luv = vec2((id + 0.5) / uTileUvCount, (lvl + 0.5) / uLevelCount);
+  float v   = floor(texture2D(uVariantLookup, luv).r + 0.5);
+  return v > 0.5 ? v - 1.0 : id;
+}
+#define TILE_ID(id) paletteVariant(id)
+#else
+#define TILE_ID(id) (id)
+#endif
+
+// Composite an overlay sample over the base colour. Palette mode uses a binary
+// alpha test so partially transparent edges can't blend into off-palette colours.
+vec3 compositeOverlay(vec3 base, vec4 oc) {
+#ifdef PALETTE_BANDS
+  return oc.a > 0.5 ? oc.rgb : base;
+#else
+  return mix(base, oc.rgb, oc.a);
+#endif
+}
 
 // Look up tile ID's UV rect from the 1D tileUvLookup, then sample the atlas
 // at vLocalUv within that rect. Used by the overlay composite passes.
@@ -5491,10 +5562,15 @@ vec4 sampleOverlayTile(float id) {
 }
 
 void main() {
+#ifdef PALETTE_BANDS
+  gLevel = floor(texture2D(uLightLevel, vLightUv).r * 255.0 + 0.5);
+#endif
+
   // ── 1. Base tile sample (with optional per-row override) ───────────────────
   // Check uBaseOverride for a per-row base tile ID at this cell.
   // RGBA channels correspond to row indices 0–3. Non-zero replaces the default
   // base tile (aUvRect). uBaseOverride defaults to a 1×1 zero texture (no-op).
+  // In palette mode every tile ID is first swapped for its light-level variant.
   vec4 baseSlots = texture2D(uBaseOverride, vOverlayUv);
   int  rowIdx    = int(vRowIndex + 0.5);
   float baseTileId = 0.0;
@@ -5504,8 +5580,12 @@ void main() {
   else                  baseTileId = floor(baseSlots.a + 0.5);
 
   vec4 color;
+  float variantBase = TILE_ID(vTileId);
   if (baseTileId > 0.5) {
-    color = sampleOverlayTile(baseTileId);
+    color = sampleOverlayTile(TILE_ID(baseTileId));
+    if (color.a < 0.01) discard;
+  } else if (variantBase != vTileId) {
+    color = sampleOverlayTile(variantBase);
     if (color.a < 0.01) discard;
   } else {
     vec2 uvMin   = vTileOrigin + uTexelSize * 0.5;
@@ -5521,16 +5601,16 @@ void main() {
   vec4 slots = texture2D(uOverlayLookup, vOverlayUv);
 
   float id0 = floor(slots.r + 0.5);
-  if (id0 > 0.5) { vec4 oc = sampleOverlayTile(id0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id0 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id0)));
 
   float id1 = floor(slots.g + 0.5);
-  if (id1 > 0.5) { vec4 oc = sampleOverlayTile(id1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id1 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id1)));
 
   float id2 = floor(slots.b + 0.5);
-  if (id2 > 0.5) { vec4 oc = sampleOverlayTile(id2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id2 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id2)));
 
   float id3 = floor(slots.a + 0.5);
-  if (id3 > 0.5) { vec4 oc = sampleOverlayTile(id3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (id3 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(id3)));
 
   // ── 3. Skirt overlays (4 slots, same RGBA encoding) ───────────────────────
   // A separate lookup texture targets skirt/edge panels independently from
@@ -5538,14 +5618,21 @@ void main() {
   // onto the base surface.
   vec4 skirtSlots = texture2D(uSkirtLookup, vOverlayUv);
   float sk0 = floor(skirtSlots.r + 0.5);
-  if (sk0 > 0.5) { vec4 oc = sampleOverlayTile(sk0); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk0 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk0)));
   float sk1 = floor(skirtSlots.g + 0.5);
-  if (sk1 > 0.5) { vec4 oc = sampleOverlayTile(sk1); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk1 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk1)));
   float sk2 = floor(skirtSlots.b + 0.5);
-  if (sk2 > 0.5) { vec4 oc = sampleOverlayTile(sk2); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk2 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk2)));
   float sk3 = floor(skirtSlots.a + 0.5);
-  if (sk3 > 0.5) { vec4 oc = sampleOverlayTile(sk3); color.rgb = mix(color.rgb, oc.rgb, oc.a); }
+  if (sk3 > 0.5) color.rgb = compositeOverlay(color.rgb, sampleOverlayTile(TILE_ID(sk3)));
 
+#ifdef PALETTE_BANDS
+  // ── Palette bands: no shading at all ──────────────────────────────────────
+  // The variant texture already carries the brightness for this cell. Cells
+  // past the last band are drawn flat in uFogColor (a palette colour).
+  if (color.a < 0.5) discard;
+  gl_FragColor = vec4(gLevel >= uLevelCount - 0.5 ? uFogColor : color.rgb, 1.0);
+#else
   // ── 4. Ambient occlusion ──────────────────────────────────────────────────
   // vAo=1 (open corner) → multiplier = 1.0 (no change).
   // vAo=0 (fully boxed corner) → multiplier = (1 - uAoIntensity).
@@ -5604,6 +5691,7 @@ void main() {
   // ── 7. Fog ────────────────────────────────────────────────────────────────
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDist);
   gl_FragColor = vec4(mix(color.rgb, uFogColor, fogFactor), color.a);
+#endif
 }
 `;
 	/**
@@ -5639,7 +5727,11 @@ void main() {
 			uDungeonSize: { value: params.dungeonSize ?? new three.Vector2(1, 1) },
 			uSkyLightColor: { value: params.skyLightColor ?? new three.Color(0, 0, 0) },
 			uCeilHeightLookup: { value: params.ceilHeightLookup ?? makeFullPixelTex() },
-			uSkyFromLookup: { value: params.skyFromLookup ? 1 : 0 }
+			uSkyFromLookup: { value: params.skyFromLookup ? 1 : 0 },
+			uLightLevel: { value: params.lightLevel ?? defaultTex },
+			uLightGridSize: { value: params.lightGridSize ?? new three.Vector2(1, 1) },
+			uVariantLookup: { value: params.variantLookup ?? defaultTex },
+			uLevelCount: { value: params.levelCount ?? 1 }
 		};
 	}
 	/** Returns a 1×1 transparent black DataTexture used as a no-op default. */
@@ -5957,6 +6049,10 @@ uniform float uOpacity;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+// 'paletteBands' lighting: 1 = skip all shading, binary alpha, opaque output.
+uniform float uPaletteMode;
+// 'paletteBands' lighting: 1 = sprite stands in a dark cell → flat uFogColor silhouette.
+uniform float uDark;
 
 varying vec2 vUv;
 varying float vFogDist;
@@ -5966,6 +6062,13 @@ void main() {
   vec2 atlasUv = vec2(uUvX + vUv.x * uUvW, uUvY + vUv.y * uUvH);
   vec4 color = texture2D(uAtlas, atlasUv);
   if (color.a < 0.01) discard;
+
+  if (uPaletteMode > 0.5) {
+    // Tile was already swapped for its light-level variant on the CPU.
+    if (color.a < 0.5 || uOpacity < 0.5) discard;
+    gl_FragColor = vec4(uDark > 0.5 ? uFogColor : color.rgb, 1.0);
+    return;
+  }
 
   vec3 lightAccum = ambientLightColor;
   #if NUM_POINT_LIGHTS > 0
@@ -5999,9 +6102,14 @@ void main() {
 	/**
 	* Create a per-entity billboard handle. Call `handle.update()` each RAF frame.
 	* The atlas texture should already be created and cached by the caller.
+	*
+	* Pass `palette` to support `'paletteBands'` lighting: each frame the sprite's
+	* tiles are swapped for the variant matching the light level of the entity's
+	* cell (level 0 when `spriteMap.emissive`), shading is skipped, and sprites in
+	* dark cells draw as flat fog-colour silhouettes.
 	*/
 	var sharedAtlasTex;
-	function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}) {
+	function createBillboard(tileSize, entity, packedAtlas, scene, resolver, expectedFrameSize = 64, fog = {}, palette) {
 		const { spriteMap } = entity;
 		const group = new three.Group();
 		scene.add(group);
@@ -6101,7 +6209,9 @@ void main() {
 				uOpacity: { value: layer.opacity ?? 1 },
 				uFogColor: { value: fog.color ?? new three.Color(0, 0, 0) },
 				uFogNear: { value: fog.near ?? 5 },
-				uFogFar: { value: fog.far ?? 24 }
+				uFogFar: { value: fog.far ?? 24 },
+				uPaletteMode: { value: 0 },
+				uDark: { value: 0 }
 			};
 			const uniforms = three.UniformsUtils.merge([three.UniformsLib.lights, appUniforms]);
 			const mat = new three.ShaderMaterial({
@@ -6149,10 +6259,16 @@ void main() {
 				pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sprH * (sc - 1) * .5, l1?.offsetZ ?? 0);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
+				const rawLevel = palette?.levelAt(Math.round(ent.x), Math.round(ent.z)) ?? null;
+				const level = rawLevel === null ? null : spriteMap.emissive ? 0 : rawLevel;
+				const levelCount = palette?.levelCount() ?? 1;
 				for (const entry of layerEntries) {
 					const override = overrides?.find((o) => o.layerIndex === entry.layerIndex);
-					const rect = getRect(override?.tile ?? entry.baseLayer.tile);
+					const rawTile = override?.tile ?? entry.baseLayer.tile;
+					const rect = level === null ? getRect(rawTile) : getRect(palette.variant(resolveTile(rawTile, resolver), Math.min(level, levelCount - 1)));
 					const layerMat = entry.mesh.material;
+					layerMat.uniforms.uPaletteMode.value = level === null ? 0 : 1;
+					layerMat.uniforms.uDark.value = level !== null && level >= levelCount ? 1 : 0;
 					layerMat.uniforms.uUvX.value = rect.x;
 					layerMat.uniforms.uUvY.value = rect.y;
 					layerMat.uniforms.uUvW.value = rect.w;
@@ -6192,6 +6308,200 @@ void main() {
 					entry.mesh.material.dispose();
 				}
 			}
+		};
+	}
+	//#endregion
+	//#region src/lib/rendering/paletteBands.ts
+	var DEFAULT_VARIANT_PATTERN = "light{n}/{name}";
+	var DEFAULT_PALETTE_LEVELS = 4;
+	/**
+	* Derive evenly spaced band thresholds (in cells) from world-unit fog
+	* distances. The first band ends at `fogNear / tileSize` and the last at
+	* `fogFar / tileSize`, both rounded to whole cells.
+	*/
+	function bandsFromFog(fogNear, fogFar, tileSize, levels = 4) {
+		const n = Math.max(1, Math.floor(levels));
+		const near = Math.max(0, Math.floor(fogNear / tileSize));
+		const far = Math.max(near, Math.round(fogFar / tileSize));
+		if (n === 1) return [far];
+		const out = [];
+		for (let i = 0; i < n; i++) out.push(near + Math.round(i * (far - near) / (n - 1)));
+		return out;
+	}
+	/** Apply defaults to a {@link PaletteBandsOptions} object. */
+	function resolvePaletteBands(opts, fogNear, fogFar, tileSize) {
+		const o = opts ?? {};
+		return {
+			bands: o.bands && o.bands.length > 0 ? [...o.bands] : bandsFromFog(fogNear, fogFar, tileSize, o.levels),
+			metric: o.metric ?? "euclidean",
+			variantPattern: o.variantPattern ?? "light{n}/{name}",
+			brushes: o.brushes ?? {},
+			playerLight: o.playerLight ?? true,
+			occlusion: o.occlusion ?? false
+		};
+	}
+	function patternToRegex(pattern) {
+		const ni = pattern.indexOf("{n}");
+		const mi = pattern.indexOf("{name}");
+		if (ni < 0 || mi < 0) throw new Error(`paletteBands: variantPattern "${pattern}" must contain both {n} and {name}`);
+		const src = pattern.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace("{n}", "(\\d+)").replace("{name}", "(.+)");
+		return {
+			re: new RegExp(`^${src}$`),
+			nFirst: ni < mi
+		};
+	}
+	/**
+	* Build the brush lookup table: for each atlas tile ID and each level, the
+	* tile ID to draw instead. Returned as a flat array indexed
+	* `level * tileCount + id`, storing `variantId + 1` (0 = "no remap — draw the
+	* tile as-is"), ready to upload as a `tileCount × levels` float texture.
+	*
+	* Brush members missing a level fall back to the nearest brighter level that
+	* exists (or the tile itself).
+	*/
+	function buildVariantTable(atlas, tileCount, levels, settings, resolver) {
+		const table = new Float32Array(tileCount * levels);
+		const idOf = (t) => typeof t === "number" ? t : atlas.getByName(t)?.id ?? (resolver ? resolver(t) : void 0);
+		const assign = (brush, members) => {
+			for (const id of members) {
+				if (id < 0 || id >= tileCount) continue;
+				let fallback = id;
+				for (let l = 0; l < levels; l++) {
+					const v = brush.get(l);
+					if (v !== void 0) fallback = v;
+					table[l * tileCount + id] = fallback + 1;
+				}
+			}
+		};
+		const { re, nFirst } = patternToRegex(settings.variantPattern);
+		const groups = /* @__PURE__ */ new Map();
+		for (const sp of atlas.sprites.values()) {
+			const m = re.exec(sp.name);
+			if (!m) continue;
+			const level = parseInt(nFirst ? m[1] : m[2], 10);
+			const name = nFirst ? m[2] : m[1];
+			let g = groups.get(name);
+			if (!g) groups.set(name, g = /* @__PURE__ */ new Map());
+			g.set(level, sp.id);
+		}
+		for (const g of groups.values()) assign(g, [...g.values()]);
+		for (const [key, tiles] of Object.entries(settings.brushes)) {
+			const brush = /* @__PURE__ */ new Map();
+			const members = [];
+			tiles.forEach((t, l) => {
+				const id = idOf(t);
+				if (id === void 0) return;
+				brush.set(l, id);
+				members.push(id);
+			});
+			const keyId = idOf(key);
+			if (keyId !== void 0) members.push(keyId);
+			assign(brush, members);
+		}
+		return table;
+	}
+	/** Remap a tile ID through a variant table built by {@link buildVariantTable}. */
+	function variantFor(table, tileCount, id, level) {
+		if (id < 0 || id >= tileCount) return id;
+		const v = table[level * tileCount + id] ?? 0;
+		return v > 0 ? v - 1 : id;
+	}
+	function cellDistance(dx, dz, metric) {
+		const ax = Math.abs(dx);
+		const az = Math.abs(dz);
+		if (metric === "chebyshev") return Math.max(ax, az);
+		if (metric === "manhattan") return ax + az;
+		return Math.sqrt(dx * dx + dz * dz);
+	}
+	function levelForDistance(d, bands) {
+		for (let i = 0; i < bands.length; i++) if (d <= bands[i] + 1e-6) return i;
+		return -1;
+	}
+	/**
+	* Fill `out` (length `width * height`) with the light level of every cell:
+	* `0` = brightest variant, `levelCount` = dark (drawn in the fog colour).
+	* Each cell takes the brightest level from any source.
+	*
+	* @param isOpaque When provided, light is shadowcast and blocked by cells for
+	*                 which this returns `true` (out-of-bounds must return `true`).
+	*/
+	function computeLightLevels(out, width, height, sources, bands, metric, isOpaque) {
+		const levelCount = bands.length;
+		out.fill(levelCount);
+		for (const src of sources) {
+			const sb = src.bands && src.bands.length > 0 ? src.bands : bands;
+			const radius = Math.ceil(sb[sb.length - 1] ?? 0);
+			const light = (x, z) => {
+				if (x < 0 || z < 0 || x >= width || z >= height) return;
+				const lvl = levelForDistance(cellDistance(x - src.x, z - src.z, metric), sb);
+				if (lvl < 0) return;
+				const i = z * width + x;
+				if (lvl < out[i]) out[i] = Math.min(lvl, levelCount);
+			};
+			if (isOpaque) computeFov(src.x, src.z, {
+				isOpaque,
+				visit: light,
+				radius
+			});
+			else for (let z = src.z - radius; z <= src.z + radius; z++) for (let x = src.x - radius; x <= src.x + radius; x++) light(x, z);
+		}
+	}
+	/**
+	* W×H RGBA Uint8 DataTexture holding one light level per cell in the R
+	* channel (shader reads `floor(r * 255 + 0.5)`).
+	*/
+	function makeLightLevelTexture(width, height) {
+		const rgba = new Uint8Array(Math.max(1, width * height) * 4);
+		const tex = new three.DataTexture(rgba, Math.max(1, width), Math.max(1, height), three.RGBAFormat);
+		tex.magFilter = three.NearestFilter;
+		tex.minFilter = three.NearestFilter;
+		tex.generateMipmaps = false;
+		tex.flipY = false;
+		tex.needsUpdate = true;
+		return {
+			tex,
+			levels: new Uint8Array(Math.max(1, width * height)),
+			rgba
+		};
+	}
+	/** Copy a per-cell level array into the R channel of a light-level texture. */
+	function uploadLightLevels(levels, rgba, tex) {
+		for (let i = 0; i < levels.length; i++) rgba[i * 4] = levels[i];
+		tex.needsUpdate = true;
+	}
+	/** Upload a variant table as a `tileCount × levels` float DataTexture. */
+	function makeVariantTexture(table, tileCount, levels) {
+		const data = new Float32Array(tileCount * levels * 4);
+		for (let i = 0; i < table.length; i++) data[i * 4] = table[i];
+		const tex = new three.DataTexture(data, tileCount, levels, three.RGBAFormat, three.FloatType);
+		tex.magFilter = three.NearestFilter;
+		tex.minFilter = three.NearestFilter;
+		tex.generateMipmaps = false;
+		tex.flipY = false;
+		tex.needsUpdate = true;
+		return tex;
+	}
+	/**
+	* Count pixels in an RGBA byte buffer whose colour isn't in `palette`.
+	* Palette entries are CSS colour strings or `0xRRGGBB` numbers.
+	*/
+	function findOffPaletteColors(pixels, palette) {
+		const allowed = /* @__PURE__ */ new Set();
+		const c = new three.Color();
+		for (const p of palette) allowed.add(c.set(p).getHex());
+		const samples = /* @__PURE__ */ new Set();
+		let off = 0;
+		const total = Math.floor(pixels.length / 4);
+		for (let i = 0; i < total; i++) {
+			const hex = pixels[i * 4] << 16 | pixels[i * 4 + 1] << 8 | pixels[i * 4 + 2];
+			if (allowed.has(hex)) continue;
+			off++;
+			if (samples.size < 32) samples.add("#" + hex.toString(16).padStart(6, "0"));
+		}
+		return {
+			offPalettePixels: off,
+			totalPixels: total,
+			samples: [...samples]
 		};
 	}
 	//#endregion
@@ -6303,8 +6613,10 @@ void main() {
 		return new three.Matrix4().compose(new three.Vector3(x, y, z), new three.Quaternion().setFromEuler(new three.Euler(rx, ry, rz)), new three.Vector3(w, h, 1));
 	}
 	/**
-	* Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
-	* and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
+	* Build a PlaneGeometry with the per-instance atlas attributes (aUvRect,
+	* aSurface, aAoCorners, aCellFace, aRowIndex, aTileId) and an InstancedMesh
+	* using either a ShaderMaterial (atlas) or a plain material. `aTileId` is
+	* taken from each rect's optional `id`.
 	*/
 	function buildInstancedMesh(matrices, uvRects, material, useAtlas, heightOffsets, uvRotations, uvHeightScales, cellX, cellZ, aoCorners, faceNormals, rowIndexes, uvOffsets) {
 		const geo = new three.PlaneGeometry(1, 1);
@@ -6339,6 +6651,11 @@ void main() {
 			const rowArr = new Float32Array(n);
 			if (rowIndexes) for (let i = 0; i < n; i++) rowArr[i] = rowIndexes[i] ?? 0;
 			geo.setAttribute("aRowIndex", new three.InstancedBufferAttribute(rowArr, 1));
+			const tileIdArr = new Float32Array(n);
+			uvRects.forEach((r, i) => {
+				tileIdArr[i] = r.id ?? -1;
+			});
+			geo.setAttribute("aTileId", new three.InstancedBufferAttribute(tileIdArr, 1));
 		}
 		const mesh = new three.InstancedMesh(geo, material, matrices.length);
 		matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -6544,7 +6861,10 @@ void main() {
 	function tileUvRect(tile, packedAtlas, resolver) {
 		const id = resolveTile(tile, resolver);
 		const sprite = packedAtlas?.getById(id);
-		return sprite ? spriteToUvRect(sprite) : {
+		return sprite ? {
+			...spriteToUvRect(sprite),
+			id
+		} : {
 			x: 0,
 			y: 0,
 			w: 0,
@@ -6620,6 +6940,9 @@ void main() {
 			const attr = paneMesh.geometry.getAttribute("aUvRect");
 			attr.setXYZW(0, rect.x, rect.y, rect.w, rect.h);
 			attr.needsUpdate = true;
+			const idAttr = paneMesh.geometry.getAttribute("aTileId");
+			idAttr.setX(0, rect.id ?? -1);
+			idAttr.needsUpdate = true;
 		}
 		return {
 			update(now) {
@@ -6761,7 +7084,10 @@ void main() {
 		const atlasMaterials = [];
 		function getUvRect(id) {
 			const sprite = packedAtlas?.getById(id);
-			return sprite ? spriteToUvRect(sprite) : {
+			return sprite ? {
+				...spriteToUvRect(sprite),
+				id
+			} : {
 				x: 0,
 				y: 0,
 				w: 0,
@@ -6849,6 +7175,89 @@ void main() {
 			tileUvLookupTex.minFilter = three.NearestFilter;
 			tileUvLookupTex.needsUpdate = true;
 		}
+		let lightingMode = options.lightingMode ?? "shaded";
+		let paletteOpts = { ...options.paletteBands };
+		let paletteCfg = resolvePaletteBands(paletteOpts, fogNear, fogFar, tileSize);
+		let variantTable = new Float32Array(0);
+		let variantTex = null;
+		let lightGrid = makeLightLevelTexture(1, 1);
+		let lightW = 1;
+		let lightH = 1;
+		let extraLightSources = [];
+		function rebuildVariantTable() {
+			if (!packedAtlas) return;
+			variantTex?.dispose();
+			const levels = paletteCfg.bands.length;
+			variantTable = buildVariantTable(packedAtlas, tileUvCount, levels, paletteCfg, resolver);
+			variantTex = makeVariantTexture(variantTable, tileUvCount, levels);
+		}
+		rebuildVariantTable();
+		/** Toggle the PALETTE_BANDS define and push palette uniforms into one atlas material. */
+		function applyPaletteToMaterial(mat) {
+			const want = lightingMode === "paletteBands";
+			if (want !== (mat.defines?.["PALETTE_BANDS"] !== void 0)) {
+				const defines = { ...mat.defines };
+				if (want) defines["PALETTE_BANDS"] = "";
+				else delete defines["PALETTE_BANDS"];
+				mat.defines = defines;
+				mat.needsUpdate = true;
+			}
+			const u = mat.uniforms;
+			if (u["uLightLevel"]) u["uLightLevel"].value = lightGrid.tex;
+			if (u["uLightGridSize"]) u["uLightGridSize"].value.set(lightW, lightH);
+			if (u["uVariantLookup"] && variantTex) u["uVariantLookup"].value = variantTex;
+			if (u["uLevelCount"]) u["uLevelCount"].value = paletteCfg.bands.length;
+		}
+		function syncPaletteMaterials() {
+			for (const mat of atlasMaterials) applyPaletteToMaterial(mat);
+		}
+		/** Every light source for the current frame: player, sprite lights, extras. */
+		function collectLightSources() {
+			const sources = [];
+			if (paletteCfg.playerLight) sources.push({
+				x: game.player.x,
+				z: game.player.z
+			});
+			for (const e of currentEntities) if (e.alive && e.spriteMap?.lightBands) sources.push({
+				x: e.x,
+				z: e.z,
+				bands: e.spriteMap.lightBands
+			});
+			for (const o of currentObjects) if (o.spriteMap?.lightBands) sources.push({
+				x: o.x,
+				z: o.z,
+				bands: o.spriteMap.lightBands
+			});
+			sources.push(...extraLightSources);
+			return sources;
+		}
+		/** Recompute the per-cell light grid (palette mode only) and upload it. */
+		function recomputeLightLevels() {
+			const outputs = game.dungeon.outputs;
+			if (!outputs) return;
+			const { width, height } = outputs;
+			if (width !== lightW || height !== lightH) {
+				lightGrid.tex.dispose();
+				lightGrid = makeLightLevelTexture(width, height);
+				lightW = width;
+				lightH = height;
+				syncPaletteMaterials();
+			}
+			if (lightingMode !== "paletteBands") return;
+			computeLightLevels(lightGrid.levels, width, height, collectLightSources(), paletteCfg.bands, paletteCfg.metric, paletteCfg.occlusion ? makeIsSolid() : void 0);
+			uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex);
+		}
+		/** Light level at a cell in palette mode (`levelCount` = dark), else null. */
+		function paletteLevelAt(x, z) {
+			if (lightingMode !== "paletteBands") return null;
+			if (x < 0 || z < 0 || x >= lightW || z >= lightH) return paletteCfg.bands.length;
+			return lightGrid.levels[z * lightW + x] ?? paletteCfg.bands.length;
+		}
+		const billboardPalette = {
+			levelAt: paletteLevelAt,
+			levelCount: () => paletteCfg.bands.length,
+			variant: (id, level) => variantFor(variantTable, tileUvCount, id, level)
+		};
 		const _defaultOverlayTex = new three.DataTexture(new Float32Array(4), 1, 1, three.RGBAFormat, three.FloatType);
 		_defaultOverlayTex.magFilter = three.NearestFilter;
 		_defaultOverlayTex.minFilter = three.NearestFilter;
@@ -7050,6 +7459,7 @@ void main() {
 				side: three.FrontSide
 			});
 			atlasMaterials.push(mat);
+			applyPaletteToMaterial(mat);
 			return mat;
 		}
 		function makeAtlasMaterialDoubleSide(surfaceLight = 1) {
@@ -7799,7 +8209,7 @@ void main() {
 						color: fogColor,
 						near: fogNear,
 						far: fogFar
-					}));
+					}, billboardPalette));
 				}
 			}
 		}
@@ -7821,7 +8231,7 @@ void main() {
 							color: fogColor,
 							near: fogNear,
 							far: fogFar
-						});
+						}, billboardPalette);
 						billboardMap.set(e.id, handle);
 					}
 				} else {
@@ -7862,6 +8272,7 @@ void main() {
 		const idleCallbacks = /* @__PURE__ */ new Set();
 		const onTurn = () => {
 			buildDungeon();
+			recomputeLightLevels();
 			tgtX = (game.player.x + .5) * tileSize;
 			tgtZ = (game.player.z + .5) * tileSize;
 			tgtYaw = game.player.facing;
@@ -7907,6 +8318,10 @@ void main() {
 		let rafId = 0;
 		let lastT = 0;
 		const scratchCamDir = new three.Vector3();
+		function paletteLit(x, z) {
+			const lvl = paletteLevelAt(x, z);
+			return lvl !== null && lvl < paletteCfg.bands.length;
+		}
 		function tick(t) {
 			rafId = requestAnimationFrame(tick);
 			const dt = Math.min((t - lastT) / 1e3, .1);
@@ -7963,7 +8378,7 @@ void main() {
 					const dx = (e.x + .5) * tileSize - curX;
 					const dz = (e.z + .5) * tileSize - curZ;
 					const floorY = getFloorOffset(e.x, e.z);
-					const inRange = dx * dx + dz * dz <= fogFar2;
+					const inRange = dx * dx + dz * dz <= fogFar2 || paletteLit(e.x, e.z);
 					const anim = entityMoveAnimMap.get(e.id);
 					let rx = e.x, rz = e.z;
 					if (anim) if (t - anim.startTime >= moveAnimMs) entityMoveAnimMap.delete(e.id);
@@ -7999,7 +8414,7 @@ void main() {
 					const dx = (obj.x + .5) * tileSize - curX;
 					const dz = (obj.z + .5) * tileSize - curZ;
 					const floorY = getFloorOffset(obj.x, obj.z);
-					const inRange = dx * dx + dz * dz <= fogFar2;
+					const inRange = dx * dx + dz * dz <= fogFar2 || paletteLit(obj.x, obj.z);
 					const key = objectKey(obj);
 					const anim = objectMoveAnimMap.get(key);
 					let rx = obj.x, rz = obj.z;
@@ -8206,6 +8621,7 @@ void main() {
 			}
 			dungeonBuilt = false;
 			buildDungeon();
+			recomputeLightLevels();
 		}
 		return {
 			scene,
@@ -8222,6 +8638,7 @@ void main() {
 			setEntities(entities) {
 				currentEntities = entities;
 				syncEntities(entities);
+				recomputeLightLevels();
 			},
 			editEntity(entity, layerIndex, tile) {
 				if (billboardMap.has(entity.id)) billboardMap.get(entity.id)?.setLayerTile(tileSize, layerIndex, tile);
@@ -8230,6 +8647,7 @@ void main() {
 			setObjects(objects) {
 				currentObjects = objects;
 				syncObjects(objects);
+				recomputeLightLevels();
 			},
 			setDoors(doors) {
 				syncDoors(doors);
@@ -8403,6 +8821,38 @@ void main() {
 				idleCallbacks.add(callback);
 				return () => idleCallbacks.delete(callback);
 			},
+			setLightingMode(mode) {
+				if (mode === lightingMode) return;
+				lightingMode = mode;
+				syncPaletteMaterials();
+				recomputeLightLevels();
+			},
+			setPaletteBands(opts) {
+				paletteOpts = {
+					...paletteOpts,
+					...opts
+				};
+				paletteCfg = resolvePaletteBands(paletteOpts, fogNear, fogFar, tileSize);
+				if (opts.variantPattern !== void 0 || opts.brushes !== void 0 || opts.bands !== void 0 || opts.levels !== void 0) rebuildVariantTable();
+				syncPaletteMaterials();
+				recomputeLightLevels();
+			},
+			setLightSources(sources) {
+				extraLightSources = [...sources];
+				recomputeLightLevels();
+			},
+			getLightLevel(x, z) {
+				return paletteLevelAt(x, z);
+			},
+			validatePalette(palette) {
+				glRenderer.render(scene, camera);
+				const gl = glRenderer.getContext();
+				const w = gl.drawingBufferWidth;
+				const h = gl.drawingBufferHeight;
+				const buf = new Uint8Array(w * h * 4);
+				gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+				return findOffPaletteColors(buf, palette);
+			},
 			destroy() {
 				cancelAnimationFrame(rafId);
 				orbitControls?.dispose();
@@ -8426,6 +8876,8 @@ void main() {
 				for (const handle of doorMap.values()) handle.dispose();
 				sharedAtlasTex?.dispose();
 				tileUvLookupTex?.dispose();
+				variantTex?.dispose();
+				lightGrid.tex.dispose();
 				if (overlayFloor !== defSurf) overlayFloor.tex.dispose();
 				if (overlayWall !== defSurf) overlayWall.tex.dispose();
 				if (overlayCeil !== defSurf) overlayCeil.tex.dispose();
@@ -10243,7 +10695,9 @@ void main() {
 		};
 	}
 	//#endregion
+	exports.DEFAULT_PALETTE_LEVELS = DEFAULT_PALETTE_LEVELS;
 	exports.DEFAULT_STEP_HEIGHT = DEFAULT_STEP_HEIGHT;
+	exports.DEFAULT_VARIANT_PATTERN = DEFAULT_VARIANT_PATTERN;
 	exports.EASINGS = EASINGS;
 	exports.FLUID_VISIBLE_THRESHOLD = FLUID_VISIBLE_THRESHOLD;
 	exports.IS_BLOCKED = IS_BLOCKED;
@@ -10257,9 +10711,12 @@ void main() {
 	exports.attachMinimap = attachMinimap;
 	exports.attachSpawner = attachSpawner;
 	exports.attachSurfacePainter = attachSurfacePainter;
+	exports.bandsFromFog = bandsFromFog;
 	exports.buildColliderFlags = buildColliderFlags;
+	exports.buildVariantTable = buildVariantTable;
 	exports.colliderFlagsFromSolid = colliderFlagsFromSolid;
 	exports.computeDoorProgress = computeDoorProgress;
+	exports.computeLightLevels = computeLightLevels;
 	exports.createDoorMesh = createDoorMesh;
 	exports.createDungeonRenderer = createDungeonRenderer;
 	exports.createEntity = createEntity;
@@ -10281,6 +10738,7 @@ void main() {
 	exports.easeOutQuad = easeOutQuad;
 	exports.exportDungeonMap = exportDungeonMap;
 	exports.findDoorCandidates = findDoorCandidates;
+	exports.findOffPaletteColors = findOffPaletteColors;
 	exports.fluidCellAt = fluidCellAt;
 	exports.fluidDepthAt = fluidDepthAt;
 	exports.fluidFieldFromDungeon = fluidFieldFromDungeon;
@@ -10300,6 +10758,7 @@ void main() {
 	exports.placeFluidCircle = placeFluidCircle;
 	exports.registerTheme = registerTheme;
 	exports.resolveEasing = resolveEasing;
+	exports.resolvePaletteBands = resolvePaletteBands;
 	exports.resolveSprite = resolveSprite;
 	exports.resolveTheme = resolveTheme;
 	exports.setCeilSkirtTiles = setCeilSkirtTiles;
@@ -10313,6 +10772,7 @@ void main() {
 	exports.stepFluid = stepFluid;
 	exports.toFaceRotation = toFaceRotation;
 	exports.updateFluidMask = updateFluidMask;
+	exports.variantFor = variantFor;
 	exports.wallOffDoorGroup = wallOffDoorGroup;
 });
 

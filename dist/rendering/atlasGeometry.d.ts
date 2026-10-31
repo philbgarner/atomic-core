@@ -17,8 +17,10 @@ export declare function computeFaceAO(isSol: (x: number, z: number) => boolean, 
 export declare function computeSkirtFaceAO(isSol: (x: number, z: number) => boolean, cx: number, cz: number, dir: "north" | "south" | "east" | "west"): [number, number, number, number];
 export declare function makeFaceMatrix(x: number, y: number, z: number, rx: number, ry: number, rz: number, w: number, h: number): THREE.Matrix4;
 /**
- * Build a PlaneGeometry with a pre-allocated aTileId InstancedBufferAttribute,
- * and an InstancedMesh using either a ShaderMaterial (atlas) or a plain material.
+ * Build a PlaneGeometry with the per-instance atlas attributes (aUvRect,
+ * aSurface, aAoCorners, aCellFace, aRowIndex, aTileId) and an InstancedMesh
+ * using either a ShaderMaterial (atlas) or a plain material. `aTileId` is
+ * taken from each rect's optional `id`.
  */
 export declare function buildInstancedMesh(matrices: THREE.Matrix4[], uvRects: UvRect[], material: THREE.Material, useAtlas: boolean, heightOffsets?: Float32Array, uvRotations?: number[], uvHeightScales?: number[], cellX?: Float32Array, cellZ?: Float32Array, aoCorners?: Float32Array, faceNormals?: Float32Array, rowIndexes?: number[], uvOffsets?: number[]): THREE.InstancedMesh;
 //# sourceMappingURL=atlasGeometry.d.ts.map

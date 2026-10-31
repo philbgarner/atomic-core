@@ -2,6 +2,7 @@ import { GameHandle } from '../api/createGame';
 import { EntityBase, ObjectPlacement } from '../entities/types';
 import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
+import { LightingMode, LightSource, PaletteBandsOptions, PaletteCheckResult } from './paletteBands';
 import { SkyboxOptions } from './skybox';
 import { DoorRecord } from '../dungeon/doors';
 import { EasingName, EasingFn } from '../animations/easing';
@@ -31,6 +32,7 @@ import { EasingName, EasingFn } from '../animations/easing';
  */
 import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
+export type { LightingMode, LightSource, LightDistanceMetric, PaletteBandsOptions, PaletteCheckResult, } from './paletteBands';
 export type { SpriteMap } from './billboardSprites';
 export type { SkyboxFaces, SkyboxOptions } from './skybox';
 /**
@@ -243,6 +245,22 @@ export type DungeonRendererOptions = {
      * Can also be attached or swapped at runtime via `renderer.setSkybox()`.
      */
     skybox?: SkyboxOptions;
+    /**
+     * Lighting mode. Default: `'shaded'` (AO, surface lighting, scene lights,
+     * smooth fog).
+     *
+     * `'paletteBands'` is a palette-safe "distance-banded texture lookup" mode
+     * for art drawn in a fixed palette: every colour-altering effect (AO,
+     * surface/sky/scene lighting, smooth fog, overlay alpha blending) is
+     * switched off, and each tile is instead swapped for a pre-drawn
+     * light-level variant chosen from the light level of its grid cell. Cells
+     * past the last band are drawn flat in `fogColor`. Configure with
+     * `paletteBands`; switch at runtime with `setLightingMode()`. Requires
+     * `packedAtlas`.
+     */
+    lightingMode?: LightingMode;
+    /** Settings for `lightingMode: 'paletteBands'`. See {@link PaletteBandsOptions}. */
+    paletteBands?: PaletteBandsOptions;
 };
 /** Which class of dungeon geometry a layer targets. */
 export type LayerTarget = "floor" | "ceil" | "wall" | "floorSkirt" | "ceilSkirt";
@@ -511,6 +529,34 @@ export type DungeonRenderer = {
      * Returns an unsubscribe function.
      */
     onIdle(callback: () => void): () => void;
+    /**
+     * Switch lighting mode at runtime (`'shaded'` ↔ `'paletteBands'`).
+     * Recompiles the atlas shaders on the next frame; no geometry rebuild.
+     */
+    setLightingMode(mode: LightingMode): void;
+    /**
+     * Update `'paletteBands'` settings at runtime. Fields are merged with the
+     * current settings. Changing `variantPattern`, `brushes`, `bands` or
+     * `levels` rebuilds the brush lookup; light levels are recomputed
+     * immediately.
+     */
+    setPaletteBands(opts: PaletteBandsOptions): void;
+    /**
+     * Replace the extra `'paletteBands'` light sources (in addition to the
+     * player and any entity/object whose `spriteMap.lightBands` is set).
+     */
+    setLightSources(sources: LightSource[]): void;
+    /**
+     * Current `'paletteBands'` light level of a cell: `0` = brightest variant,
+     * the number of bands = dark. Returns `null` in `'shaded'` mode.
+     */
+    getLightLevel(x: number, z: number): number | null;
+    /**
+     * Dev tool: render a frame and count pixels whose colour isn't in
+     * `palette` (CSS colour strings or `0xRRGGBB` numbers). Useful for
+     * checking that `'paletteBands'` output obeys the art palette.
+     */
+    validatePalette(palette: (string | number)[]): PaletteCheckResult;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };
