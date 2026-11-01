@@ -26,6 +26,7 @@ src/lib/
     skybox.ts
     fluidMask.ts
     paletteBands.ts
+    particles.ts
   fluid/
     fluid.ts
   dungeon/
@@ -144,6 +145,16 @@ Palette-safe lighting mode for art drawn in a fixed palette. `lightingMode: 'pal
 - `rendering/dungeonRenderer.ts` — `lightingMode` / `paletteBands` options; `setLightingMode()`, `setPaletteBands()`, `setLightSources()`, `getLightLevel()`, `validatePalette()`; `applyPaletteToMaterial()` toggles the define and shares textures with every atlas material (including doors and layers); light grid recomputed on `turn`, `setEntities`, `setObjects`, `rebuild`; `getUvRect()` carries tile IDs; `billboardPalette` passed to `createBillboard()`
 - `rendering/billboardSprites.ts` — `SpriteMap.emissive`, `SpriteMap.lightBands`; `BillboardPalette` interface and optional `palette` parameter on `createBillboard()`; `uPaletteMode` / `uDark` billboard uniforms
 - `rendering/doorRenderer.ts` — door rects carry tile IDs; `syncPaneTexture()` keeps `aTileId` in sync
+
+---
+
+### Particle effects (palette-safe)
+
+`renderer.addEmitter(spec)` starts a particle emitter (gas clouds, flames, sparks, dust, projectiles); `renderer.clearEmitters()` removes them all. Particles are hard-edged square points (whole-pixel `gl_PointSize`, opaque, no blending) in exact colours from the emitter's `colors` ramp, stepped brightest → darkest over each particle's life, so output stays in the art palette. Emitters spawn in a list of grid `cells` (or around a moving `path` head for projectiles, firing `onArrive` at the end) with `burst` and/or `rate` × `duration`, `lifetime`, `velocity`/`jitter`, `gravity`, `drag`, `size` and `height` (fractions of the ceiling above the cell's floor). In `'paletteBands'` lighting non-emissive particles shift one ramp step darker per light level and are culled in dark cells; `emissive` particles ignore the light grid. In `'shaded'` mode they take the usual smoothstep fog. The layer is stepped in the renderer's RAF loop, so effects animate in real time between turns.
+
+**Files:**
+- `rendering/particles.ts` — `ParticleEmitterSpec`, `EmitterHandle`, `ParticleVec`, `ParticlePoint`, `ParticleView`, `ParticleSim`, `ParticleLayer`, `ParticleLayerOptions`, `ParticleLighting` types; `createParticleSim()` (pure CPU simulation, injectable `rng`, capacity cap), `createParticleLayer()` (one `THREE.Points` with dynamic position/colour/size attributes), `rampColor()`, `parseHexColor()`
+- `rendering/dungeonRenderer.ts` — creates the particle layer, steps it in `tick()` with the palette light grid, `addEmitter()` / `clearEmitters()` on the handle, disposed on `destroy()`
 
 ---
 

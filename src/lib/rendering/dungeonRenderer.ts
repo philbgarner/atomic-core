@@ -63,6 +63,9 @@ export type {
   PaletteCheckResult,
 } from "./paletteBands";
 export type { SpriteMap } from "./billboardSprites";
+import { createParticleLayer } from "./particles";
+import type { EmitterHandle, ParticleEmitterSpec } from "./particles";
+export type { EmitterHandle, ParticleEmitterSpec } from "./particles";
 import { loadSkybox } from "./skybox";
 import type { SkyboxOptions } from "./skybox";
 export type { SkyboxFaces, SkyboxOptions } from "./skybox";
@@ -648,6 +651,14 @@ export type DungeonRenderer = {
    * checking that `'paletteBands'` output obeys the art palette.
    */
   validatePalette(palette: (string | number)[]): PaletteCheckResult;
+  /**
+   * Start a particle emitter (gas, flames, sparks, projectiles, …). Particles
+   * are palette-safe square points stepped every frame, so they animate in
+   * real time between turns. See {@link ParticleEmitterSpec}.
+   */
+  addEmitter(spec: ParticleEmitterSpec): EmitterHandle;
+  /** Remove every particle emitter and particle. */
+  clearEmitters(): void;
   /** Unmount the canvas and release all Three.js resources. */
   destroy(): void;
 };
@@ -2859,6 +2870,19 @@ export function createDungeonRenderer(
   let rafId = 0;
   let lastT = 0;
   const scratchCamDir = new THREE.Vector3();
+  const scratchBufSize = new THREE.Vector2();
+
+  // ── Particles ──────────────────────────────────────────────────────────────
+  // Palette-safe square points (see particles.ts), stepped every frame.
+  const particleLayer = createParticleLayer({
+    scene,
+    tileSize,
+    ceilingHeight: ceilingH,
+    floorAt: (x, z) => getFloorOffset(x, z),
+    fogColor,
+    fogNear,
+    fogFar,
+  });
 
   // In palette mode a sprite in a lit cell (e.g. near a distant light source)
   // stays visible even beyond fogFar.
@@ -3051,6 +3075,17 @@ export function createDungeonRenderer(
     // Unconditional (not gated on `initialized` or cameraMode) so damping
     // keeps animating smoothly even on the exact frame a mode switch happens.
     if (orbitControls) orbitControls.update();
+
+    glRenderer.getDrawingBufferSize(scratchBufSize);
+    particleLayer.update(
+      dt,
+      scratchBufSize.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)),
+      {
+        palette: lightingMode === "paletteBands",
+        levelAt: paletteLevelAt,
+        levelCount: paletteCfg.bands.length,
+      },
+    );
 
     glRenderer.render(scene, camera);
   }
@@ -3568,6 +3603,12 @@ export function createDungeonRenderer(
       extraLightSources = [...sources];
       recomputeLightLevels();
     },
+    addEmitter(spec) {
+      return particleLayer.sim.addEmitter(spec);
+    },
+    clearEmitters() {
+      particleLayer.sim.clear();
+    },
     getLightLevel(x, z) {
       return paletteLevelAt(x, z);
     },
@@ -3582,6 +3623,7 @@ export function createDungeonRenderer(
     },
     destroy() {
       cancelAnimationFrame(rafId);
+      particleLayer.dispose();
       orbitControls?.dispose();
       orbitControls = null;
       ro.disconnect();

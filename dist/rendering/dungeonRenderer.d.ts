@@ -3,6 +3,7 @@ import { EntityBase, ObjectPlacement } from '../entities/types';
 import { DirectionFaceMap } from './tileAtlas';
 import { PackedAtlas } from './textureLoader';
 import { LightingMode, LightSource, PaletteBandsOptions, PaletteCheckResult } from './paletteBands';
+import { EmitterHandle, ParticleEmitterSpec } from './particles';
 import { SkyboxOptions } from './skybox';
 import { DoorRecord } from '../dungeon/doors';
 import { EasingName, EasingFn } from '../animations/easing';
@@ -34,6 +35,7 @@ import * as THREE from "three";
 export type { FaceTileSpec, DirectionFaceMap } from './tileAtlas';
 export type { LightingMode, LightSource, LightDistanceMetric, PaletteBandsOptions, PaletteCheckResult, } from './paletteBands';
 export type { SpriteMap } from './billboardSprites';
+export type { EmitterHandle, ParticleEmitterSpec } from './particles';
 export type { SkyboxFaces, SkyboxOptions } from './skybox';
 /**
  * Information about a dungeon cell returned by mouse interaction callbacks.
@@ -568,6 +570,14 @@ export type DungeonRenderer = {
      * checking that `'paletteBands'` output obeys the art palette.
      */
     validatePalette(palette: (string | number)[]): PaletteCheckResult;
+    /**
+     * Start a particle emitter (gas, flames, sparks, projectiles, …). Particles
+     * are palette-safe square points stepped every frame, so they animate in
+     * real time between turns. See {@link ParticleEmitterSpec}.
+     */
+    addEmitter(spec: ParticleEmitterSpec): EmitterHandle;
+    /** Remove every particle emitter and particle. */
+    clearEmitters(): void;
     /** Unmount the canvas and release all Three.js resources. */
     destroy(): void;
 };

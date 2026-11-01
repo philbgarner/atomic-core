@@ -6680,6 +6680,300 @@ void main() {
 		};
 	}
 	//#endregion
+	//#region src/lib/rendering/particles.ts
+	/** Parse a CSS hex string (`#rgb` / `#rrggbb`) or `0xRRGGBB` number to `0xRRGGBB`. */
+	function parseHexColor(c) {
+		if (typeof c === "number") return c & 16777215;
+		let s = c.trim().replace(/^#/, "");
+		if (s.length === 3) s = s.split("").map((ch) => ch + ch).join("");
+		const v = parseInt(s, 16);
+		return Number.isNaN(v) ? 0 : v & 16777215;
+	}
+	/**
+	* Pick a ramp colour for a particle at life fraction `t` (0..1), shifted
+	* `shift` steps darker (clamped to the last entry). Returns `0xRRGGBB`.
+	*/
+	function rampColor(colors, t, shift = 0) {
+		if (colors.length === 0) return 0;
+		const i = Math.floor(Math.max(0, Math.min(.999999, t)) * colors.length) + Math.max(0, shift);
+		return colors[Math.min(colors.length - 1, i)];
+	}
+	/**
+	* Create a CPU particle simulation. `capacity` caps live particles (new
+	* spawns are dropped when full); `rng` defaults to `Math.random`.
+	*/
+	function createParticleSim(capacity = 4096, rng = Math.random) {
+		const emitters = /* @__PURE__ */ new Set();
+		let particles = [];
+		const range = (r) => r[0] + (r[1] - r[0]) * rng();
+		const pm = (a) => (rng() * 2 - 1) * a;
+		function spawn(em) {
+			if (particles.length >= capacity) return;
+			const s = em.spec;
+			const [h0, h1] = s.height ?? [0, 1];
+			let x;
+			let y;
+			let z;
+			if (em.head) {
+				const r = s.spread ?? .1;
+				x = em.head.x + pm(r);
+				y = em.head.y + pm(r);
+				z = em.head.z + pm(r);
+			} else {
+				const cells = s.cells ?? [];
+				if (cells.length === 0) return;
+				const c = cells[Math.floor(rng() * cells.length)];
+				const sp = Math.max(0, Math.min(1, s.spread ?? 1));
+				x = c.x + .5 + (rng() - .5) * sp;
+				z = c.z + .5 + (rng() - .5) * sp;
+				y = h0 + (h1 - h0) * rng();
+			}
+			const v = s.velocity ?? {};
+			const j = typeof s.jitter === "number" ? {
+				x: s.jitter,
+				y: s.jitter,
+				z: s.jitter
+			} : s.jitter ?? {};
+			particles.push({
+				em,
+				x,
+				y,
+				z,
+				vx: (v.x ?? 0) + pm(j.x ?? 0),
+				vy: (v.y ?? 0) + pm(j.y ?? 0),
+				vz: (v.z ?? 0) + pm(j.z ?? 0),
+				age: 0,
+				life: Math.max(.001, range(s.lifetime)),
+				size: typeof s.size === "number" ? s.size : range(s.size)
+			});
+			em.live++;
+		}
+		return {
+			addEmitter(spec) {
+				const em = {
+					spec,
+					colors: spec.colors.map(parseHexColor),
+					elapsed: 0,
+					duration: spec.duration ?? (spec.rate ? Infinity : 0),
+					carry: 0,
+					spawning: true,
+					live: 0,
+					dead: false,
+					head: spec.path ? {
+						x: spec.path.from.x + .5,
+						y: spec.path.from.y ?? .5,
+						z: spec.path.from.z + .5
+					} : null
+				};
+				emitters.add(em);
+				for (let i = 0; i < (spec.burst ?? 0); i++) spawn(em);
+				if (!spec.rate && !spec.path) em.spawning = false;
+				return {
+					stop() {
+						em.spawning = false;
+					},
+					kill() {
+						em.dead = true;
+						em.spawning = false;
+						emitters.delete(em);
+						particles = particles.filter((p) => p.em !== em);
+						em.live = 0;
+					},
+					get alive() {
+						return !em.dead && (em.spawning || em.live > 0);
+					}
+				};
+			},
+			step(dt) {
+				for (const em of emitters) {
+					const s = em.spec;
+					if (em.spawning && em.head && s.path) {
+						const to = {
+							x: s.path.to.x + .5,
+							y: s.path.to.y ?? .5,
+							z: s.path.to.z + .5
+						};
+						const dx = to.x - em.head.x;
+						const dy = to.y - em.head.y;
+						const dz = to.z - em.head.z;
+						const dist = Math.hypot(dx, dy, dz);
+						const move = s.path.speed * dt;
+						if (dist <= move || dist === 0) {
+							em.head = to;
+							em.spawning = false;
+							s.onArrive?.();
+						} else {
+							em.head.x += dx / dist * move;
+							em.head.y += dy / dist * move;
+							em.head.z += dz / dist * move;
+						}
+					}
+					if (em.spawning && s.rate) {
+						em.carry += s.rate * dt;
+						while (em.carry >= 1) {
+							em.carry -= 1;
+							spawn(em);
+						}
+					}
+					em.elapsed += dt;
+					if (em.elapsed >= em.duration && !s.path) em.spawning = false;
+				}
+				const next = [];
+				for (const p of particles) {
+					p.age += dt;
+					if (p.age >= p.life || p.em.dead) {
+						p.em.live--;
+						continue;
+					}
+					const s = p.em.spec;
+					if (s.drag) {
+						const k = Math.exp(-s.drag * dt);
+						p.vx *= k;
+						p.vy *= k;
+						p.vz *= k;
+					}
+					if (s.gravity) p.vy -= s.gravity * dt;
+					p.x += p.vx * dt;
+					p.y += p.vy * dt;
+					p.z += p.vz * dt;
+					next.push(p);
+				}
+				particles = next;
+				for (const em of emitters) if (!em.spawning && em.live <= 0) {
+					em.dead = true;
+					emitters.delete(em);
+				}
+			},
+			forEach(fn) {
+				for (const p of particles) fn({
+					x: p.x,
+					y: p.y,
+					z: p.z,
+					t: p.age / p.life,
+					size: p.size,
+					colors: p.em.colors,
+					emissive: !!p.em.spec.emissive
+				});
+			},
+			clear() {
+				for (const em of emitters) {
+					em.dead = true;
+					em.spawning = false;
+					em.live = 0;
+				}
+				emitters.clear();
+				particles = [];
+			},
+			get count() {
+				return particles.length;
+			}
+		};
+	}
+	var PARTICLE_VERT = `
+attribute vec3 aColor;
+attribute float aSize;
+uniform float uPixelScale;
+varying vec3 vColor;
+varying float vFogDist;
+
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vColor = aColor;
+  vFogDist = length(mv.xyz);
+  // Whole pixels keep particles crisp squares.
+  gl_PointSize = max(1.0, floor(aSize * uPixelScale / max(-mv.z, 1e-3)));
+  gl_Position = projectionMatrix * mv;
+}
+`;
+	var PARTICLE_FRAG = `
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
+uniform float uPaletteMode;
+varying vec3 vColor;
+varying float vFogDist;
+
+void main() {
+  // Palette mode: exact ramp colour (light already applied on the CPU).
+  if (uPaletteMode > 0.5) { gl_FragColor = vec4(vColor, 1.0); return; }
+  float f = smoothstep(uFogNear, uFogFar, vFogDist);
+  gl_FragColor = vec4(mix(vColor, uFogColor, f), 1.0);
+}
+`;
+	/** Create the particle layer used by the dungeon renderer. */
+	function createParticleLayer(opts) {
+		const capacity = opts.capacity ?? 4096;
+		const sim = createParticleSim(capacity);
+		const { tileSize, ceilingHeight } = opts;
+		const positions = new Float32Array(capacity * 3);
+		const colors = new Float32Array(capacity * 3);
+		const sizes = new Float32Array(capacity);
+		const geo = new three.BufferGeometry();
+		const posAttr = new three.BufferAttribute(positions, 3).setUsage(three.DynamicDrawUsage);
+		const colAttr = new three.BufferAttribute(colors, 3).setUsage(three.DynamicDrawUsage);
+		const sizeAttr = new three.BufferAttribute(sizes, 1).setUsage(three.DynamicDrawUsage);
+		geo.setAttribute("position", posAttr);
+		geo.setAttribute("aColor", colAttr);
+		geo.setAttribute("aSize", sizeAttr);
+		geo.setDrawRange(0, 0);
+		const mat = new three.ShaderMaterial({
+			vertexShader: PARTICLE_VERT,
+			fragmentShader: PARTICLE_FRAG,
+			uniforms: {
+				uPixelScale: { value: 1 },
+				uFogColor: { value: opts.fogColor },
+				uFogNear: { value: opts.fogNear },
+				uFogFar: { value: opts.fogFar },
+				uPaletteMode: { value: 0 }
+			},
+			transparent: false,
+			depthTest: true,
+			depthWrite: true
+		});
+		const points = new three.Points(geo, mat);
+		points.frustumCulled = false;
+		points.renderOrder = 1;
+		opts.scene.add(points);
+		return {
+			sim,
+			update(dt, pixelScale, lighting) {
+				sim.step(dt);
+				let n = 0;
+				sim.forEach((p) => {
+					const cx = Math.floor(p.x);
+					const cz = Math.floor(p.z);
+					let shift = 0;
+					if (lighting.palette && !p.emissive) {
+						const lvl = lighting.levelAt(cx, cz) ?? 0;
+						if (lvl >= lighting.levelCount) return;
+						shift = lvl;
+					}
+					const hex = rampColor(p.colors, p.t, shift);
+					positions[n * 3] = p.x * tileSize;
+					positions[n * 3 + 1] = opts.floorAt(cx, cz) + p.y * ceilingHeight;
+					positions[n * 3 + 2] = p.z * tileSize;
+					colors[n * 3] = (hex >> 16 & 255) / 255;
+					colors[n * 3 + 1] = (hex >> 8 & 255) / 255;
+					colors[n * 3 + 2] = (hex & 255) / 255;
+					sizes[n] = p.size * tileSize;
+					n++;
+				});
+				mat.uniforms["uPixelScale"].value = pixelScale;
+				mat.uniforms["uPaletteMode"].value = lighting.palette ? 1 : 0;
+				geo.setDrawRange(0, n);
+				posAttr.needsUpdate = true;
+				colAttr.needsUpdate = true;
+				sizeAttr.needsUpdate = true;
+			},
+			dispose() {
+				sim.clear();
+				opts.scene.remove(points);
+				geo.dispose();
+				mat.dispose();
+			}
+		};
+	}
+	//#endregion
 	//#region src/lib/rendering/skybox.ts
 	/**
 	* Load a `THREE.CubeTexture` from 6 face image URLs and apply an optional
@@ -8494,6 +8788,16 @@ void main() {
 		let rafId = 0;
 		let lastT = 0;
 		const scratchCamDir = new three.Vector3();
+		const scratchBufSize = new three.Vector2();
+		const particleLayer = createParticleLayer({
+			scene,
+			tileSize,
+			ceilingHeight: ceilingH,
+			floorAt: (x, z) => getFloorOffset(x, z),
+			fogColor,
+			fogNear,
+			fogFar
+		});
 		function paletteLit(x, z) {
 			const lvl = paletteLevelAt(x, z);
 			return lvl !== null && lvl < paletteCfg.bands.length;
@@ -8619,6 +8923,12 @@ void main() {
 				wasAnimating = nowAnimating;
 			}
 			if (orbitControls) orbitControls.update();
+			glRenderer.getDrawingBufferSize(scratchBufSize);
+			particleLayer.update(dt, scratchBufSize.y / (2 * Math.tan(three.MathUtils.degToRad(camera.fov) / 2)), {
+				palette: lightingMode === "paletteBands",
+				levelAt: paletteLevelAt,
+				levelCount: paletteCfg.bands.length
+			});
 			glRenderer.render(scene, camera);
 		}
 		function getFloorOffset(tx, tz) {
@@ -9020,6 +9330,12 @@ void main() {
 				extraLightSources = [...sources];
 				recomputeLightLevels();
 			},
+			addEmitter(spec) {
+				return particleLayer.sim.addEmitter(spec);
+			},
+			clearEmitters() {
+				particleLayer.sim.clear();
+			},
 			getLightLevel(x, z) {
 				return paletteLevelAt(x, z);
 			},
@@ -9034,6 +9350,7 @@ void main() {
 			},
 			destroy() {
 				cancelAnimationFrame(rafId);
+				particleLayer.dispose();
 				orbitControls?.dispose();
 				orbitControls = null;
 				ro.disconnect();
@@ -10906,6 +11223,8 @@ void main() {
 	exports.createFluidSurface = createFluidSurface;
 	exports.createGame = createGame;
 	exports.createItem = createItem;
+	exports.createParticleLayer = createParticleLayer;
+	exports.createParticleSim = createParticleSim;
 	exports.createWebSocketTransport = createWebSocketTransport;
 	exports.dungeonMapFromJson = dungeonMapFromJson;
 	exports.dungeonMapToJson = dungeonMapToJson;
@@ -10934,7 +11253,9 @@ void main() {
 	exports.loadTiledMap = loadTiledMap;
 	exports.makeRng = makeRng;
 	exports.packedAtlasResolver = packedAtlasResolver;
+	exports.parseHexColor = parseHexColor;
 	exports.placeFluidCircle = placeFluidCircle;
+	exports.rampColor = rampColor;
 	exports.registerTheme = registerTheme;
 	exports.resolveEasing = resolveEasing;
 	exports.resolvePaletteBands = resolvePaletteBands;

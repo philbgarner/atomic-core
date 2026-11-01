@@ -34,6 +34,8 @@ export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboard
 export { resolvePaletteBands, bandsFromFog, buildVariantTable, variantFor, computeLightLevels, findOffPaletteColors, DEFAULT_VARIANT_PATTERN, DEFAULT_PALETTE_LEVELS } from './rendering/paletteBands'
 export type { LightingMode, LightDistanceMetric, LightSource, PaletteBandsOptions, ResolvedPaletteBands, PaletteCheckResult } from './rendering/paletteBands'
 export type { BillboardPalette, BillboardPlacementOffset } from './rendering/billboardSprites'
+export { createParticleSim, createParticleLayer, rampColor, parseHexColor } from './rendering/particles'
+export type { ParticleEmitterSpec, EmitterHandle, ParticleVec, ParticlePoint, ParticleView, ParticleSim, ParticleLayer, ParticleLayerOptions, ParticleLighting } from './rendering/particles'
 
 // Transport
 export { createWebSocketTransport }                  from './transport/websocket'
