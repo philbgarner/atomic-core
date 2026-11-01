@@ -3018,6 +3018,7 @@ export function createDungeonRenderer(
               tileSize,
               ceilingH,
               floorY,
+              obj,
             );
           }
         }

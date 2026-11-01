@@ -168,14 +168,33 @@ void main() {
 // Internal types
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-placement adjustments applied on top of a billboard's sprite layers
+ * (see `ObjectPlacement.offsetX/offsetY/offsetZ/scale`).
+ */
+export interface BillboardPlacementOffset {
+	/** World-space shift from the cell centre along X, in cell units. */
+	offsetX?: number;
+	/** Vertical shift, in cell units (+ = up). */
+	offsetY?: number;
+	/** World-space shift from the cell centre along Z, in cell units. */
+	offsetZ?: number;
+	/** Uniform scale multiplier on every layer; the sprite stays floor-anchored. */
+	scale?: number;
+}
+
 export interface BillboardHandle {
-	/** Update position, orientation, and angle-variant uniforms each frame. */
+	/**
+	 * Update position, orientation, and angle-variant uniforms each frame.
+	 * `placement` (object billboards) shifts and scales the whole sprite.
+	 */
 	update(
 		entity: EntityBase,
 		cameraYaw: number,
 		tileSize: number,
 		ceilingH: number,
 		floorY: number,
+		placement?: BillboardPlacementOffset,
 	): void;
 	/** Show or hide all meshes in this billboard without disposing GPU resources. */
 	setVisible(visible: boolean): void;
@@ -418,14 +437,15 @@ export function createBillboard(
 	);
 
 	return {
-		update(ent, cameraYaw, tileSize, ceilingH, floorY) {
+		update(ent, cameraYaw, tileSize, ceilingH, floorY, placement) {
 			const useYaw = (ent.forcedYaw as number) ?? cameraYaw;	// support facades with fixed angle
+			const placeScale = placement?.scale ?? 1;
 
-			// Position group at entity world coordinates.
-			const wx = (ent.x + 0.5) * tileSize;
-			const wz = (ent.z + 0.5) * tileSize;
+			// Position group at entity world coordinates (plus any placement offset, in cells).
+			const wx = (ent.x + 0.5 + (placement?.offsetX ?? 0)) * tileSize;
+			const wz = (ent.z + 0.5 + (placement?.offsetZ ?? 0)) * tileSize;
 			const basePivot = spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : { x: 0.5, y: 0 };
-			const wy = (1 - basePivot.y) * tileSize + floorY;
+			const wy = (1 - basePivot.y + (placement?.offsetY ?? 0)) * tileSize + floorY;
 			group.position.set(wx, wy, wz);
 
 			// Rotate the group to always face the camera (Y-axis billboard). unless it's a facade with fixed angle
@@ -446,7 +466,7 @@ export function createBillboard(
 			const centerX = (opaqueBounds.left + opaqueBounds.right) * 0.5;
 			const centerY = (opaqueBounds.top + opaqueBounds.bottom) * 0.5;
 			// minor inconvenience, pickmesh assumes scale constant across all layers
-			const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1);
+			const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1) * placeScale;
 			pickMesh.position.set(
 				centerX * sprW + sc * (l1?.offsetX ?? 0),
 				centerY * sprH + (sprH * (sc - 1) * 0.5),	// do not offsetY here because the object itself has already taken this into account
@@ -477,7 +497,7 @@ export function createBillboard(
 				layerMat.uniforms.uUvH!.value = rect.h;
 				layerMat.uniforms.uOpacity!.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
 
-				const s = entry.baseLayer.scale ?? 1;
+				const s = (entry.baseLayer.scale ?? 1) * placeScale;
 				entry.mesh.scale.set(sprW * s, sprH * s, 1);
 
 				const bob = entry.baseLayer.bob;

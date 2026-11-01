@@ -79,13 +79,21 @@ export interface ObjectPlacement {
   z: number;
   /** Factory key resolved by the renderer's ObjectRegistry. */
   type: string;
-  /** Fine-grained world-space offset from cell centre (in cell units). */
+  /**
+   * Fine-grained world-space offset from cell centre, in cell units
+   * (e.g. `offsetX: 0.25` = a quarter cell east). Billboards (`spriteMap`)
+   * are drawn shifted by this; the placement still occupies cell (x, z).
+   */
   offsetX?: number;
   offsetZ?: number;
+  /** Vertical offset in cell units (+ = up), e.g. to sit a sprite on a table. */
   offsetY?: number;
-  /** Yaw rotation in radians. */
+  /** Yaw rotation in radians. Ignored by camera-facing billboards. */
   yaw?: number;
-  /** Uniform scale multiplier. */
+  /**
+   * Uniform scale multiplier. Billboards multiply every sprite layer's
+   * `scale` by this, keeping the sprite anchored to the floor.
+   */
   scale?: number;
   /** Arbitrary metadata for game logic. */
   meta?: Record<string, unknown>;

@@ -36,7 +36,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
 - Entity system: player, NPCs, enemies, items, chests
-- **Billboard sprite rendering** — `spriteMap` field on any entity activates camera-facing billboard quads with layered atlas tiles, x/y offsets, per-layer opacity, and up to 8 viewing angles (N/NE/E/SE/S/SW/W/NW) with per-layer tile overrides; box geometry fallback when `spriteMap` is absent
+- **Billboard sprite rendering** — `spriteMap` field on any entity activates camera-facing billboard quads with layered atlas tiles, x/y offsets, per-layer opacity, per-placement world offsets (`ObjectPlacement.offsetX`/`offsetZ`/`offsetY`, in cells) and `scale`, and up to 8 viewing angles (N/NE/E/SE/S/SW/W/NW) with per-layer tile overrides; box geometry fallback when `spriteMap` is absent
 - Active status effects with configurable stacking modes
 - Three-faction combat model: `player`, `npc`, `enemy`
 - Minimap with entity overlays
