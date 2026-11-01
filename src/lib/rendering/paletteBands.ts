@@ -97,6 +97,15 @@ export type PaletteBandsOptions = {
    * `computeFov`), so it doesn't leak through walls. Default: `false`.
    */
   occlusion?: boolean;
+  /**
+   * Extra distance (in cells) added when lighting wall faces. A wall face sits
+   * on the edge of the open cell it is lit from, so it is really a little
+   * further away than that cell's centre; a small offset (e.g. `0.5`) makes
+   * walls fall off slightly before the floor in front of them, so a wall at
+   * the end of a corridor bands with its neighbours instead of matching the
+   * floor. Floors, ceilings and sprites are unaffected. Default: `0`.
+   */
+  wallDistanceOffset?: number;
 };
 
 /** Fully resolved palette-band settings (all defaults applied). */
@@ -107,6 +116,7 @@ export type ResolvedPaletteBands = {
   brushes: Record<string, (string | number)[]>;
   playerLight: boolean;
   occlusion: boolean;
+  wallDistanceOffset: number;
 };
 
 export const DEFAULT_VARIANT_PATTERN = "light{n}/{name}";
@@ -156,6 +166,7 @@ export function resolvePaletteBands(
     brushes: o.brushes ?? {},
     playerLight: o.playerLight ?? true,
     occlusion: o.occlusion ?? false,
+    wallDistanceOffset: o.wallDistanceOffset ?? 0,
   };
 }
 
@@ -277,6 +288,10 @@ function levelForDistance(d: number, bands: number[]): number {
  *
  * @param isOpaque When provided, light is shadowcast and blocked by cells for
  *                 which this returns `true` (out-of-bounds must return `true`).
+ * @param wallOut  When provided, also filled with the level wall faces lit from
+ *                 each cell take: the same lighting with `wallOffset` added to
+ *                 every distance (see {@link PaletteBandsOptions.wallDistanceOffset}).
+ * @param wallOffset Extra cells of distance for `wallOut`. Default: `0`.
  */
 export function computeLightLevels(
   out: Uint8Array,
@@ -286,17 +301,25 @@ export function computeLightLevels(
   bands: number[],
   metric: LightDistanceMetric,
   isOpaque?: (x: number, z: number) => boolean,
+  wallOut?: Uint8Array,
+  wallOffset = 0,
 ): void {
   const levelCount = bands.length;
   out.fill(levelCount);
+  wallOut?.fill(levelCount);
   for (const src of sources) {
     const sb = src.bands && src.bands.length > 0 ? src.bands : bands;
     const radius = Math.ceil(sb[sb.length - 1] ?? 0);
     const light = (x: number, z: number) => {
       if (x < 0 || z < 0 || x >= width || z >= height) return;
-      const lvl = levelForDistance(cellDistance(x - src.x, z - src.z, metric), sb);
-      if (lvl < 0) return;
+      const d = cellDistance(x - src.x, z - src.z, metric);
       const i = z * width + x;
+      if (wallOut) {
+        const wl = levelForDistance(d + wallOffset, sb);
+        if (wl >= 0 && wl < wallOut[i]!) wallOut[i] = Math.min(wl, levelCount);
+      }
+      const lvl = levelForDistance(d, sb);
+      if (lvl < 0) return;
       if (lvl < out[i]!) out[i] = Math.min(lvl, levelCount);
     };
     if (isOpaque) {
@@ -314,12 +337,17 @@ export function computeLightLevels(
 
 /**
  * W×H RGBA Uint8 DataTexture holding one light level per cell in the R
- * channel (shader reads `floor(r * 255 + 0.5)`).
+ * channel and the wall-face level in G (shader reads `floor(v * 255 + 0.5)`).
  */
 export function makeLightLevelTexture(
   width: number,
   height: number,
-): { tex: THREE.DataTexture; levels: Uint8Array; rgba: Uint8Array } {
+): {
+  tex: THREE.DataTexture;
+  levels: Uint8Array;
+  wallLevels: Uint8Array;
+  rgba: Uint8Array;
+} {
   const rgba = new Uint8Array(Math.max(1, width * height) * 4);
   const tex = new THREE.DataTexture(
     rgba,
@@ -332,16 +360,24 @@ export function makeLightLevelTexture(
   tex.generateMipmaps = false;
   tex.flipY = false;
   tex.needsUpdate = true;
-  return { tex, levels: new Uint8Array(Math.max(1, width * height)), rgba };
+  const n = Math.max(1, width * height);
+  return { tex, levels: new Uint8Array(n), wallLevels: new Uint8Array(n), rgba };
 }
 
-/** Copy a per-cell level array into the R channel of a light-level texture. */
+/**
+ * Copy per-cell levels into the R channel of a light-level texture and
+ * wall-face levels into G (G = R when `wallLevels` is omitted).
+ */
 export function uploadLightLevels(
   levels: Uint8Array,
   rgba: Uint8Array,
   tex: THREE.DataTexture,
+  wallLevels?: Uint8Array,
 ): void {
-  for (let i = 0; i < levels.length; i++) rgba[i * 4] = levels[i]!;
+  for (let i = 0; i < levels.length; i++) {
+    rgba[i * 4] = levels[i]!;
+    rgba[i * 4 + 1] = wallLevels ? wallLevels[i]! : levels[i]!;
+  }
   tex.needsUpdate = true;
 }
 

@@ -943,8 +943,10 @@ export function createDungeonRenderer(
       paletteCfg.bands,
       paletteCfg.metric,
       paletteCfg.occlusion ? makeIsSolid() : undefined,
+      lightGrid.wallLevels,
+      paletteCfg.wallDistanceOffset,
     );
-    uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex);
+    uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex, lightGrid.wallLevels);
   }
 
   /** Light level at a cell in palette mode (`levelCount` = dark), else null. */

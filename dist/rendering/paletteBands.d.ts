@@ -68,6 +68,15 @@ export type PaletteBandsOptions = {
      * `computeFov`), so it doesn't leak through walls. Default: `false`.
      */
     occlusion?: boolean;
+    /**
+     * Extra distance (in cells) added when lighting wall faces. A wall face sits
+     * on the edge of the open cell it is lit from, so it is really a little
+     * further away than that cell's centre; a small offset (e.g. `0.5`) makes
+     * walls fall off slightly before the floor in front of them, so a wall at
+     * the end of a corridor bands with its neighbours instead of matching the
+     * floor. Floors, ceilings and sprites are unaffected. Default: `0`.
+     */
+    wallDistanceOffset?: number;
 };
 /** Fully resolved palette-band settings (all defaults applied). */
 export type ResolvedPaletteBands = {
@@ -77,6 +86,7 @@ export type ResolvedPaletteBands = {
     brushes: Record<string, (string | number)[]>;
     playerLight: boolean;
     occlusion: boolean;
+    wallDistanceOffset: number;
 };
 export declare const DEFAULT_VARIANT_PATTERN = "light{n}/{name}";
 export declare const DEFAULT_PALETTE_LEVELS = 4;
@@ -107,19 +117,27 @@ export declare function variantFor(table: Float32Array, tileCount: number, id: n
  *
  * @param isOpaque When provided, light is shadowcast and blocked by cells for
  *                 which this returns `true` (out-of-bounds must return `true`).
+ * @param wallOut  When provided, also filled with the level wall faces lit from
+ *                 each cell take: the same lighting with `wallOffset` added to
+ *                 every distance (see {@link PaletteBandsOptions.wallDistanceOffset}).
+ * @param wallOffset Extra cells of distance for `wallOut`. Default: `0`.
  */
-export declare function computeLightLevels(out: Uint8Array, width: number, height: number, sources: LightSource[], bands: number[], metric: LightDistanceMetric, isOpaque?: (x: number, z: number) => boolean): void;
+export declare function computeLightLevels(out: Uint8Array, width: number, height: number, sources: LightSource[], bands: number[], metric: LightDistanceMetric, isOpaque?: (x: number, z: number) => boolean, wallOut?: Uint8Array, wallOffset?: number): void;
 /**
  * W×H RGBA Uint8 DataTexture holding one light level per cell in the R
- * channel (shader reads `floor(r * 255 + 0.5)`).
+ * channel and the wall-face level in G (shader reads `floor(v * 255 + 0.5)`).
  */
 export declare function makeLightLevelTexture(width: number, height: number): {
     tex: THREE.DataTexture;
     levels: Uint8Array;
+    wallLevels: Uint8Array;
     rgba: Uint8Array;
 };
-/** Copy a per-cell level array into the R channel of a light-level texture. */
-export declare function uploadLightLevels(levels: Uint8Array, rgba: Uint8Array, tex: THREE.DataTexture): void;
+/**
+ * Copy per-cell levels into the R channel of a light-level texture and
+ * wall-face levels into G (G = R when `wallLevels` is omitted).
+ */
+export declare function uploadLightLevels(levels: Uint8Array, rgba: Uint8Array, tex: THREE.DataTexture, wallLevels?: Uint8Array): void;
 /** Upload a variant table as a `tileCount × levels` float DataTexture. */
 export declare function makeVariantTexture(table: Float32Array, tileCount: number, levels: number): THREE.DataTexture;
 /** Result of {@link findOffPaletteColors}. */

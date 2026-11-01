@@ -5384,8 +5384,8 @@ function interceptControlUp(event) {
 *   7. Compute vFacingLight: fixed for floors/ceilings, dot-product for walls.
 *   8. Output fog distance as eye-space length.
 *   9. Pass the row index through for per-row base overrides.
-*  10. Pass the base tile ID and the light-grid UV (the open cell the face is
-*      lit from) through for 'paletteBands' lighting.
+*  10. Pass the base tile ID, the light-grid UV (the open cell the face is
+*      lit from) and a wall flag through for 'paletteBands' lighting.
 */
 var BASIC_ATLAS_VERT = `
 // ── Per-instance atlas UV rect ────────────────────────────────────────────────
@@ -5470,6 +5470,7 @@ varying vec3  vViewPos;     // Eye-space position for scene point light attenuat
 varying float vRowIndex;    // Row index forwarded to fragment for per-row base override
 varying float vTileId;      // Base atlas tile ID (palette-band variant lookup)
 varying vec2  vLightUv;     // UV into the palette-band light-level texture
+varying float vIsWall;      // 1 for wall/skirt faces (read the G wall level), 0 for floor/ceiling
 
 void main() {
   // ── 1. Clip UV height for partial skirt panels ─────────────────────────────
@@ -5533,9 +5534,11 @@ void main() {
   // ── 10. Palette-band light cell ────────────────────────────────────────────
   // Walls store the solid cell behind them; stepping along the outward normal
   // gives the open cell the face is seen (and lit) from. Floors/ceilings have
-  // a zero normal and use their own cell.
+  // a zero normal and use their own cell. Walls read the wall-face level (G),
+  // which includes PaletteBandsOptions.wallDistanceOffset.
   vTileId  = aTileId;
   vLightUv = (aCellFace.xy + aCellFace.zw + 0.5) / uLightGridSize;
+  vIsWall  = (aCellFace.z != 0.0 || aCellFace.w != 0.0) ? 1.0 : 0.0;
 
   gl_Position = projectionMatrix * eyePos;
 }
@@ -5619,7 +5622,9 @@ uniform sampler2D uBaseOverride;
 
 // ── Palette-band lighting (only read when PALETTE_BANDS is defined) ──────────
 // uLightLevel:    W×H Uint8 RGBA DataTexture — R = light level of each cell
-//                 (0 = brightest variant, uLevelCount = dark → uFogColor).
+//                 (0 = brightest variant, uLevelCount = dark → uFogColor),
+//                 G = level for wall faces lit from that cell (R plus the
+//                 wall distance offset).
 // uVariantLookup: tileCount × levels Float RGBA DataTexture — R = variant
 //                 tile ID + 1 for (tile ID, level); 0 = no variant, draw as-is.
 // uLevelCount:    number of lit levels (height of uVariantLookup).
@@ -5640,6 +5645,7 @@ varying vec3  vViewPos;     // Eye-space position for scene point light attenuat
 varying float vRowIndex;    // Row index for per-row base override lookup
 varying float vTileId;      // Base atlas tile ID (-1 = unknown)
 varying vec2  vLightUv;     // UV into uLightLevel for this face's lit cell
+varying float vIsWall;      // 1 = wall/skirt face (use G wall level), 0 = floor/ceiling
 
 #ifdef PALETTE_BANDS
 // Light level of the current fragment's cell; set once at the top of main().
@@ -5686,7 +5692,8 @@ vec4 sampleOverlayTile(float id) {
 
 void main() {
 #ifdef PALETTE_BANDS
-  gLevel = floor(texture2D(uLightLevel, vLightUv).r * 255.0 + 0.5);
+  vec4 lightTexel = texture2D(uLightLevel, vLightUv);
+  gLevel = floor((vIsWall > 0.5 ? lightTexel.g : lightTexel.r) * 255.0 + 0.5);
 #endif
 
   // ── 1. Base tile sample (with optional per-row override) ───────────────────
@@ -6461,7 +6468,8 @@ function resolvePaletteBands(opts, fogNear, fogFar, tileSize) {
 		variantPattern: o.variantPattern ?? "light{n}/{name}",
 		brushes: o.brushes ?? {},
 		playerLight: o.playerLight ?? true,
-		occlusion: o.occlusion ?? false
+		occlusion: o.occlusion ?? false,
+		wallDistanceOffset: o.wallDistanceOffset ?? 0
 	};
 }
 function patternToRegex(pattern) {
@@ -6548,18 +6556,28 @@ function levelForDistance(d, bands) {
 *
 * @param isOpaque When provided, light is shadowcast and blocked by cells for
 *                 which this returns `true` (out-of-bounds must return `true`).
+* @param wallOut  When provided, also filled with the level wall faces lit from
+*                 each cell take: the same lighting with `wallOffset` added to
+*                 every distance (see {@link PaletteBandsOptions.wallDistanceOffset}).
+* @param wallOffset Extra cells of distance for `wallOut`. Default: `0`.
 */
-function computeLightLevels(out, width, height, sources, bands, metric, isOpaque) {
+function computeLightLevels(out, width, height, sources, bands, metric, isOpaque, wallOut, wallOffset = 0) {
 	const levelCount = bands.length;
 	out.fill(levelCount);
+	wallOut?.fill(levelCount);
 	for (const src of sources) {
 		const sb = src.bands && src.bands.length > 0 ? src.bands : bands;
 		const radius = Math.ceil(sb[sb.length - 1] ?? 0);
 		const light = (x, z) => {
 			if (x < 0 || z < 0 || x >= width || z >= height) return;
-			const lvl = levelForDistance(cellDistance(x - src.x, z - src.z, metric), sb);
-			if (lvl < 0) return;
+			const d = cellDistance(x - src.x, z - src.z, metric);
 			const i = z * width + x;
+			if (wallOut) {
+				const wl = levelForDistance(d + wallOffset, sb);
+				if (wl >= 0 && wl < wallOut[i]) wallOut[i] = Math.min(wl, levelCount);
+			}
+			const lvl = levelForDistance(d, sb);
+			if (lvl < 0) return;
 			if (lvl < out[i]) out[i] = Math.min(lvl, levelCount);
 		};
 		if (isOpaque) computeFov(src.x, src.z, {
@@ -6572,7 +6590,7 @@ function computeLightLevels(out, width, height, sources, bands, metric, isOpaque
 }
 /**
 * W×H RGBA Uint8 DataTexture holding one light level per cell in the R
-* channel (shader reads `floor(r * 255 + 0.5)`).
+* channel and the wall-face level in G (shader reads `floor(v * 255 + 0.5)`).
 */
 function makeLightLevelTexture(width, height) {
 	const rgba = new Uint8Array(Math.max(1, width * height) * 4);
@@ -6582,15 +6600,23 @@ function makeLightLevelTexture(width, height) {
 	tex.generateMipmaps = false;
 	tex.flipY = false;
 	tex.needsUpdate = true;
+	const n = Math.max(1, width * height);
 	return {
 		tex,
-		levels: new Uint8Array(Math.max(1, width * height)),
+		levels: new Uint8Array(n),
+		wallLevels: new Uint8Array(n),
 		rgba
 	};
 }
-/** Copy a per-cell level array into the R channel of a light-level texture. */
-function uploadLightLevels(levels, rgba, tex) {
-	for (let i = 0; i < levels.length; i++) rgba[i * 4] = levels[i];
+/**
+* Copy per-cell levels into the R channel of a light-level texture and
+* wall-face levels into G (G = R when `wallLevels` is omitted).
+*/
+function uploadLightLevels(levels, rgba, tex, wallLevels) {
+	for (let i = 0; i < levels.length; i++) {
+		rgba[i * 4] = levels[i];
+		rgba[i * 4 + 1] = wallLevels ? wallLevels[i] : levels[i];
+	}
 	tex.needsUpdate = true;
 }
 /** Upload a variant table as a `tileCount × levels` float DataTexture. */
@@ -7368,8 +7394,8 @@ function createDungeonRenderer(element, game, options = {}) {
 			syncPaletteMaterials();
 		}
 		if (lightingMode !== "paletteBands") return;
-		computeLightLevels(lightGrid.levels, width, height, collectLightSources(), paletteCfg.bands, paletteCfg.metric, paletteCfg.occlusion ? makeIsSolid() : void 0);
-		uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex);
+		computeLightLevels(lightGrid.levels, width, height, collectLightSources(), paletteCfg.bands, paletteCfg.metric, paletteCfg.occlusion ? makeIsSolid() : void 0, lightGrid.wallLevels, paletteCfg.wallDistanceOffset);
+		uploadLightLevels(lightGrid.levels, lightGrid.rgba, lightGrid.tex, lightGrid.wallLevels);
 	}
 	/** Light level at a cell in palette mode (`levelCount` = dark), else null. */
 	function paletteLevelAt(x, z) {
