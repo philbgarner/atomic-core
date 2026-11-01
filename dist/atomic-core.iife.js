@@ -6236,14 +6236,15 @@ void main() {
 			};
 		});
 		return {
-			update(ent, cameraYaw, tileSize, ceilingH, floorY) {
+			update(ent, cameraYaw, tileSize, ceilingH, floorY, placement) {
 				const useYaw = ent.forcedYaw ?? cameraYaw;
-				const wx = (ent.x + .5) * tileSize;
-				const wz = (ent.z + .5) * tileSize;
+				const placeScale = placement?.scale ?? 1;
+				const wx = (ent.x + .5 + (placement?.offsetX ?? 0)) * tileSize;
+				const wz = (ent.z + .5 + (placement?.offsetZ ?? 0)) * tileSize;
 				const wy = (1 - (spriteMap.layers[0] ? getPivot(spriteMap.layers[0].tile) : {
 					x: .5,
 					y: 0
-				}).y) * tileSize + floorY;
+				}).y + (placement?.offsetY ?? 0)) * tileSize + floorY;
 				group.position.set(wx, wy, wz);
 				group.rotation.set(0, useYaw, 0, "YXZ");
 				const sprW = (ent.flipTimer ? Math.floor(performance.now() / 1e3 / ent.flipTimer) % 2 === 0 ? 1 : -1 : 1) * tileSize * (spriteMap.frameSize.w / expectedFrameSize);
@@ -6253,7 +6254,7 @@ void main() {
 				pickMesh.scale.set(sprW * widthFrac, sprH * heightFrac, 1);
 				const centerX = (opaqueBounds.left + opaqueBounds.right) * .5;
 				const centerY = (opaqueBounds.top + opaqueBounds.bottom) * .5;
-				const l1 = layerEntries[0]?.baseLayer, sc = l1?.scale ?? 1;
+				const l1 = layerEntries[0]?.baseLayer, sc = (l1?.scale ?? 1) * placeScale;
 				pickMesh.position.set(centerX * sprW + sc * (l1?.offsetX ?? 0), centerY * sprH + sprH * (sc - 1) * .5, l1?.offsetZ ?? 0);
 				const angleKey = selectAngleKey(ent.facing ?? 0, cameraYaw);
 				const overrides = spriteMap.angles?.[angleKey];
@@ -6272,7 +6273,7 @@ void main() {
 					layerMat.uniforms.uUvW.value = rect.w;
 					layerMat.uniforms.uUvH.value = rect.h;
 					layerMat.uniforms.uOpacity.value = override?.opacity ?? entry.baseLayer.opacity ?? 1;
-					const s = entry.baseLayer.scale ?? 1;
+					const s = (entry.baseLayer.scale ?? 1) * placeScale;
 					entry.mesh.scale.set(sprW * s, sprH * s, 1);
 					const bob = entry.baseLayer.bob;
 					const bobTheta = bob ? performance.now() / 1e3 * (bob.speed ?? 2) + (bob.phase ?? 0) : 0;
@@ -8431,7 +8432,7 @@ void main() {
 								x: rx,
 								z: rz
 							};
-							handle.update(renderObj, curYaw, tileSize, ceilingH, floorY);
+							handle.update(renderObj, curYaw, tileSize, ceilingH, floorY, obj);
 						}
 					}
 				}
@@ -9908,7 +9909,7 @@ void main() {
 	*/
 	function exportDungeonMap(dungeon, options) {
 		return {
-			version: "1.0.9",
+			version: "1.0.10",
 			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 			...options.meta !== void 0 ? { meta: options.meta } : {},
 			generatorOptions: options.generatorOptions,

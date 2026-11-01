@@ -14,7 +14,7 @@ export { loadSkybox } from './rendering/skybox';
 export type { SpriteLayer, AngleOverride, AngleKey } from './rendering/billboardSprites';
 export { resolvePaletteBands, bandsFromFog, buildVariantTable, variantFor, computeLightLevels, findOffPaletteColors, DEFAULT_VARIANT_PATTERN, DEFAULT_PALETTE_LEVELS } from './rendering/paletteBands';
 export type { LightingMode, LightDistanceMetric, LightSource, PaletteBandsOptions, ResolvedPaletteBands, PaletteCheckResult } from './rendering/paletteBands';
-export type { BillboardPalette } from './rendering/billboardSprites';
+export type { BillboardPalette, BillboardPlacementOffset } from './rendering/billboardSprites';
 export { createWebSocketTransport } from './transport/websocket';
 export type { ActionTransport, ServerStateUpdate, PlayerNetState, DungeonInitPayload, DungeonSetPayload } from './transport/types';
 export type { Mission, MissionStatus, MissionContext, MissionEvaluator, MissionCompleteCallback, MissionDef, MissionsHandle } from './missions/types';

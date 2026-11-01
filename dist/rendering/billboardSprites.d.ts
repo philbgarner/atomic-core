@@ -81,9 +81,26 @@ export interface BillboardPalette {
     /** Swap a tile ID for its variant at `level`. */
     variant(id: number, level: number): number;
 }
+/**
+ * Per-placement adjustments applied on top of a billboard's sprite layers
+ * (see `ObjectPlacement.offsetX/offsetY/offsetZ/scale`).
+ */
+export interface BillboardPlacementOffset {
+    /** World-space shift from the cell centre along X, in cell units. */
+    offsetX?: number;
+    /** Vertical shift, in cell units (+ = up). */
+    offsetY?: number;
+    /** World-space shift from the cell centre along Z, in cell units. */
+    offsetZ?: number;
+    /** Uniform scale multiplier on every layer; the sprite stays floor-anchored. */
+    scale?: number;
+}
 export interface BillboardHandle {
-    /** Update position, orientation, and angle-variant uniforms each frame. */
-    update(entity: EntityBase, cameraYaw: number, tileSize: number, ceilingH: number, floorY: number): void;
+    /**
+     * Update position, orientation, and angle-variant uniforms each frame.
+     * `placement` (object billboards) shifts and scales the whole sprite.
+     */
+    update(entity: EntityBase, cameraYaw: number, tileSize: number, ceilingH: number, floorY: number, placement?: BillboardPlacementOffset): void;
     /** Show or hide all meshes in this billboard without disposing GPU resources. */
     setVisible(visible: boolean): void;
     /** Remove meshes from scene and dispose GPU resources. */
