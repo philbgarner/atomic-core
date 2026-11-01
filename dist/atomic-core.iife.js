@@ -2570,19 +2570,28 @@ var AtomicCore = (function(exports, three) {
 	//#endregion
 	//#region src/lib/api/keybindings.ts
 	/**
-	* Install a `keydown` listener on `document` that maps key presses to
-	* named actions using `options.bindings`.
+	* Install `keydown` / `keyup` listeners on `document` (plus a window `blur`
+	* listener that releases all held keys) mapping key presses to named actions
+	* using `options.bindings`.
 	*
-	* Returns a handle with a `destroy()` method that removes the listener.
+	* Returns a handle with `destroy()`, `setRealtime()` and `pollHeld()`.
 	*/
 	function createKeybindings(options) {
 		const keyToAction = /* @__PURE__ */ new Map();
 		for (const [action, keys] of Object.entries(options.bindings)) for (const key of keys) keyToAction.set(key, action);
 		const repeatDelayMs = options.repeatDelayMs ?? 150;
 		const lastFired = /* @__PURE__ */ new Map();
+		const held = /* @__PURE__ */ new Map();
+		let realtime = false;
 		function handleKeydown(event) {
 			const action = keyToAction.get(event.code);
 			if (action === void 0) return;
+			if (!event.repeat) held.delete(event.code);
+			held.set(event.code, event);
+			if (realtime) {
+				event.preventDefault();
+				return;
+			}
 			if (event.repeat && repeatDelayMs > 0) {
 				const last = lastFired.get(event.code) ?? 0;
 				if (event.timeStamp - last < repeatDelayMs) return;
@@ -2590,10 +2599,33 @@ var AtomicCore = (function(exports, three) {
 			lastFired.set(event.code, event.timeStamp);
 			options.onAction(action, event);
 		}
+		function handleKeyup(event) {
+			held.delete(event.code);
+		}
+		function handleBlur() {
+			held.clear();
+		}
 		document.addEventListener("keydown", handleKeydown);
-		return { destroy() {
-			document.removeEventListener("keydown", handleKeydown);
-		} };
+		document.addEventListener("keyup", handleKeyup);
+		window.addEventListener("blur", handleBlur);
+		return {
+			destroy() {
+				document.removeEventListener("keydown", handleKeydown);
+				document.removeEventListener("keyup", handleKeyup);
+				window.removeEventListener("blur", handleBlur);
+				held.clear();
+			},
+			setRealtime(enabled) {
+				realtime = enabled;
+			},
+			pollHeld() {
+				let latest;
+				for (const entry of held) latest = entry;
+				if (!latest) return;
+				const action = keyToAction.get(latest[0]);
+				if (action !== void 0) options.onAction(action, latest[1]);
+			}
+		};
 	}
 	//#endregion
 	//#region src/lib/utils/rng.ts
@@ -3357,52 +3389,158 @@ var AtomicCore = (function(exports, three) {
 		const tex = dungeon.textures.overlays;
 		if (tex) tex.needsUpdate = true;
 	}
+	/**
+	* Forward a player action to the server, bundling developer-defined entity
+	* fields. Used by `turns.commit()` and the realtime tick in multiplayer.
+	*/
+	function sendTransportAction(internal, action) {
+		const serverKeys = new Set([
+			"id",
+			"x",
+			"z",
+			"alive",
+			"hp",
+			"maxHp",
+			"facing"
+		]);
+		const entityState = {};
+		for (const [k, v] of Object.entries(internal.playerState.entity)) if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
+		internal.options.transport?.send(action, entityState);
+	}
+	/**
+	* Apply a player action locally (single-player): run the turn loop until the
+	* player's next turn, flush animation handlers, then sync entities and FOV.
+	*/
+	async function runLocalCommit(internal, action) {
+		if (!internal.turnState || !internal.dungeonOutputs) return;
+		const flags = internal.colliderFlagsData;
+		const { width, height } = internal.dungeonOutputs;
+		const dungOut = internal.dungeonOutputs;
+		const onAnimEvent = (e) => internal.animationRegistry._enqueue(e);
+		const deps = {
+			isWalkable: (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
+			monsterDecide: (state, monsterId) => decideChasePlayer(state, monsterId, dungOut, (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)), (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height))),
+			computeCost: (actorId, a) => defaultComputeCost(actorId, a, internal.turnState.actors),
+			applyAction: makeApplyAction(internal, internal.options.combat, onAnimEvent),
+			onTimeAdvanced: ({ nextTime, prevTime, state }) => {
+				if (nextTime > prevTime) internal.turnCounter += 1;
+				const playerActor = state.actors[internal.playerActorId];
+				if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
+				internal.events.emit("turn", { turn: internal.turnCounter });
+				internal.options.turns?.onAdvance?.({
+					turn: internal.turnCounter,
+					dt: nextTime - prevTime
+				});
+			}
+		};
+		internal.turnState = commitPlayerAction(internal.turnState, deps, action);
+		await internal.animationRegistry._flush();
+		syncAllEntitiesFromTurnState(internal);
+		updateFovAndMinimap(internal);
+	}
+	var DEFAULT_TICK_MS = 250;
+	var MIN_TICK_MS = 16;
+	function clampTickMs(ms) {
+		return Number.isFinite(ms) ? Math.max(MIN_TICK_MS, ms) : DEFAULT_TICK_MS;
+	}
+	function resolvePending(internal) {
+		const resolvers = internal.pendingResolvers;
+		internal.pendingResolvers = [];
+		for (const r of resolvers) r();
+	}
+	/**
+	* Start the realtime tick loop. Uses a self-rescheduling setTimeout so a tick
+	* never overlaps the previous one while animation handlers are being awaited;
+	* the next tick is scheduled relative to the start of the current one.
+	*/
+	function startRealtimeTicks(internal) {
+		if (internal.tickTimer !== null || internal.destroyed) return;
+		const schedule = (delay) => {
+			internal.tickTimer = setTimeout(runTick, Math.max(0, delay));
+		};
+		const runTick = async () => {
+			if (internal.destroyed || internal.turnMode !== "realtime") {
+				internal.tickTimer = null;
+				return;
+			}
+			const tickStart = performance.now();
+			try {
+				await realtimeTick(internal);
+			} catch (err) {
+				console.error("[atomic-core] realtime tick failed:", err);
+			}
+			if (internal.destroyed || internal.turnMode !== "realtime") {
+				internal.tickTimer = null;
+				return;
+			}
+			schedule(tickStart + internal.tickMs - performance.now());
+		};
+		schedule(internal.tickMs);
+	}
+	function stopRealtimeTicks(internal) {
+		if (internal.tickTimer !== null) clearTimeout(internal.tickTimer);
+		internal.tickTimer = null;
+	}
+	/**
+	* One realtime tick: sample held keybindings (which queue an action via
+	* commit()), then execute the queued action — or a wait if none — locally.
+	* In multiplayer only a queued action is forwarded; idle waits are not sent.
+	*/
+	async function realtimeTick(internal) {
+		if (!internal.generationReady || !internal.turnState) return;
+		if (!internal.playerState.entity.alive) {
+			internal.pendingAction = null;
+			resolvePending(internal);
+			return;
+		}
+		for (const h of internal.keybindingsHandles) h.pollHeld();
+		const action = internal.pendingAction;
+		internal.pendingAction = null;
+		const resolvers = internal.pendingResolvers;
+		internal.pendingResolvers = [];
+		try {
+			if (internal.options.transport) {
+				if (action) sendTransportAction(internal, action);
+			} else await runLocalCommit(internal, action ?? { kind: "wait" });
+		} finally {
+			for (const r of resolvers) r();
+		}
+	}
 	function makeTurnsHandle(internal, dungeonHandle) {
 		return {
 			get turn() {
 				return internal.turnCounter;
 			},
+			get mode() {
+				return internal.turnMode;
+			},
+			get tickMs() {
+				return internal.tickMs;
+			},
 			async commit(action) {
+				if (internal.turnMode === "realtime" && action.kind !== "rotate") {
+					internal.pendingAction = action;
+					return new Promise((resolve) => internal.pendingResolvers.push(resolve));
+				}
 				if (internal.options.transport) {
-					const serverKeys = new Set([
-						"id",
-						"x",
-						"z",
-						"alive",
-						"hp",
-						"maxHp",
-						"facing"
-					]);
-					const entityState = {};
-					for (const [k, v] of Object.entries(internal.playerState.entity)) if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
-					internal.options.transport.send(action, entityState);
+					sendTransportAction(internal, action);
 					return;
 				}
-				if (!internal.turnState || !internal.dungeonOutputs) return;
-				const flags = internal.colliderFlagsData;
-				const { width, height } = internal.dungeonOutputs;
-				const dungOut = internal.dungeonOutputs;
-				const onAnimEvent = (e) => internal.animationRegistry._enqueue(e);
-				const deps = {
-					isWalkable: (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
-					monsterDecide: (state, monsterId) => decideChasePlayer(state, monsterId, dungOut, (x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)), (x, y) => !isLightPassableCell(getCellFlags(x, y, flags, width, height))),
-					computeCost: (actorId, a) => defaultComputeCost(actorId, a, internal.turnState.actors),
-					applyAction: makeApplyAction(internal, internal.options.combat, onAnimEvent),
-					onTimeAdvanced: ({ nextTime, prevTime, state }) => {
-						if (nextTime > prevTime) internal.turnCounter += 1;
-						const playerActor = state.actors[internal.playerActorId];
-						if (playerActor) syncEntityFromActor(internal.playerState.entity, playerActor);
-						internal.events.emit("turn", { turn: internal.turnCounter });
-						internal.options.turns?.onAdvance?.({
-							turn: internal.turnCounter,
-							dt: nextTime - prevTime
-						});
-					}
-				};
-				internal.turnState = commitPlayerAction(internal.turnState, deps, action);
-				await internal.animationRegistry._flush();
-				syncAllEntitiesFromTurnState(internal);
-				updateFovAndMinimap(internal);
+				await runLocalCommit(internal, action);
+			},
+			setMode(mode) {
+				if (mode === internal.turnMode) return;
+				internal.turnMode = mode;
+				for (const h of internal.keybindingsHandles) h.setRealtime(mode === "realtime");
+				if (mode === "realtime") startRealtimeTicks(internal);
+				else {
+					stopRealtimeTicks(internal);
+					internal.pendingAction = null;
+					resolvePending(internal);
+				}
+			},
+			setTickMs(ms) {
+				internal.tickMs = clampTickMs(ms);
 			},
 			addActor(entity) {
 				if (!internal.turnState) {
@@ -3749,13 +3887,19 @@ var AtomicCore = (function(exports, three) {
 			missions: missionsHandle,
 			animationRegistry,
 			destroyed: false,
-			generationReady: false
+			generationReady: false,
+			turnMode: options.turns?.mode ?? "turnBased",
+			tickMs: clampTickMs(options.turns?.tickMs ?? DEFAULT_TICK_MS),
+			tickTimer: null,
+			pendingAction: null,
+			pendingResolvers: []
 		};
 		let dungeonHandle;
 		let turnsHandle;
 		let generated = false;
 		dungeonHandle = makeDungeonHandle(internal);
 		turnsHandle = makeTurnsHandle(internal, dungeonHandle);
+		if (internal.turnMode === "realtime") startRealtimeTicks(internal);
 		events.on("heal", ({ entity, amount }) => {
 			if (internal.destroyed) return;
 			const fullEntity = internal.entityById.get(entity.id);
@@ -3994,6 +4138,7 @@ var AtomicCore = (function(exports, three) {
 			destroy() {
 				if (internal.destroyed) return;
 				internal.destroyed = true;
+				stopRealtimeTicks(internal);
 				for (const h of internal.keybindingsHandles) h.destroy();
 				internal.keybindingsHandles.length = 0;
 			}
@@ -4044,7 +4189,10 @@ var AtomicCore = (function(exports, three) {
 	function attachKeybindings(game, opts) {
 		const handle = createKeybindings(opts);
 		const _internal = game._internal;
-		if (_internal) _internal.keybindingsHandles.push(handle);
+		if (_internal) {
+			handle.setRealtime(_internal.turnMode === "realtime");
+			_internal.keybindingsHandles.push(handle);
+		}
 	}
 	//#endregion
 	//#region src/lib/entities/factory.ts

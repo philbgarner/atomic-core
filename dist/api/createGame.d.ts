@@ -331,16 +331,44 @@ export type DungeonHandle = {
      */
     set(x: number, y: number, spriteName: string, options?: SetCellOptions): void;
 };
+/**
+ * How the simulation advances.
+ *   - `"turnBased"` — time only advances when the player commits an action.
+ *   - `"realtime"`  — a turn advances every `tickMs` milliseconds whether or not
+ *     the player acts; input is sampled on each tick and never speeds time up.
+ */
+export type TurnMode = "turnBased" | "realtime";
 export type TurnsHandle = {
     /** Current turn counter. */
     readonly turn: number;
+    /** Current simulation mode. Change with `setMode()`. */
+    readonly mode: TurnMode;
+    /** Realtime tick interval in milliseconds. Change with `setTickMs()`. */
+    readonly tickMs: number;
     /**
      * Commit a player action and run all other actors until the player's next turn.
      * Resolves after all registered animation handlers have completed.
      * In multiplayer mode resolves immediately after the action is forwarded to
      * the server; animation handlers fire from the onStateUpdate reconciliation path.
+     *
+     * In realtime mode the action is not applied immediately: it is queued
+     * (replacing any previously queued action) and executed on the next tick,
+     * and the promise resolves once that tick completes. `rotate` actions cost
+     * no time and are still applied immediately.
      */
     commit(action: TurnAction): Promise<void>;
+    /**
+     * Switch between `"turnBased"` and `"realtime"` simulation on the fly.
+     * Starts or stops the tick timer immediately and switches every keybindings
+     * handle installed via `attachKeybindings` to the matching dispatch mode.
+     * Switching to turn-based discards any queued realtime action.
+     */
+    setMode(mode: TurnMode): void;
+    /**
+     * Set the realtime tick interval in milliseconds (minimum 16). Takes effect
+     * from the next scheduled tick.
+     */
+    setTickMs(ms: number): void;
     addActor(entity: EntityBase): void;
     removeActor(id: string): void;
 };
@@ -508,6 +536,16 @@ export type TurnsOptions = {
         turn: number;
         dt: number;
     }) => void;
+    /**
+     * Initial simulation mode. Defaults to `"turnBased"`. In `"realtime"` mode a
+     * turn advances every `tickMs` (the player waits if no input is held); held
+     * keybindings are sampled on each tick. In multiplayer (`transport` set) ticks
+     * only forward queued actions — idle waits are not sent and the server keeps
+     * its own turn cadence. Change at runtime with `game.turns.setMode()`.
+     */
+    mode?: TurnMode;
+    /** Realtime tick interval in milliseconds. Defaults to 250, minimum 16. */
+    tickMs?: number;
 };
 export type RenderingOptions = {
     atlas?: string;

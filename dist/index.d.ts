@@ -1,5 +1,5 @@
 export { createGame, attachMinimap, attachSpawner, attachDecorator, attachSurfacePainter, attachKeybindings, } from './api/createGame';
-export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget, ColliderFlags, DungeonHandle, CellData, DoorsHandle } from './api/createGame';
+export type { SurfacePaintTarget, PlaceAPI, SetCellOptions, ApplyTarget, ColliderFlags, DungeonHandle, CellData, DoorsHandle, TurnMode, TurnsHandle, TurnsOptions } from './api/createGame';
 export { createEntity } from './entities/factory';
 export type { EntityCoreOpts } from './entities/factory';
 export { createItem } from './entities/inventory';

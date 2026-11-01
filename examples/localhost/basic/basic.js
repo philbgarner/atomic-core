@@ -1,6 +1,6 @@
 // basic.js — atomic-core 3D example
-// Demonstrates dungeon generation, turn-based movement, combat events,
-// and first-person 3D rendering — no build step required.
+// Demonstrates dungeon generation, turn-based and realtime movement, combat
+// events, and first-person 3D rendering — no build step required.
 
 const {
   createGame,
@@ -193,6 +193,25 @@ attachKeybindings(game, {
     }
     if (a) game.turns.commit(a);
   },
+});
+
+// ---------------------------------------------------------------------------
+// Simulation mode — switch between turn-based and realtime on the fly
+// ---------------------------------------------------------------------------
+
+const realtimeEl = document.getElementById("realtime");
+const tickMsEl = document.getElementById("tick-ms");
+
+realtimeEl.checked = game.turns.mode === "realtime";
+tickMsEl.value = String(game.turns.tickMs);
+
+realtimeEl.addEventListener("change", () => {
+  game.turns.setMode(realtimeEl.checked ? "realtime" : "turnBased");
+  realtimeEl.blur();
+});
+tickMsEl.addEventListener("change", () => {
+  game.turns.setTickMs(Number(tickMsEl.value));
+  tickMsEl.value = String(game.turns.tickMs);
 });
 
 // ---------------------------------------------------------------------------

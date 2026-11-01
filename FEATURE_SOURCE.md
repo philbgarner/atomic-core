@@ -266,7 +266,7 @@ Generation (`runGenerate`) advances through `tickUntilPlayer()` (step 11), then 
 - `turn/actionCosts.ts` — default action cost table
 - `turn/events.ts` — `TurnEvent` union including `damage`, `death`, `chest-open`, `item-pickup`, `turn`, `win`, `lose`, `audio`
 - `api/actions.ts` — `createActionPipeline()`, `ActionMiddleware`, `ActionContext`; extension point for `turns.commit()`
-- `api/createGame.ts` — `runGenerate()` step 12 calls `syncAllEntitiesFromTurnState()` + `updateFovAndMinimap()` before the "generate" event
+- `api/createGame.ts` — `runGenerate()` step 12 calls `syncAllEntitiesFromTurnState()` + `updateFovAndMinimap()` before the "generate" event; see "Realtime turn mode" for the timed-tick alternative to commit-driven turns
 
 ---
 
@@ -426,7 +426,22 @@ Per-cell shader overlay system. Up to 4 overlay tile names can be assigned per c
 ### Configurable keybindings
 
 **Files:**
-- `api/keybindings.ts` — `KeyBinding` map (`Record<string, string[]>`), default binding set, `attachKeybindings(game, { bindings, onAction })` adds/removes a `keydown` listener on `document`
+- `api/keybindings.ts` — `KeyBindings` map (`Record<string, string[]>`, keyed by `KeyboardEvent.code`); `createKeybindings({ bindings, onAction, repeatDelayMs })` installs `keydown`/`keyup` listeners on `document` plus a window `blur` listener, and tracks which bound keys are held; `KeybindingsHandle` exposes `destroy()`, `setRealtime(enabled)` (realtime: keydown only records the key, no dispatch) and `pollHeld()` (fires `onAction` for the most recently pressed key that is still held — used by the realtime tick)
+- `api/createGame.ts` — `attachKeybindings(game, opts)` wraps `createKeybindings`, syncs the handle to the game's current turn mode, and registers it for cleanup on `destroy()`
+
+---
+
+### Realtime turn mode
+
+`turns.mode: 'realtime'` (in `GameOptions.turns`, or `game.turns.setMode()` at runtime) advances one player turn every `tickMs` milliseconds (default `250`, minimum `16`; `game.turns.setTickMs()` at runtime) even with no input — the player waits if nothing is queued. Input never speeds up time: `turns.commit(action)` queues the action (latest wins) and resolves once the next tick executes it; `rotate` costs no time and still applies immediately. Keybindings switch to held-key sampling: keydown no longer dispatches, and on each tick `pollHeld()` re-fires `onAction` for the most recently pressed key still held, so a key tapped and released between ticks does nothing. The tick loop is a self-rescheduling `setTimeout` (no overlap while animation handlers are awaited), skips until generation is ready and while the player is dead, and stops on `destroy()`. With a `transport` set, ticks only forward queued actions (no idle waits) — the server keeps its own cadence. The default is `'turnBased'`, which is unchanged.
+
+**Files:**
+- `api/createGame.ts` — `TurnMode` type; `TurnsOptions.mode` / `tickMs`; `TurnsHandle.mode` / `tickMs` / `setMode()` / `setTickMs()`; realtime-aware `commit()`; internal `runLocalCommit()` (shared local commit path) and `sendTransportAction()`; `startRealtimeTicks()`, `stopRealtimeTicks()`, `realtimeTick()`, `clampTickMs()`, `resolvePending()`; `GameInternal` fields `turnMode`, `tickMs`, `tickTimer`, `pendingAction`, `pendingResolvers`
+- `api/keybindings.ts` — held-key tracking, `setRealtime()`, `pollHeld()`
+- `index.ts` — exports `TurnMode`, `TurnsHandle`, `TurnsOptions` types
+
+**Example:**
+- `examples/localhost/basic/` — "Realtime" checkbox and "Tick ms" input switch the mode and tick rate live
 
 ---
 

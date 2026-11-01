@@ -20,6 +20,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
   - [localhost examples](#localhost-examples)
   - [standalone examples](#standalone-examples)
 - [Quick Start](#quick-start)
+- [Realtime mode](#realtime-mode)
 - [API Documentation](#api-documentation)
 
 ---
@@ -35,6 +36,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 - Renderer layer system - stack additional instanced meshes on floors, ceilings, walls, or skirts with per-face filtering
 - Per-direction tile specs for walls, floor skirts, and ceiling skirts
 - Turn-based scheduler with priority queue
+- **Realtime mode** — `turns: { mode: 'realtime', tickMs: 250 }` (or `game.turns.setMode()` / `setTickMs()` at runtime) advances a turn every `tickMs` ms even without input; held keys are sampled on each tick, so input never speeds time up and a key released before the tick does nothing (single-player; with a transport, ticks only forward queued actions)
 - Entity system: player, NPCs, enemies, items, chests
 - **Billboard sprite rendering** — `spriteMap` field on any entity activates camera-facing billboard quads with layered atlas tiles, x/y offsets, per-layer opacity, per-placement world offsets (`ObjectPlacement.offsetX`/`offsetZ`/`offsetY`, in cells) and `scale`, and up to 8 viewing angles (N/NE/E/SE/S/SW/W/NW) with per-layer tile overrides; box geometry fallback when `spriteMap` is absent
 - Active status effects with configurable stacking modes
@@ -229,6 +231,33 @@ Available standalone examples:
 </body>
 </html>
 ```
+
+---
+
+## Realtime mode
+
+By default the simulation is turn-based: time only advances when `game.turns.commit()` is called. Realtime mode advances one player turn every `tickMs` milliseconds whether or not the player acts.
+
+```js
+const game = createGame(document.body, {
+  dungeon: { /* ... */ },
+  turns: { mode: 'realtime', tickMs: 250 },
+})
+
+// Switch on the fly
+game.turns.setMode('turnBased')   // or 'realtime'
+game.turns.setTickMs(400)         // takes effect from the next tick (min 16)
+```
+
+In realtime mode:
+
+- If no action is queued when a tick fires, the player waits and monsters still act.
+- `game.turns.commit(action)` queues the action (the latest one wins) instead of applying it. The returned promise resolves after the tick that runs it. `rotate` costs no time and still applies immediately.
+- Keybindings installed with `attachKeybindings` no longer dispatch on keydown. On each tick, `onAction` fires for the most recently pressed key that is **still held**. Holding a key moves one step per tick, mashing it does not move faster, and a key tapped and released between ticks does nothing.
+- If your `onAction` drops input while `renderer.isAnimating()`, skip that check in realtime mode, because the tick rate already limits input.
+- With a multiplayer `transport`, ticks only forward queued actions and never send idle waits. The server keeps its own turn cadence.
+
+`examples/localhost/basic/` has a "Realtime" toggle and a "Tick ms" input for trying it out.
 
 ---
 

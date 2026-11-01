@@ -118,6 +118,19 @@ body::before {
   line-height: 2.2;
 }
 
+#sim {
+  font-size: 8px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  line-height: 2.2;
+}
+
+#sim input[type="number"] {
+  width: 5em;
+  font: inherit;
+}
+
 #canvas-wrap {
   flex: 1;
   position: relative;

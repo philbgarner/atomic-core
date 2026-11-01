@@ -430,16 +430,45 @@ export type DungeonHandle = {
 // TurnsHandle — game.turns
 // ---------------------------------------------------------------------------
 
+/**
+ * How the simulation advances.
+ *   - `"turnBased"` — time only advances when the player commits an action.
+ *   - `"realtime"`  — a turn advances every `tickMs` milliseconds whether or not
+ *     the player acts; input is sampled on each tick and never speeds time up.
+ */
+export type TurnMode = "turnBased" | "realtime";
+
 export type TurnsHandle = {
 	/** Current turn counter. */
 	readonly turn: number;
+	/** Current simulation mode. Change with `setMode()`. */
+	readonly mode: TurnMode;
+	/** Realtime tick interval in milliseconds. Change with `setTickMs()`. */
+	readonly tickMs: number;
 	/**
 	 * Commit a player action and run all other actors until the player's next turn.
 	 * Resolves after all registered animation handlers have completed.
 	 * In multiplayer mode resolves immediately after the action is forwarded to
 	 * the server; animation handlers fire from the onStateUpdate reconciliation path.
+	 *
+	 * In realtime mode the action is not applied immediately: it is queued
+	 * (replacing any previously queued action) and executed on the next tick,
+	 * and the promise resolves once that tick completes. `rotate` actions cost
+	 * no time and are still applied immediately.
 	 */
 	commit(action: TurnAction): Promise<void>;
+	/**
+	 * Switch between `"turnBased"` and `"realtime"` simulation on the fly.
+	 * Starts or stops the tick timer immediately and switches every keybindings
+	 * handle installed via `attachKeybindings` to the matching dispatch mode.
+	 * Switching to turn-based discards any queued realtime action.
+	 */
+	setMode(mode: TurnMode): void;
+	/**
+	 * Set the realtime tick interval in milliseconds (minimum 16). Takes effect
+	 * from the next scheduled tick.
+	 */
+	setTickMs(ms: number): void;
 	addActor(entity: EntityBase): void;
 	removeActor(id: string): void;
 };
@@ -626,6 +655,16 @@ export type PassagesOptions = {
 
 export type TurnsOptions = {
 	onAdvance?: (args: { turn: number; dt: number }) => void;
+	/**
+	 * Initial simulation mode. Defaults to `"turnBased"`. In `"realtime"` mode a
+	 * turn advances every `tickMs` (the player waits if no input is held); held
+	 * keybindings are sampled on each tick. In multiplayer (`transport` set) ticks
+	 * only forward queued actions — idle waits are not sent and the server keeps
+	 * its own turn cadence. Change at runtime with `game.turns.setMode()`.
+	 */
+	mode?: TurnMode;
+	/** Realtime tick interval in milliseconds. Defaults to 250, minimum 16. */
+	tickMs?: number;
 };
 
 export type RenderingOptions = {
@@ -800,6 +839,15 @@ type GameInternal = {
 	// The transport onStateUpdate handler ignores incoming state until this is true,
 	// preventing pre-generation network state from overwriting the dungeon spawn.
 	generationReady: boolean;
+
+	// Realtime mode
+	turnMode: TurnMode;
+	tickMs: number;
+	tickTimer: ReturnType<typeof setTimeout> | null;
+	/** Action queued by commit() in realtime mode, consumed on the next tick. */
+	pendingAction: TurnAction | null;
+	/** Resolvers for commit() promises waiting on the next tick. */
+	pendingResolvers: Array<() => void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -1603,6 +1651,172 @@ function writePaintToOverlayTexture(
 	if (tex) tex.needsUpdate = true;
 }
 
+/**
+ * Forward a player action to the server, bundling developer-defined entity
+ * fields. Used by `turns.commit()` and the realtime tick in multiplayer.
+ */
+function sendTransportAction(internal: GameInternal, action: TurnAction): void {
+	// Collect developer-defined entity fields. Server-managed fields are
+	// excluded — the server is authoritative for those and will ignore them
+	// anyway, but we skip them here to avoid sending stale values.
+	const serverKeys = new Set([
+		"id",
+		"x",
+		"z",
+		"alive",
+		"hp",
+		"maxHp",
+		"facing",
+	]);
+	const entityState: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(internal.playerState.entity)) {
+		if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
+	}
+	internal.options.transport?.send(action, entityState);
+}
+
+/**
+ * Apply a player action locally (single-player): run the turn loop until the
+ * player's next turn, flush animation handlers, then sync entities and FOV.
+ */
+async function runLocalCommit(
+	internal: GameInternal,
+	action: TurnAction,
+): Promise<void> {
+	if (!internal.turnState || !internal.dungeonOutputs) return;
+
+	const flags = internal.colliderFlagsData!;
+	const { width, height } = internal.dungeonOutputs;
+	const dungOut = internal.dungeonOutputs;
+
+	const onAnimEvent = (e: AnimationQueueEntry) =>
+		internal.animationRegistry._enqueue(e);
+
+	const deps: TurnSystemDeps = {
+		isWalkable: (x, y) =>
+			isWalkableCell(getCellFlags(x, y, flags, width, height)),
+		monsterDecide: (state, monsterId) =>
+			decideChasePlayer(
+				state,
+				monsterId,
+				dungOut,
+				(x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
+				(x, y) =>
+					!isLightPassableCell(getCellFlags(x, y, flags, width, height)),
+			),
+		computeCost: (actorId, a) =>
+			defaultComputeCost(actorId, a, internal.turnState!.actors),
+		applyAction: makeApplyAction(
+			internal,
+			internal.options.combat,
+			onAnimEvent,
+		),
+		onTimeAdvanced: ({ nextTime, prevTime, state }) => {
+			if (nextTime > prevTime) internal.turnCounter += 1;
+			const playerActor = state.actors[internal.playerActorId];
+			if (playerActor)
+				syncEntityFromActor(internal.playerState.entity, playerActor);
+			internal.events.emit("turn", { turn: internal.turnCounter });
+			internal.options.turns?.onAdvance?.({
+				turn: internal.turnCounter,
+				dt: nextTime - prevTime,
+			});
+
+		},
+	};
+
+	internal.turnState = commitPlayerAction(internal.turnState, deps, action);
+	await internal.animationRegistry._flush();
+	syncAllEntitiesFromTurnState(internal);
+	updateFovAndMinimap(internal);
+}
+
+// ---------------------------------------------------------------------------
+// Realtime tick loop
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TICK_MS = 250;
+const MIN_TICK_MS = 16;
+
+function clampTickMs(ms: number): number {
+	return Number.isFinite(ms) ? Math.max(MIN_TICK_MS, ms) : DEFAULT_TICK_MS;
+}
+
+function resolvePending(internal: GameInternal): void {
+	const resolvers = internal.pendingResolvers;
+	internal.pendingResolvers = [];
+	for (const r of resolvers) r();
+}
+
+/**
+ * Start the realtime tick loop. Uses a self-rescheduling setTimeout so a tick
+ * never overlaps the previous one while animation handlers are being awaited;
+ * the next tick is scheduled relative to the start of the current one.
+ */
+function startRealtimeTicks(internal: GameInternal): void {
+	if (internal.tickTimer !== null || internal.destroyed) return;
+
+	const schedule = (delay: number) => {
+		internal.tickTimer = setTimeout(runTick, Math.max(0, delay));
+	};
+
+	const runTick = async () => {
+		if (internal.destroyed || internal.turnMode !== "realtime") {
+			internal.tickTimer = null;
+			return;
+		}
+		const tickStart = performance.now();
+		try {
+			await realtimeTick(internal);
+		} catch (err) {
+			console.error("[atomic-core] realtime tick failed:", err);
+		}
+		if (internal.destroyed || internal.turnMode !== "realtime") {
+			internal.tickTimer = null;
+			return;
+		}
+		schedule(tickStart + internal.tickMs - performance.now());
+	};
+
+	schedule(internal.tickMs);
+}
+
+function stopRealtimeTicks(internal: GameInternal): void {
+	if (internal.tickTimer !== null) clearTimeout(internal.tickTimer);
+	internal.tickTimer = null;
+}
+
+/**
+ * One realtime tick: sample held keybindings (which queue an action via
+ * commit()), then execute the queued action — or a wait if none — locally.
+ * In multiplayer only a queued action is forwarded; idle waits are not sent.
+ */
+async function realtimeTick(internal: GameInternal): Promise<void> {
+	if (!internal.generationReady || !internal.turnState) return;
+	if (!internal.playerState.entity.alive) {
+		internal.pendingAction = null;
+		resolvePending(internal);
+		return;
+	}
+
+	for (const h of internal.keybindingsHandles) h.pollHeld();
+
+	const action = internal.pendingAction;
+	internal.pendingAction = null;
+	const resolvers = internal.pendingResolvers;
+	internal.pendingResolvers = [];
+
+	try {
+		if (internal.options.transport) {
+			if (action) sendTransportAction(internal, action);
+		} else {
+			await runLocalCommit(internal, action ?? { kind: "wait" });
+		}
+	} finally {
+		for (const r of resolvers) r();
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TurnsHandle factory
 // ---------------------------------------------------------------------------
@@ -1616,74 +1830,46 @@ function makeTurnsHandle(
 			return internal.turnCounter;
 		},
 
+		get mode() {
+			return internal.turnMode;
+		},
+
+		get tickMs() {
+			return internal.tickMs;
+		},
+
 		async commit(action: TurnAction): Promise<void> {
+			if (internal.turnMode === "realtime" && action.kind !== "rotate") {
+				internal.pendingAction = action;
+				return new Promise<void>((resolve) =>
+					internal.pendingResolvers.push(resolve),
+				);
+			}
+
 			if (internal.options.transport) {
-				// Collect developer-defined entity fields. Server-managed fields are
-				// excluded — the server is authoritative for those and will ignore them
-				// anyway, but we skip them here to avoid sending stale values.
-				const serverKeys = new Set([
-					"id",
-					"x",
-					"z",
-					"alive",
-					"hp",
-					"maxHp",
-					"facing",
-				]);
-				const entityState: Record<string, unknown> = {};
-				for (const [k, v] of Object.entries(internal.playerState.entity)) {
-					if (!serverKeys.has(k) && typeof v !== "function") entityState[k] = v;
-				}
-				internal.options.transport.send(action, entityState);
+				sendTransportAction(internal, action);
 				return;
 			}
 
-			if (!internal.turnState || !internal.dungeonOutputs) return;
+			await runLocalCommit(internal, action);
+		},
 
-			const flags = internal.colliderFlagsData!;
-			const { width, height } = internal.dungeonOutputs;
-			const dungOut = internal.dungeonOutputs;
+		setMode(mode: TurnMode) {
+			if (mode === internal.turnMode) return;
+			internal.turnMode = mode;
+			for (const h of internal.keybindingsHandles)
+				h.setRealtime(mode === "realtime");
+			if (mode === "realtime") {
+				startRealtimeTicks(internal);
+			} else {
+				stopRealtimeTicks(internal);
+				internal.pendingAction = null;
+				resolvePending(internal);
+			}
+		},
 
-			const onAnimEvent = (e: AnimationQueueEntry) =>
-				internal.animationRegistry._enqueue(e);
-
-			const deps: TurnSystemDeps = {
-				isWalkable: (x, y) =>
-					isWalkableCell(getCellFlags(x, y, flags, width, height)),
-				monsterDecide: (state, monsterId) =>
-					decideChasePlayer(
-						state,
-						monsterId,
-						dungOut,
-						(x, y) => isWalkableCell(getCellFlags(x, y, flags, width, height)),
-						(x, y) =>
-							!isLightPassableCell(getCellFlags(x, y, flags, width, height)),
-					),
-				computeCost: (actorId, a) =>
-					defaultComputeCost(actorId, a, internal.turnState!.actors),
-				applyAction: makeApplyAction(
-					internal,
-					internal.options.combat,
-					onAnimEvent,
-				),
-				onTimeAdvanced: ({ nextTime, prevTime, state }) => {
-					if (nextTime > prevTime) internal.turnCounter += 1;
-					const playerActor = state.actors[internal.playerActorId];
-					if (playerActor)
-						syncEntityFromActor(internal.playerState.entity, playerActor);
-					internal.events.emit("turn", { turn: internal.turnCounter });
-					internal.options.turns?.onAdvance?.({
-						turn: internal.turnCounter,
-						dt: nextTime - prevTime,
-					});
-
-				},
-			};
-
-			internal.turnState = commitPlayerAction(internal.turnState, deps, action);
-			await internal.animationRegistry._flush();
-			syncAllEntitiesFromTurnState(internal);
-			updateFovAndMinimap(internal);
+		setTickMs(ms: number) {
+			internal.tickMs = clampTickMs(ms);
 		},
 
 		addActor(entity: EntityBase) {
@@ -2265,6 +2451,11 @@ export function createGame(
 		animationRegistry,
 		destroyed: false,
 		generationReady: false,
+		turnMode: options.turns?.mode ?? "turnBased",
+		tickMs: clampTickMs(options.turns?.tickMs ?? DEFAULT_TICK_MS),
+		tickTimer: null,
+		pendingAction: null,
+		pendingResolvers: [],
 	};
 
 	let dungeonHandle: DungeonHandle;
@@ -2273,6 +2464,7 @@ export function createGame(
 
 	dungeonHandle = makeDungeonHandle(internal);
 	turnsHandle = makeTurnsHandle(internal, dungeonHandle);
+	if (internal.turnMode === "realtime") startRealtimeTicks(internal);
 
 	events.on("heal", ({ entity, amount }) => {
 		if (internal.destroyed) return;
@@ -2548,6 +2740,7 @@ export function createGame(
 		destroy() {
 			if (internal.destroyed) return;
 			internal.destroyed = true;
+			stopRealtimeTicks(internal);
 			for (const h of internal.keybindingsHandles) h.destroy();
 			internal.keybindingsHandles.length = 0;
 		},
@@ -2637,6 +2830,7 @@ export function attachKeybindings(
 		| GameInternal
 		| undefined;
 	if (_internal) {
+		handle.setRealtime(_internal.turnMode === "realtime");
 		_internal.keybindingsHandles.push(handle);
 	}
 }
