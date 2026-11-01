@@ -135,6 +135,12 @@ export type DungeonRendererOptions = {
      */
     eyeHeightFactor?: number;
     /**
+     * `'firstPerson'` camera pitch in radians; negative looks down. A little
+     * downward pitch keeps the floor in view and the ceiling from feeling too
+     * close. Default: -0.1 (about 6° down). See `setCameraPitch()`.
+     */
+    cameraPitch?: number;
+    /**
      * When true, the camera Y position tracks the floor height offset at the
      * player's current cell (in addition to the normal eyeHeightFactor offset).
      * Transitions are smoothed by the same lerpFactor used for X/Z movement.
@@ -494,6 +500,11 @@ export type DungeonRenderer = {
      * `'topDown'`.
      */
     setTopDownHeight(height: number): void;
+    /**
+     * Update the `'firstPerson'` camera pitch at runtime (radians, negative
+     * looks down). Takes effect on the next rendered frame.
+     */
+    setCameraPitch(radians: number): void;
     /**
      * Set an explicit camera target cell for `'thirdPerson'`/`'topDown'`
      * modes, overriding auto-follow of the player. Call `followPlayer()` to

@@ -8261,6 +8261,7 @@ void main() {
 			z: tileSize * 1.5
 		};
 		let topDownHeight = options.topDownHeight ?? tileSize * 6;
+		let cameraPitch = options.cameraPitch ?? -.1;
 		let cameraTargetOverride = options.cameraTarget ?? null;
 		function effectiveTargetCell() {
 			return cameraTargetOverride ?? {
@@ -8351,7 +8352,7 @@ void main() {
 					const backX = Math.sin(curYaw) * PULLBACK;
 					const backZ = Math.cos(curYaw) * PULLBACK;
 					camera.position.set(curX + backX, curY, curZ + backZ);
-					camera.rotation.set(-.1, curYaw, 0, "YXZ");
+					camera.rotation.set(cameraPitch, curYaw, 0, "YXZ");
 				} else if (cameraMode === "thirdPerson" || cameraMode === "topDown") {
 					const offY = cameraMode === "topDown" ? topDownHeight : cameraOffset.y;
 					if (cameraMode === "topDown") {
@@ -8790,6 +8791,9 @@ void main() {
 			},
 			setTopDownHeight(height) {
 				topDownHeight = height;
+			},
+			setCameraPitch(radians) {
+				cameraPitch = radians;
 			},
 			setCameraTarget(x, z) {
 				cameraTargetOverride = {
