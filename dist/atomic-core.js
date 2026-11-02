@@ -7985,8 +7985,9 @@ function createDungeonRenderer(element, game, options = {}) {
 			uvRects.push(getUvRect(id));
 			rotations.push(result.rotation ?? 0);
 			heightScales.push(hs);
-			cellXs.push(faceCx);
-			cellZs.push(faceCz);
+			const behind = spec.target === "wall";
+			cellXs.push(behind ? faceCx - normalX : faceCx);
+			cellZs.push(behind ? faceCz - normalZ : faceCz);
 			if (aoEnabled && aoDir) {
 				const v = computeFaceAO(isSolid, faceCx, faceCz, aoDir);
 				aoCornerArr.push(v[0], v[1], v[2], v[3]);
