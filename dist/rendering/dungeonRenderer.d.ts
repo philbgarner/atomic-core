@@ -77,6 +77,19 @@ export type CameraTarget = {
     z: number;
 };
 export type DungeonRendererOptions = {
+    /**
+     * Fixed drawing-buffer size in CSS pixels (multiplied by `pixelRatio`). By
+     * default the buffer follows the container element's size. When set, the
+     * buffer stays this size whatever the element's size, and the canvas gets no
+     * inline width/height, so the host sizes it with CSS. For example, render a
+     * retro 320x200 view and show it at 3x with `image-rendering: pixelated`.
+     */
+    renderSize?: {
+        width: number;
+        height: number;
+    };
+    /** Drawing-buffer pixel ratio. Default: `window.devicePixelRatio`. */
+    pixelRatio?: number;
     /** Camera field of view in degrees. Default: 75. */
     fov?: number;
     /** World units per grid cell. Default: 3. */

@@ -28,6 +28,7 @@ Game logic lives entirely in your JS layer - the library provides the rendering 
 ## Features
 
 - First-person 3D tile-based dungeon rendering with linear fog and per-cell lighting (plain Three.js - no React/R3F required)
+- **Fixed render resolution** — `renderSize: { width, height }` on `createDungeonRenderer` keeps the drawing buffer at that size (e.g. 320x200) whatever the container's size and leaves the canvas's CSS size to the host (scale it up with `image-rendering: pixelated`); `pixelRatio` overrides `window.devicePixelRatio`
 - BSP dungeon generator or cellular automata generator or **Tiled map import** (`.tmj` / `.tsj` JSON exports)
 - Built-in dungeon themes (`dungeon`, `crypt`, `catacomb`, `industrial`, `ruins`) with `registerTheme()` for custom themes
 - Ceiling and floor height offsets; pit markers that omit floor tiles

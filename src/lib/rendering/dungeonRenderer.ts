@@ -126,6 +126,16 @@ export type CameraOffset = { x: number; y: number; z: number };
 export type CameraTarget = { x: number; z: number };
 
 export type DungeonRendererOptions = {
+  /**
+   * Fixed drawing-buffer size in CSS pixels (multiplied by `pixelRatio`). By
+   * default the buffer follows the container element's size. When set, the
+   * buffer stays this size whatever the element's size, and the canvas gets no
+   * inline width/height, so the host sizes it with CSS. For example, render a
+   * retro 320x200 view and show it at 3x with `image-rendering: pixelated`.
+   */
+  renderSize?: { width: number; height: number };
+  /** Drawing-buffer pixel ratio. Default: `window.devicePixelRatio`. */
+  pixelRatio?: number;
   /** Camera field of view in degrees. Default: 75. */
   fov?: number;
   /** World units per grid cell. Default: 3. */
@@ -755,10 +765,12 @@ export function createDungeonRenderer(
 
   // ── WebGL renderer ────────────────────────────────────────────────────────
   const glRenderer = new THREE.WebGLRenderer({ antialias: false });
-  glRenderer.setPixelRatio(window.devicePixelRatio);
+  const renderSize = options.renderSize;
+  glRenderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
   glRenderer.setClearColor(fogColor);
   const canvas = glRenderer.domElement;
-  canvas.style.cssText = "width:100%;height:100%;display:block;";
+  // With a fixed renderSize the host sizes the canvas with CSS.
+  canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
   element.appendChild(canvas);
 
   // ── Scene ─────────────────────────────────────────────────────────────────
@@ -3111,8 +3123,8 @@ export function createDungeonRenderer(
 
   // ── Resize ────────────────────────────────────────────────────────────────
   function resize() {
-    const w = element.clientWidth || 1;
-    const h = element.clientHeight || 1;
+    const w = Math.max(1, Math.round(renderSize?.width ?? element.clientWidth)) || 1;
+    const h = Math.max(1, Math.round(renderSize?.height ?? element.clientHeight)) || 1;
     glRenderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();

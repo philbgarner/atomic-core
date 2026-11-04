@@ -7570,10 +7570,11 @@ void main() {
 		const floorSkirtTiles = options.floorSkirtTiles;
 		const ceilSkirtTiles = options.ceilSkirtTiles;
 		const glRenderer = new three.WebGLRenderer({ antialias: false });
-		glRenderer.setPixelRatio(window.devicePixelRatio);
+		const renderSize = options.renderSize;
+		glRenderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
 		glRenderer.setClearColor(fogColor);
 		const canvas = glRenderer.domElement;
-		canvas.style.cssText = "width:100%;height:100%;display:block;";
+		canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
 		element.appendChild(canvas);
 		const scene = new three.Scene();
 		scene.fog = new three.Fog(fogColor, fogNear, fogFar);
@@ -8940,8 +8941,8 @@ void main() {
 			return floorVal !== 0 ? (floorVal - 128) * offsetStep : 0;
 		}
 		function resize() {
-			const w = element.clientWidth || 1;
-			const h = element.clientHeight || 1;
+			const w = Math.max(1, Math.round(renderSize?.width ?? element.clientWidth)) || 1;
+			const h = Math.max(1, Math.round(renderSize?.height ?? element.clientHeight)) || 1;
 			glRenderer.setSize(w, h, false);
 			camera.aspect = w / h;
 			camera.updateProjectionMatrix();
