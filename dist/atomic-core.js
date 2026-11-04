@@ -7544,13 +7544,19 @@ function createDungeonRenderer(element, game, options = {}) {
 	const wallTiles = options.wallTiles;
 	const floorSkirtTiles = options.floorSkirtTiles;
 	const ceilSkirtTiles = options.ceilSkirtTiles;
-	const glRenderer = new THREE.WebGLRenderer({ antialias: false });
+	const ownCanvas = !options.canvas;
+	const glRenderer = new THREE.WebGLRenderer({
+		antialias: false,
+		canvas: options.canvas
+	});
 	const renderSize = options.renderSize;
 	glRenderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
 	glRenderer.setClearColor(fogColor);
 	const canvas = glRenderer.domElement;
-	canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
-	element.appendChild(canvas);
+	if (ownCanvas) {
+		canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
+		element.appendChild(canvas);
+	}
 	const scene = new THREE.Scene();
 	scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
 	let skyboxTex = null;
@@ -9089,6 +9095,7 @@ function createDungeonRenderer(element, game, options = {}) {
 	return {
 		scene,
 		camera,
+		canvas,
 		addLight(light) {
 			scene.add(light);
 			managedLights.add(light);
@@ -9363,7 +9370,7 @@ function createDungeonRenderer(element, game, options = {}) {
 			managedLights.clear();
 			if (skyboxTex && skyboxOwned) skyboxTex.dispose();
 			glRenderer.dispose();
-			canvas.remove();
+			if (ownCanvas) canvas.remove();
 		}
 	};
 }

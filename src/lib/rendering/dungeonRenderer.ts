@@ -136,6 +136,14 @@ export type DungeonRendererOptions = {
   renderSize?: { width: number; height: number };
   /** Drawing-buffer pixel ratio. Default: `window.devicePixelRatio`. */
   pixelRatio?: number;
+  /**
+   * Render into this existing canvas instead of creating one. The host owns
+   * it: the renderer doesn't append it to `element`, doesn't change its inline
+   * styles, and doesn't remove it on `destroy()`, so the same canvas can be
+   * handed to a later renderer (e.g. when the next level is built). Without
+   * `renderSize`, the buffer still follows `element`'s size.
+   */
+  canvas?: HTMLCanvasElement;
   /** Camera field of view in degrees. Default: 75. */
   fov?: number;
   /** World units per grid cell. Default: 3. */
@@ -406,6 +414,8 @@ export type EntityAppearanceSpec = {
 };
 
 export type DungeonRenderer = {
+  /** The canvas being drawn into (created by the renderer, or `options.canvas`). */
+  canvas: HTMLCanvasElement;
   /**
    * The Three.js Scene used by the renderer.
    * Add PointLights, DirectionalLights, or any other Three.js objects directly.
@@ -764,14 +774,17 @@ export function createDungeonRenderer(
   const ceilSkirtTiles = options.ceilSkirtTiles;
 
   // ── WebGL renderer ────────────────────────────────────────────────────────
-  const glRenderer = new THREE.WebGLRenderer({ antialias: false });
+  const ownCanvas = !options.canvas;
+  const glRenderer = new THREE.WebGLRenderer({ antialias: false, canvas: options.canvas });
   const renderSize = options.renderSize;
   glRenderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
   glRenderer.setClearColor(fogColor);
   const canvas = glRenderer.domElement;
-  // With a fixed renderSize the host sizes the canvas with CSS.
-  canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
-  element.appendChild(canvas);
+  if (ownCanvas) {
+    // With a fixed renderSize the host sizes the canvas with CSS.
+    canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
+    element.appendChild(canvas);
+  }
 
   // ── Scene ─────────────────────────────────────────────────────────────────
   const scene = new THREE.Scene();
@@ -3355,6 +3368,7 @@ export function createDungeonRenderer(
   return {
     scene,
     camera,
+    canvas,
     addLight<T extends THREE.Light>(light: T): T {
       scene.add(light);
       managedLights.add(light);
@@ -3675,7 +3689,7 @@ export function createDungeonRenderer(
       managedLights.clear();
       if (skyboxTex && skyboxOwned) skyboxTex.dispose();
       glRenderer.dispose();
-      canvas.remove();
+      if (ownCanvas) canvas.remove();
     },
   };
 }

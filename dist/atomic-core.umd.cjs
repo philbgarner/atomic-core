@@ -7569,13 +7569,19 @@ void main() {
 		const wallTiles = options.wallTiles;
 		const floorSkirtTiles = options.floorSkirtTiles;
 		const ceilSkirtTiles = options.ceilSkirtTiles;
-		const glRenderer = new three.WebGLRenderer({ antialias: false });
+		const ownCanvas = !options.canvas;
+		const glRenderer = new three.WebGLRenderer({
+			antialias: false,
+			canvas: options.canvas
+		});
 		const renderSize = options.renderSize;
 		glRenderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
 		glRenderer.setClearColor(fogColor);
 		const canvas = glRenderer.domElement;
-		canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
-		element.appendChild(canvas);
+		if (ownCanvas) {
+			canvas.style.cssText = renderSize ? "display:block;" : "width:100%;height:100%;display:block;";
+			element.appendChild(canvas);
+		}
 		const scene = new three.Scene();
 		scene.fog = new three.Fog(fogColor, fogNear, fogFar);
 		let skyboxTex = null;
@@ -9114,6 +9120,7 @@ void main() {
 		return {
 			scene,
 			camera,
+			canvas,
 			addLight(light) {
 				scene.add(light);
 				managedLights.add(light);
@@ -9388,7 +9395,7 @@ void main() {
 				managedLights.clear();
 				if (skyboxTex && skyboxOwned) skyboxTex.dispose();
 				glRenderer.dispose();
-				canvas.remove();
+				if (ownCanvas) canvas.remove();
 			}
 		};
 	}

@@ -90,6 +90,14 @@ export type DungeonRendererOptions = {
     };
     /** Drawing-buffer pixel ratio. Default: `window.devicePixelRatio`. */
     pixelRatio?: number;
+    /**
+     * Render into this existing canvas instead of creating one. The host owns
+     * it: the renderer doesn't append it to `element`, doesn't change its inline
+     * styles, and doesn't remove it on `destroy()`, so the same canvas can be
+     * handed to a later renderer (e.g. when the next level is built). Without
+     * `renderSize`, the buffer still follows `element`'s size.
+     */
+    canvas?: HTMLCanvasElement;
     /** Camera field of view in degrees. Default: 75. */
     fov?: number;
     /** World units per grid cell. Default: 3. */
@@ -338,6 +346,8 @@ export type EntityAppearanceSpec = {
     depthFactor?: number;
 };
 export type DungeonRenderer = {
+    /** The canvas being drawn into (created by the renderer, or `options.canvas`). */
+    canvas: HTMLCanvasElement;
     /**
      * The Three.js Scene used by the renderer.
      * Add PointLights, DirectionalLights, or any other Three.js objects directly.
