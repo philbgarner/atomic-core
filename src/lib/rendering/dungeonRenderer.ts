@@ -81,6 +81,7 @@ import { createDoorMesh } from "./doorRenderer";
 import type { DoorHandle } from "./doorRenderer";
 import { computeEntityMovePosition } from "../entities/moveAnim";
 import type { EntityMoveAnimState } from "../entities/moveAnim";
+import { resolveEasing } from "../animations/easing";
 import type { EasingName, EasingFn } from "../animations/easing";
 import type { AnimationEventMap } from "../animations/types";
 import type { GameEventMap } from "../events/eventEmitter";
@@ -156,8 +157,24 @@ export type DungeonRendererOptions = {
   fogFar?: number;
   /** CSS colour string for fog / background. Default: '#000000'. */
   fogColor?: string;
-  /** Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18. */
+  /**
+   * Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18.
+   * Applies to `cameraMotion: 'exponential'` and always to thirdPerson/topDown/free modes.
+   */
   lerpFactor?: number;
+  /**
+   * Camera motion style in firstPerson mode. 'exponential' (default) eases out
+   * per frame using `lerpFactor` and never exactly arrives; 'linear' runs a
+   * fixed-duration, time-based tween (see `cameraMoveMs`/`cameraTurnMs`) that
+   * snaps exactly to the target at its end.
+   */
+  cameraMotion?: "exponential" | "linear";
+  /** Duration (ms) of a one-tile camera move in linear mode (scaled by distance for constant speed). Default: 130. */
+  cameraMoveMs?: number;
+  /** Duration (ms) of a quarter-turn (90 degrees) in linear mode (scaled by angle for constant speed). Default: 130. */
+  cameraTurnMs?: number;
+  /** Easing applied to the linear camera tween. Default: 'linear'. */
+  cameraEasing?: EasingName | EasingFn;
   /** Duration (ms) of the visual glide when an entity's logical x/z changes. Default: 130. Set 0 to disable. */
   moveAnimMs?: number;
   /** Easing for the entity move glide. Default: 'easeOutQuad'. */
@@ -737,6 +754,10 @@ export function createDungeonRenderer(
   const fogHex = options.fogColor ?? "#000000";
   const lerpFactor = options.lerpFactor ?? 0.18;
   const moveAnimMs = options.moveAnimMs ?? 130;
+  const cameraMotion = options.cameraMotion ?? "exponential";
+  const cameraMoveMs = Math.max(1, options.cameraMoveMs ?? 130);
+  const cameraTurnMs = Math.max(1, options.cameraTurnMs ?? 130);
+  const cameraEase = resolveEasing(options.cameraEasing ?? "linear");
   const moveAnimEasing = options.moveAnimEasing ?? "easeOutQuad";
   const offsetStep = tileSize * (options.offsetFactor ?? 0.5);
   let snapToFloor = options.snapCameraToFloor ?? false;
@@ -2804,6 +2825,27 @@ export function createDungeonRenderer(
   let curY = tileSize * eyeHeightFactor;
   let initialized = false;
 
+  // ── Linear camera tween state (cameraMotion === 'linear', firstPerson) ──
+  // Position (x/y/z) and yaw run on independent timers so a turn does not
+  // restart a move in progress. onTurn only flags a restart; tick() stamps the
+  // start time from the rAF clock so the timebase is always consistent.
+  let posPending = false,
+    posActive = false,
+    posStart = 0,
+    posDur = 1;
+  let startX = 0,
+    startY = 0,
+    startZ = 0;
+  let yawPending = false,
+    yawActive = false,
+    yawStart = 0,
+    yawDur = 1;
+  let startYaw = 0,
+    yawDelta = 0;
+  const resetCameraTween = () => {
+    posPending = posActive = yawPending = yawActive = false;
+  };
+
   // ── Camera mode state ────────────────────────────────────────────────────
   let cameraMode: CameraMode = options.cameraMode ?? "firstPerson";
   let cameraOffset: CameraOffset = options.cameraOffset ?? {
@@ -2832,6 +2874,10 @@ export function createDungeonRenderer(
   const onTurn = () => {
     buildDungeon();
     recomputeLightLevels();
+    const prevTgtX = tgtX,
+      prevTgtZ = tgtZ,
+      prevTgtY = tgtY,
+      prevTgtYaw = tgtYaw;
     tgtX = (game.player.x + 0.5) * tileSize;
     tgtZ = (game.player.z + 0.5) * tileSize;
     tgtYaw = game.player.facing;
@@ -2841,6 +2887,13 @@ export function createDungeonRenderer(
     // handle spider webs on the ceiling at some point in the future.
     tgtY =
       tileSize * eyeHeightFactor + getFloorOffset(game.player.x, game.player.z);
+
+    // The realtime clock fires 'turn' every tick even when nothing changed;
+    // only restart a tween channel when its target actually moved.
+    if (initialized && cameraMotion === "linear" && cameraMode === "firstPerson") {
+      if (tgtX !== prevTgtX || tgtZ !== prevTgtZ || tgtY !== prevTgtY) posPending = true;
+      if (tgtYaw !== prevTgtYaw) yawPending = true;
+    }
 
     if (!initialized) {
       curX = tgtX;
@@ -2937,23 +2990,78 @@ export function createDungeonRenderer(
         tgtY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
       }
 
-      const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
-      curX += (tgtX - curX) * k;
-      curY += (tgtY - curY) * k;
-      curZ += (tgtZ - curZ) * k;
+      if (cameraMotion === "linear" && cameraMode === "firstPerson") {
+        if (posPending) {
+          posPending = false;
+          startX = curX;
+          startY = curY;
+          startZ = curZ;
+          posStart = t;
+          // Constant speed: scale duration by horizontal distance (in tiles),
+          // so a retarget mid-move (held key) neither crawls nor rushes.
+          const distTiles = Math.hypot(tgtX - curX, tgtZ - curZ) / tileSize;
+          posDur =
+            distTiles > 0
+              ? cameraMoveMs * Math.min(3, Math.max(0.1, distTiles))
+              : cameraMoveMs;
+          posActive = true;
+        }
+        if (yawPending) {
+          yawPending = false;
+          startYaw = curYaw;
+          // Shortest signed delta, computed once (no per-frame flips at 180).
+          let d = tgtYaw - curYaw;
+          while (d > Math.PI) d -= 2 * Math.PI;
+          while (d < -Math.PI) d += 2 * Math.PI;
+          yawDelta = d;
+          yawStart = t;
+          yawDur =
+            cameraTurnMs * Math.min(2, Math.max(0.1, Math.abs(d) / (Math.PI / 2)));
+          yawActive = true;
+        }
+        if (posActive) {
+          const u = Math.min(1, Math.max(0, (t - posStart) / posDur));
+          if (u >= 1) {
+            curX = tgtX;
+            curY = tgtY;
+            curZ = tgtZ;
+            posActive = false;
+          } else {
+            const e = cameraEase(u);
+            curX = startX + (tgtX - startX) * e;
+            curY = startY + (tgtY - startY) * e;
+            curZ = startZ + (tgtZ - startZ) * e;
+          }
+        }
+        if (yawActive) {
+          const u = Math.min(1, Math.max(0, (t - yawStart) / yawDur));
+          if (u >= 1) {
+            curYaw = tgtYaw;
+            yawActive = false;
+          } else {
+            curYaw = startYaw + yawDelta * cameraEase(u);
+          }
+        }
+        cameraMoving = posActive || yawActive || posPending || yawPending;
+      } else {
+        const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
+        curX += (tgtX - curX) * k;
+        curY += (tgtY - curY) * k;
+        curZ += (tgtZ - curZ) * k;
 
-      let dy = tgtYaw - curYaw;
-      while (dy > Math.PI) dy -= 2 * Math.PI;
-      while (dy < -Math.PI) dy += 2 * Math.PI;
-      curYaw += dy * k;
+        let dy = tgtYaw - curYaw;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        curYaw += dy * k;
 
-      const POS_EPS = 0.02 * tileSize;
-      const YAW_EPS = 0.01;
-      cameraMoving =
-        Math.abs(tgtX - curX) > POS_EPS ||
-        Math.abs(tgtZ - curZ) > POS_EPS ||
-        Math.abs(tgtY - curY) > POS_EPS ||
-        Math.abs(dy) > YAW_EPS;
+        const POS_EPS = 0.02 * tileSize;
+        const YAW_EPS = 0.01;
+        cameraMoving =
+          Math.abs(tgtX - curX) > POS_EPS ||
+          Math.abs(tgtZ - curZ) > POS_EPS ||
+          Math.abs(tgtY - curY) > POS_EPS ||
+          Math.abs(dy) > YAW_EPS;
+      }
 
       // Expire move tweens by elapsed time unconditionally, not just for ids
       // visited by the per-entity/per-object loops below (which only cover
@@ -3568,6 +3676,7 @@ export function createDungeonRenderer(
         tgtZ = curZ = (t.z + 0.5) * tileSize;
         tgtYaw = curYaw = game.player.facing;
         tgtY = curY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
+        resetCameraTween();
       }
     },
     setCameraOffset(offset) {

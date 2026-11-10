@@ -110,8 +110,24 @@ export type DungeonRendererOptions = {
     fogFar?: number;
     /** CSS colour string for fog / background. Default: '#000000'. */
     fogColor?: string;
-    /** Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18. */
+    /**
+     * Smoothing factor for camera animation (0 = instant, 1 = never arrives). Default: 0.18.
+     * Applies to `cameraMotion: 'exponential'` and always to thirdPerson/topDown/free modes.
+     */
     lerpFactor?: number;
+    /**
+     * Camera motion style in firstPerson mode. 'exponential' (default) eases out
+     * per frame using `lerpFactor` and never exactly arrives; 'linear' runs a
+     * fixed-duration, time-based tween (see `cameraMoveMs`/`cameraTurnMs`) that
+     * snaps exactly to the target at its end.
+     */
+    cameraMotion?: "exponential" | "linear";
+    /** Duration (ms) of a one-tile camera move in linear mode (scaled by distance for constant speed). Default: 130. */
+    cameraMoveMs?: number;
+    /** Duration (ms) of a quarter-turn (90 degrees) in linear mode (scaled by angle for constant speed). Default: 130. */
+    cameraTurnMs?: number;
+    /** Easing applied to the linear camera tween. Default: 'linear'. */
+    cameraEasing?: EasingName | EasingFn;
     /** Duration (ms) of the visual glide when an entity's logical x/z changes. Default: 130. Set 0 to disable. */
     moveAnimMs?: number;
     /** Easing for the entity move glide. Default: 'easeOutQuad'. */

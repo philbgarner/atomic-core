@@ -7505,6 +7505,10 @@ function createDungeonRenderer(element, game, options = {}) {
 	const fogHex = options.fogColor ?? "#000000";
 	const lerpFactor = options.lerpFactor ?? .18;
 	const moveAnimMs = options.moveAnimMs ?? 130;
+	const cameraMotion = options.cameraMotion ?? "exponential";
+	const cameraMoveMs = Math.max(1, options.cameraMoveMs ?? 130);
+	const cameraTurnMs = Math.max(1, options.cameraTurnMs ?? 130);
+	const cameraEase = resolveEasing(options.cameraEasing ?? "linear");
 	const moveAnimEasing = options.moveAnimEasing ?? "easeOutQuad";
 	const offsetStep = tileSize * (options.offsetFactor ?? .5);
 	options.snapCameraToFloor;
@@ -8705,6 +8709,13 @@ function createDungeonRenderer(element, game, options = {}) {
 	let curX = 0, curZ = 0, curYaw = 0;
 	let curY = tileSize * eyeHeightFactor;
 	let initialized = false;
+	let posPending = false, posActive = false, posStart = 0, posDur = 1;
+	let startX = 0, startY = 0, startZ = 0;
+	let yawPending = false, yawActive = false, yawStart = 0, yawDur = 1;
+	let startYaw = 0, yawDelta = 0;
+	const resetCameraTween = () => {
+		posPending = posActive = yawPending = yawActive = false;
+	};
 	let cameraMode = options.cameraMode ?? "firstPerson";
 	let cameraOffset = options.cameraOffset ?? {
 		x: 0,
@@ -8726,10 +8737,15 @@ function createDungeonRenderer(element, game, options = {}) {
 	const onTurn = () => {
 		buildDungeon();
 		recomputeLightLevels();
+		const prevTgtX = tgtX, prevTgtZ = tgtZ, prevTgtY = tgtY, prevTgtYaw = tgtYaw;
 		tgtX = (game.player.x + .5) * tileSize;
 		tgtZ = (game.player.z + .5) * tileSize;
 		tgtYaw = game.player.facing;
 		tgtY = tileSize * eyeHeightFactor + getFloorOffset(game.player.x, game.player.z);
+		if (initialized && cameraMotion === "linear" && cameraMode === "firstPerson") {
+			if (tgtX !== prevTgtX || tgtZ !== prevTgtZ || tgtY !== prevTgtY) posPending = true;
+			if (tgtYaw !== prevTgtYaw) yawPending = true;
+		}
 		if (!initialized) {
 			curX = tgtX;
 			curZ = tgtZ;
@@ -8796,16 +8812,62 @@ function createDungeonRenderer(element, game, options = {}) {
 				tgtZ = (t.z + .5) * tileSize;
 				tgtY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
 			}
-			const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
-			curX += (tgtX - curX) * k;
-			curY += (tgtY - curY) * k;
-			curZ += (tgtZ - curZ) * k;
-			let dy = tgtYaw - curYaw;
-			while (dy > Math.PI) dy -= 2 * Math.PI;
-			while (dy < -Math.PI) dy += 2 * Math.PI;
-			curYaw += dy * k;
-			const POS_EPS = .02 * tileSize;
-			cameraMoving = Math.abs(tgtX - curX) > POS_EPS || Math.abs(tgtZ - curZ) > POS_EPS || Math.abs(tgtY - curY) > POS_EPS || Math.abs(dy) > .01;
+			if (cameraMotion === "linear" && cameraMode === "firstPerson") {
+				if (posPending) {
+					posPending = false;
+					startX = curX;
+					startY = curY;
+					startZ = curZ;
+					posStart = t;
+					const distTiles = Math.hypot(tgtX - curX, tgtZ - curZ) / tileSize;
+					posDur = distTiles > 0 ? cameraMoveMs * Math.min(3, Math.max(.1, distTiles)) : cameraMoveMs;
+					posActive = true;
+				}
+				if (yawPending) {
+					yawPending = false;
+					startYaw = curYaw;
+					let d = tgtYaw - curYaw;
+					while (d > Math.PI) d -= 2 * Math.PI;
+					while (d < -Math.PI) d += 2 * Math.PI;
+					yawDelta = d;
+					yawStart = t;
+					yawDur = cameraTurnMs * Math.min(2, Math.max(.1, Math.abs(d) / (Math.PI / 2)));
+					yawActive = true;
+				}
+				if (posActive) {
+					const u = Math.min(1, Math.max(0, (t - posStart) / posDur));
+					if (u >= 1) {
+						curX = tgtX;
+						curY = tgtY;
+						curZ = tgtZ;
+						posActive = false;
+					} else {
+						const e = cameraEase(u);
+						curX = startX + (tgtX - startX) * e;
+						curY = startY + (tgtY - startY) * e;
+						curZ = startZ + (tgtZ - startZ) * e;
+					}
+				}
+				if (yawActive) {
+					const u = Math.min(1, Math.max(0, (t - yawStart) / yawDur));
+					if (u >= 1) {
+						curYaw = tgtYaw;
+						yawActive = false;
+					} else curYaw = startYaw + yawDelta * cameraEase(u);
+				}
+				cameraMoving = posActive || yawActive || posPending || yawPending;
+			} else {
+				const k = 1 - Math.pow(1 - lerpFactor, dt * 60);
+				curX += (tgtX - curX) * k;
+				curY += (tgtY - curY) * k;
+				curZ += (tgtZ - curZ) * k;
+				let dy = tgtYaw - curYaw;
+				while (dy > Math.PI) dy -= 2 * Math.PI;
+				while (dy < -Math.PI) dy += 2 * Math.PI;
+				curYaw += dy * k;
+				const POS_EPS = .02 * tileSize;
+				cameraMoving = Math.abs(tgtX - curX) > POS_EPS || Math.abs(tgtZ - curZ) > POS_EPS || Math.abs(tgtY - curY) > POS_EPS || Math.abs(dy) > .01;
+			}
 			for (const [id, anim] of entityMoveAnimMap) if (t - anim.startTime >= moveAnimMs) entityMoveAnimMap.delete(id);
 			for (const [key, anim] of objectMoveAnimMap) if (t - anim.startTime >= moveAnimMs) objectMoveAnimMap.delete(key);
 			if (cameraMode === "firstPerson") {
@@ -9249,6 +9311,7 @@ function createDungeonRenderer(element, game, options = {}) {
 				tgtZ = curZ = (t.z + .5) * tileSize;
 				tgtYaw = curYaw = game.player.facing;
 				tgtY = curY = tileSize * eyeHeightFactor + getFloorOffset(t.x, t.z);
+				resetCameraTween();
 			}
 		},
 		setCameraOffset(offset) {
@@ -10390,7 +10453,7 @@ function stripNonSerializable(opts) {
 */
 function exportDungeonMap(dungeon, options) {
 	return {
-		version: "1.0.18",
+		version: "1.0.19",
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 		...options.meta !== void 0 ? { meta: options.meta } : {},
 		generatorOptions: options.generatorOptions,
